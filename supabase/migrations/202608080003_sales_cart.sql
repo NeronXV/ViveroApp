@@ -61,16 +61,28 @@ alter table public.sales enable row level security;
 alter table public.sale_items enable row level security;
 alter table public.sale_status_history enable row level security;
 
-create policy sales_worker_read_own on public.sales
+create policy sales_creator_read_own on public.sales
 for select to authenticated
-using (created_by = auth.uid());
+using (created_by = auth.uid() and public.has_permission('VIEW_OWN_SALES'));
 
 create policy sales_cashier_read_pending on public.sales
 for select to authenticated
 using (
     branch_id = (select p.branch_id from public.profiles p where p.id = auth.uid())
-    and public.has_any_role(array['CASHIER', 'MANAGER', 'ADMIN', 'OWNER'])
+    and status in ('SENT_TO_CASHIER', 'PAYMENT_PENDING')
+    and public.has_permission('OPERATE_CASHIER')
 );
+
+create policy sales_management_read_branch on public.sales
+for select to authenticated
+using (
+    branch_id = (select p.branch_id from public.profiles p where p.id = auth.uid())
+    and public.has_permission('VIEW_BRANCH_SALES')
+);
+
+create policy sales_management_read_all on public.sales
+for select to authenticated
+using (public.has_permission('VIEW_ALL_SALES'));
 
 create policy sale_items_read_visible_sale on public.sale_items
 for select to authenticated
@@ -83,38 +95,104 @@ using (exists (select 1 from public.sales s where s.id = sale_status_history.sal
 grant select on public.sales, public.sale_items, public.sale_status_history to authenticated;
 
 create or replace function public.submit_sale_to_cashier(
-    p_sale_id uuid,
-    p_folio text,
-    p_items jsonb,
-    p_customer_id uuid default null
+    p_sale_id pg_catalog.uuid,
+    p_folio pg_catalog.text,
+    p_items pg_catalog.jsonb,
+    p_customer_id pg_catalog.uuid default null
 ) returns public.sales
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
-    v_user_id uuid := auth.uid();
-    v_branch_id uuid;
-    v_sale public.sales;
-    v_subtotal bigint;
+    v_user_id pg_catalog.uuid := auth.uid();
+    v_branch_id pg_catalog.uuid;
+    v_sale public.sales%rowtype;
+    v_item_count pg_catalog.int8;
+    v_distinct_item_count pg_catalog.int8;
+    v_valid_product_count pg_catalog.int8;
+    v_invalid_quantity_count pg_catalog.int8;
+    v_subtotal pg_catalog.int8;
 begin
-    if v_user_id is null or not public.has_any_role(array['WORKER', 'MANAGER', 'ADMIN', 'OWNER']) then
-        raise exception 'Not authorized to submit sales';
+    if v_user_id is null or not public.has_permission('CREATE_SALES') then
+        raise exception using errcode = '42501', message = 'Sale submission is not allowed';
     end if;
 
-    select branch_id into v_branch_id from public.profiles where id = v_user_id;
-    if v_branch_id is null then raise exception 'User has no branch'; end if;
-    if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
-        raise exception 'Sale requires at least one item';
+    select p.branch_id into v_branch_id
+    from public.profiles p
+    join public.branches b on b.id = p.branch_id and b.is_active
+    where p.id = v_user_id and p.is_active;
+
+    if v_branch_id is null then
+        raise exception using errcode = '42501', message = 'Sale submission is not allowed';
     end if;
 
-    select coalesce(sum(p.price_cents * i.quantity), 0)
-    into v_subtotal
-    from jsonb_to_recordset(p_items) as i(product_id uuid, quantity integer)
-    join public.products p on p.id = i.product_id and p.is_active
-    where i.quantity > 0;
+    select s.* into v_sale
+    from public.sales s
+    where s.idempotency_key = p_sale_id or s.id = p_sale_id
+    limit 1;
 
-    if v_subtotal <= 0 then raise exception 'Sale items are invalid'; end if;
+    if found then
+        if v_sale.created_by <> v_user_id then
+            raise exception using errcode = '42501', message = 'Idempotency key is unavailable';
+        end if;
+        return v_sale;
+    end if;
+
+    if p_items is null
+       or pg_catalog.jsonb_typeof(p_items) <> 'array'
+       or pg_catalog.jsonb_array_length(p_items) = 0 then
+        raise exception using errcode = '22023', message = 'Sale requires at least one item';
+    end if;
+
+    if exists (
+        select 1
+        from pg_catalog.jsonb_array_elements(p_items) as element(value)
+        where pg_catalog.jsonb_typeof(element.value) <> 'object'
+    ) then
+        raise exception using errcode = '22023', message = 'Sale items are invalid';
+    end if;
+
+    select
+        pg_catalog.count(*),
+        pg_catalog.count(distinct i.product_id),
+        pg_catalog.count(*) filter (
+            where i.product_id is null
+               or i.quantity is null
+               or i.quantity <= 0
+               or i.quantity > 100000
+        )
+    into v_item_count, v_distinct_item_count, v_invalid_quantity_count
+    from pg_catalog.jsonb_to_recordset(p_items)
+        as i(product_id pg_catalog.uuid, quantity pg_catalog.int4);
+
+    if v_item_count <> pg_catalog.jsonb_array_length(p_items)
+       or v_distinct_item_count <> v_item_count
+       or v_invalid_quantity_count > 0 then
+        raise exception using errcode = '22023', message = 'Sale items are invalid';
+    end if;
+
+    perform 1
+    from public.products p
+    join pg_catalog.jsonb_to_recordset(p_items)
+        as i(product_id pg_catalog.uuid, quantity pg_catalog.int4)
+      on i.product_id = p.id
+    where p.is_active
+    for key share of p;
+
+    select
+        pg_catalog.count(*),
+        pg_catalog.coalesce(pg_catalog.sum(p.price_cents * i.quantity), 0)
+    into v_valid_product_count, v_subtotal
+    from pg_catalog.jsonb_to_recordset(p_items)
+        as i(product_id pg_catalog.uuid, quantity pg_catalog.int4)
+    join public.products p on p.id = i.product_id and p.is_active;
+
+    -- Until branch inventory is introduced, the permitted product scope is the
+    -- complete active catalog. Every requested row must match that scope.
+    if v_valid_product_count <> v_item_count or v_subtotal <= 0 then
+        raise exception using errcode = '22023', message = 'Sale items are invalid';
+    end if;
 
     insert into public.sales (
         id, folio, branch_id, customer_id, subtotal_cents, discount_cents,
@@ -123,31 +201,45 @@ begin
         p_sale_id, p_folio, v_branch_id, p_customer_id, v_subtotal, 0,
         v_subtotal, 'SENT_TO_CASHIER', v_user_id, p_sale_id
     )
-    on conflict (idempotency_key) do update set idempotency_key = excluded.idempotency_key
+    on conflict (idempotency_key) do nothing
     returning * into v_sale;
 
-    if not exists (select 1 from public.sale_items where sale_id = v_sale.id) then
-        insert into public.sale_items (
-            sale_id, product_id, product_name, internal_code, quantity,
-            list_price_cents, unit_price_cents
-        )
-        select v_sale.id, p.id, p.common_name, p.internal_code, i.quantity,
-               p.price_cents, p.price_cents
-        from jsonb_to_recordset(p_items) as i(product_id uuid, quantity integer)
-        join public.products p on p.id = i.product_id and p.is_active
-        where i.quantity > 0;
+    if v_sale.id is null then
+        select s.* into strict v_sale
+        from public.sales s
+        where s.idempotency_key = p_sale_id;
 
-        insert into public.sale_status_history(sale_id, previous_status, new_status, changed_by, observation)
-        values
-            (v_sale.id, null, 'DRAFT', v_user_id, 'Draft accepted by backend'),
-            (v_sale.id, 'DRAFT', 'SENT_TO_CASHIER', v_user_id, 'Order sent to cashier');
+        if v_sale.created_by <> v_user_id then
+            raise exception using errcode = '42501', message = 'Idempotency key is unavailable';
+        end if;
+        return v_sale;
     end if;
+
+    insert into public.sale_items (
+        sale_id, product_id, product_name, internal_code, quantity,
+        list_price_cents, unit_price_cents
+    )
+    select v_sale.id, p.id, p.common_name, p.internal_code, i.quantity,
+           p.price_cents, p.price_cents
+    from pg_catalog.jsonb_to_recordset(p_items)
+        as i(product_id pg_catalog.uuid, quantity pg_catalog.int4)
+    join public.products p on p.id = i.product_id and p.is_active;
+
+    insert into public.sale_status_history(
+        sale_id, previous_status, new_status, changed_by, observation
+    ) values
+        (v_sale.id, null, 'DRAFT', v_user_id, 'Draft accepted by backend'),
+        (v_sale.id, 'DRAFT', 'SENT_TO_CASHIER', v_user_id, 'Order sent to cashier');
 
     return v_sale;
 end;
 $$;
 
-revoke all on function public.submit_sale_to_cashier(uuid, text, jsonb, uuid) from public;
-grant execute on function public.submit_sale_to_cashier(uuid, text, jsonb, uuid) to authenticated;
+revoke all on function public.submit_sale_to_cashier(
+    pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb, pg_catalog.uuid
+) from public;
+grant execute on function public.submit_sale_to_cashier(
+    pg_catalog.uuid, pg_catalog.text, pg_catalog.jsonb, pg_catalog.uuid
+) to authenticated;
 
 commit;

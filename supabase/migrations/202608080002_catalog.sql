@@ -54,40 +54,64 @@ for each row execute function public.set_updated_at();
 create trigger product_images_set_updated_at before update on public.product_images
 for each row execute function public.set_updated_at();
 
+create or replace function public.enforce_product_price_permission()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+    if auth.uid() is not null
+       and (
+           new.price_cents is distinct from old.price_cents
+           or new.wholesale_price_cents is distinct from old.wholesale_price_cents
+       )
+       and not public.has_permission('MANAGE_PRICES') then
+        raise exception using errcode = '42501', message = 'Price management is not allowed';
+    end if;
+
+    return new;
+end;
+$$;
+
+revoke all on function public.enforce_product_price_permission() from public;
+
+create trigger products_enforce_price_permission before update on public.products
+for each row execute function public.enforce_product_price_permission();
+
 alter table public.categories enable row level security;
 alter table public.products enable row level security;
 alter table public.product_images enable row level security;
 
 create policy categories_read on public.categories
 for select to authenticated
-using (is_active or public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN', 'OWNER']));
+using (is_active or public.has_permission('MANAGE_PRODUCTS'));
 
 create policy categories_manage on public.categories
 for all to authenticated
-using (public.has_any_role(array['MANAGER', 'ADMIN']))
-with check (public.has_any_role(array['MANAGER', 'ADMIN']));
+using (public.has_permission('MANAGE_PRODUCTS'))
+with check (public.has_permission('MANAGE_PRODUCTS'));
 
 create policy products_read on public.products
 for select to authenticated
-using (is_active or public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN', 'OWNER']));
+using (is_active or public.has_permission('MANAGE_PRODUCTS'));
 
 create policy products_manage on public.products
 for all to authenticated
-using (public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN']))
-with check (public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN']));
+using (public.has_permission('MANAGE_PRODUCTS'))
+with check (public.has_permission('MANAGE_PRODUCTS'));
 
 create policy product_images_read on public.product_images
 for select to authenticated
 using (exists (
     select 1 from public.products p
     where p.id = product_images.product_id
-      and (p.is_active or public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN', 'OWNER']))
+      and (p.is_active or public.has_permission('MANAGE_PRODUCTS'))
 ));
 
 create policy product_images_manage on public.product_images
 for all to authenticated
-using (public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN']))
-with check (public.has_any_role(array['INVENTORY', 'MANAGER', 'ADMIN']));
+using (public.has_permission('MANAGE_PRODUCTS'))
+with check (public.has_permission('MANAGE_PRODUCTS'));
 
 grant select on public.categories, public.products, public.product_images to authenticated;
 grant insert, update, delete on public.categories to authenticated;

@@ -26,7 +26,7 @@ class FakeDashboardRepository @Inject constructor(
     }
 
     private fun modulesFor(role: UserRole): List<DashboardModule> = when (role) {
-        UserRole.WORKER -> listOf(
+        UserRole.SALES -> listOf(
             module("catalog", "Catálogo", "Consulta plantas y existencias", true),
             module("scanner", "Escáner", "Identifica plantas por código"),
             module("cart", "Carrito actual", "Prepara una nueva venta", true),

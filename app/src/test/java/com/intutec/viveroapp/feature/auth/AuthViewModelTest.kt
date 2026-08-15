@@ -55,7 +55,7 @@ class AuthViewModelTest {
             userId = "demo",
             email = "demo@vivero.test",
             fullName = "Demo",
-            role = UserRole.WORKER,
+            role = UserRole.SALES,
             branchName = "Centro",
             isDemo = true,
         )

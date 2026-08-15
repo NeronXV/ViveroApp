@@ -42,10 +42,10 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun signInDemo(): Result<UserSession> = runCatching {
         delay(350)
         UserSession(
-            userId = "demo-worker",
-            email = "trabajador@vivero.demo",
+            userId = "demo-sales",
+            email = "ventas@vivero.demo",
             fullName = "Mariana López",
-            role = UserRole.WORKER,
+            role = UserRole.SALES,
             branchName = "Vivero Centro",
             isDemo = true,
         ).also(sessionStore::update)

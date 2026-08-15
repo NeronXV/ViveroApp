@@ -47,7 +47,7 @@ class HomeViewModelTest {
 
     private fun demoDashboard() = Dashboard(
         userName = "Prueba",
-        role = UserRole.WORKER,
+        role = UserRole.SALES,
         branchName = "Centro",
         pendingTickets = 0,
         lowStockProducts = 0,

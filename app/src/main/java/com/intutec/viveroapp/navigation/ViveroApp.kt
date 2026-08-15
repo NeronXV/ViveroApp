@@ -107,7 +107,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
         }
         composable<CartRoute> {
             val role = authState.session?.role
-            if (role != null && RolePermissions.can(role, AppPermission.MANAGE_CART)) {
+            if (role != null && RolePermissions.can(role, AppPermission.CREATE_SALES)) {
                 CartScreenRoute(
                     onBack = navController::navigateUp,
                     onBrowseCatalog = { navController.navigate(CatalogRoute) },
