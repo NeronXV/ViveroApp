@@ -139,7 +139,7 @@ create trigger user_roles_set_updated_at before update on public.user_roles
 for each row execute function public.set_updated_at();
 
 create or replace function public.has_permission(required_permission pg_catalog.text)
-returns pg_catalog.boolean
+returns pg_catalog.bool
 language sql
 stable
 security definer
@@ -169,9 +169,9 @@ begin
     insert into public.profiles (id, full_name)
     values (
         new.id,
-        pg_catalog.coalesce(
-            pg_catalog.nullif(pg_catalog.btrim(new.raw_user_meta_data ->> 'full_name'), ''),
-            pg_catalog.split_part(pg_catalog.coalesce(new.email, 'Usuario'), '@', 1)
+        coalesce(
+            nullif(pg_catalog.btrim(new.raw_user_meta_data ->> 'full_name'), ''),
+            pg_catalog.split_part(coalesce(new.email, 'Usuario'), '@', 1)
         )
     );
     return new;

@@ -182,7 +182,7 @@ begin
 
     select
         pg_catalog.count(*),
-        pg_catalog.coalesce(pg_catalog.sum(p.price_cents * i.quantity), 0)
+        coalesce(pg_catalog.sum(p.price_cents * i.quantity), 0)
     into v_valid_product_count, v_subtotal
     from pg_catalog.jsonb_to_recordset(p_items)
         as i(product_id pg_catalog.uuid, quantity pg_catalog.int4)
