@@ -7,6 +7,7 @@ $allSql = ($migrationFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -j
 $authSql = Get-Content (Join-Path $migrationDirectory '202608080001_auth_roles.sql') -Raw
 $salesSql = Get-Content (Join-Path $migrationDirectory '202608080003_sales_cart.sql') -Raw
 $branchSql = Get-Content (Join-Path $migrationDirectory '202608140001_branch_management.sql') -Raw
+$privilegeSql = Get-Content (Join-Path $migrationDirectory '202608150001_harden_table_privileges.sql') -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -25,11 +26,11 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 4) 'exactly four ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 5) 'exactly five ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
-        '202608140001_branch_management.sql'
+        '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -120,6 +121,29 @@ Assert-Condition (
 Assert-Condition (
     -not [regex]::IsMatch($branchSql, '(?i)grant\s+(insert|update|delete).+public\.(branches|profiles).+authenticated')
 ) 'branch management adds no direct authenticated table writes'
+Assert-Condition (
+    $privilegeSql.Contains('from anon, authenticated, public;') -and
+    $privilegeSql.Contains('public.branches,') -and
+    $privilegeSql.Contains('public.user_roles')
+) 'client and PUBLIC privileges are reset across all twelve application tables'
+Assert-Condition (
+    $privilegeSql.IndexOf('revoke all privileges on table') -lt
+    $privilegeSql.IndexOf('grant update (full_name, avatar_path)')
+) 'general table privileges are revoked before profile column updates are granted'
+Assert-Condition (
+    $privilegeSql.Contains('grant select on table') -and
+    $privilegeSql.Contains('to authenticated;')
+) 'authenticated retains the table reads required by RLS'
+Assert-Condition (
+    $privilegeSql.Contains('grant insert, update, delete on table') -and
+    $privilegeSql.Contains('public.categories,') -and
+    $privilegeSql.Contains('public.product_images,') -and
+    $privilegeSql.Contains('public.products')
+) 'authenticated retains catalog administration privileges governed by RLS'
+Assert-Condition (
+    -not $privilegeSql.Contains('service_role') -and
+    -not [regex]::IsMatch($privilegeSql, '(?i)alter\s+(role|default\s+privileges)|owner\s+to')
+) 'service_role, system roles, ownership, and default privileges remain untouched'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

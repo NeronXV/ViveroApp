@@ -59,6 +59,8 @@ Son campos protegidos y no tienen privilegio de actualización directa:
 
 Los cambios protegidos deberán pasar por funciones administrativas específicas y auditables. No se entregan permisos directos de escritura sobre `user_roles` a `authenticated`.
 
+Los privilegios generales creados por defaults de Supabase se eliminan explícitamente. `authenticated` conserva lectura sobre las tablas de aplicación, escritura RLS sobre las tres tablas de catálogo y `UPDATE` exclusivamente sobre `profiles.full_name` y `profiles.avatar_path`. `anon` y `PUBLIC` no reciben privilegios de tabla durante esta fase; el acceso público al catálogo se diseñará posteriormente.
+
 La administración de sucursales usa exclusivamente estos RPC:
 
 - `create_branch(text, text)`

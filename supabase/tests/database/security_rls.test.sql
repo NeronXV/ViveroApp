@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(40);
+select extensions.plan(57);
 
 insert into public.branches (id, code, name, is_active) values
     ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro', true),
@@ -394,6 +394,239 @@ select extensions.ok(
     ),
     'anon cannot execute branch management RPCs'
 );
+
+select extensions.ok(
+    not pg_catalog.has_table_privilege('authenticated', 'public.branches', 'INSERT'),
+    'authenticated has no direct INSERT privilege on branches'
+);
+select extensions.ok(
+    not pg_catalog.has_table_privilege('authenticated', 'public.branches', 'UPDATE'),
+    'authenticated has no general UPDATE privilege on branches'
+);
+select extensions.ok(
+    not pg_catalog.has_table_privilege('authenticated', 'public.branches', 'DELETE'),
+    'authenticated has no direct DELETE privilege on branches'
+);
+select extensions.ok(
+    not pg_catalog.has_table_privilege('authenticated', 'public.profiles', 'UPDATE'),
+    'authenticated has no general UPDATE privilege on profiles'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            not pg_catalog.has_column_privilege(
+                'authenticated', 'public.profiles', protected.column_name, 'UPDATE'
+            )
+        )
+        from (values
+            ('id'::pg_catalog.text),
+            ('branch_id'::pg_catalog.text),
+            ('is_active'::pg_catalog.text),
+            ('created_at'::pg_catalog.text),
+            ('updated_at'::pg_catalog.text)
+        ) as protected(column_name)
+    ),
+    'authenticated cannot update any protected profile column'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
+        )
+        from pg_catalog.pg_proc p
+        where p.oid = any(array[
+            'public.create_branch(text,text)'::regprocedure::oid,
+            'public.update_branch(uuid,text,text)'::regprocedure::oid,
+            'public.set_branch_active(uuid,boolean)'::regprocedure::oid,
+            'public.assign_user_branch(uuid,uuid)'::regprocedure::oid
+        ])
+    ),
+    'authenticated retains EXECUTE on all branch RPCs'
+);
+select extensions.ok(
+    pg_catalog.has_function_privilege(
+        'authenticated', 'public.submit_sale_to_cashier(uuid,text,jsonb,uuid)', 'EXECUTE'
+    )
+    and not pg_catalog.has_function_privilege(
+        'anon', 'public.submit_sale_to_cashier(uuid,text,jsonb,uuid)', 'EXECUTE'
+    ),
+    'submit_sale_to_cashier remains executable only by authenticated clients'
+);
+select extensions.ok(
+    pg_catalog.has_function_privilege(
+        'authenticated', 'public.assign_user_role(uuid,text)', 'EXECUTE'
+    )
+    and not pg_catalog.has_function_privilege(
+        'anon', 'public.assign_user_role(uuid,text)', 'EXECUTE'
+    ),
+    'assign_user_role remains executable only by authenticated clients'
+);
+select extensions.ok(
+    pg_catalog.has_function_privilege(
+        'service_role', 'public.bootstrap_first_owner(uuid)', 'EXECUTE'
+    )
+    and not pg_catalog.has_function_privilege(
+        'authenticated', 'public.bootstrap_first_owner(uuid)', 'EXECUTE'
+    )
+    and not pg_catalog.has_function_privilege(
+        'anon', 'public.bootstrap_first_owner(uuid)', 'EXECUTE'
+    ),
+    'bootstrap_first_owner remains reserved for service_role'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            pg_catalog.has_table_privilege('authenticated', required.table_name, 'SELECT')
+        )
+        from (values
+            ('public.branches'::pg_catalog.text),
+            ('public.categories'::pg_catalog.text),
+            ('public.permissions'::pg_catalog.text),
+            ('public.product_images'::pg_catalog.text),
+            ('public.products'::pg_catalog.text),
+            ('public.profiles'::pg_catalog.text),
+            ('public.role_permissions'::pg_catalog.text),
+            ('public.roles'::pg_catalog.text),
+            ('public.sale_items'::pg_catalog.text),
+            ('public.sale_status_history'::pg_catalog.text),
+            ('public.sales'::pg_catalog.text),
+            ('public.user_roles'::pg_catalog.text)
+        ) as required(table_name)
+    ),
+    'authenticated retains SELECT on all twelve RLS-protected tables'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            not pg_catalog.has_table_privilege(
+                'authenticated', protected.table_name, privilege.name
+            )
+        )
+        from (values
+            ('public.branches'::pg_catalog.text),
+            ('public.permissions'::pg_catalog.text),
+            ('public.profiles'::pg_catalog.text),
+            ('public.role_permissions'::pg_catalog.text),
+            ('public.roles'::pg_catalog.text),
+            ('public.sale_items'::pg_catalog.text),
+            ('public.sale_status_history'::pg_catalog.text),
+            ('public.sales'::pg_catalog.text),
+            ('public.user_roles'::pg_catalog.text)
+        ) as protected(table_name)
+        cross join (values
+            ('INSERT'::pg_catalog.text), ('UPDATE'::pg_catalog.text),
+            ('DELETE'::pg_catalog.text), ('TRUNCATE'::pg_catalog.text),
+            ('REFERENCES'::pg_catalog.text), ('TRIGGER'::pg_catalog.text)
+        ) as privilege(name)
+    ),
+    'authenticated has no table-level writes on non-catalog application tables'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            case
+                when privilege.name in ('INSERT', 'UPDATE', 'DELETE') then
+                    pg_catalog.has_table_privilege(
+                        'authenticated', catalog.table_name, privilege.name
+                    )
+                else
+                    not pg_catalog.has_table_privilege(
+                        'authenticated', catalog.table_name, privilege.name
+                    )
+            end
+        )
+        from (values
+            ('public.categories'::pg_catalog.text),
+            ('public.product_images'::pg_catalog.text),
+            ('public.products'::pg_catalog.text)
+        ) as catalog(table_name)
+        cross join (values
+            ('INSERT'::pg_catalog.text), ('UPDATE'::pg_catalog.text),
+            ('DELETE'::pg_catalog.text), ('TRUNCATE'::pg_catalog.text),
+            ('REFERENCES'::pg_catalog.text), ('TRIGGER'::pg_catalog.text)
+        ) as privilege(name)
+    ),
+    'catalog tables retain only RLS-governed client writes'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            not pg_catalog.has_table_privilege('anon', target.table_name, privilege.name)
+        )
+        from (values
+            ('public.branches'::pg_catalog.text), ('public.categories'::pg_catalog.text),
+            ('public.permissions'::pg_catalog.text), ('public.product_images'::pg_catalog.text),
+            ('public.products'::pg_catalog.text), ('public.profiles'::pg_catalog.text),
+            ('public.role_permissions'::pg_catalog.text), ('public.roles'::pg_catalog.text),
+            ('public.sale_items'::pg_catalog.text), ('public.sale_status_history'::pg_catalog.text),
+            ('public.sales'::pg_catalog.text), ('public.user_roles'::pg_catalog.text)
+        ) as target(table_name)
+        cross join (values
+            ('SELECT'::pg_catalog.text), ('INSERT'::pg_catalog.text),
+            ('UPDATE'::pg_catalog.text), ('DELETE'::pg_catalog.text),
+            ('TRUNCATE'::pg_catalog.text), ('REFERENCES'::pg_catalog.text),
+            ('TRIGGER'::pg_catalog.text)
+        ) as privilege(name)
+    ),
+    'anon has no table privileges during the authenticated-only phase'
+);
+select extensions.ok(
+    not exists (
+        select 1
+        from pg_catalog.pg_class c
+        join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+        cross join lateral pg_catalog.aclexplode(
+            coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))
+        ) acl
+        where n.nspname = 'public'
+          and c.relkind = 'r'
+          and acl.grantee = 0
+    ),
+    'PUBLIC has no privileges on application tables'
+);
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            pg_catalog.has_table_privilege('service_role', target.table_name, privilege.name)
+        )
+        from (values
+            ('public.branches'::pg_catalog.text), ('public.categories'::pg_catalog.text),
+            ('public.permissions'::pg_catalog.text), ('public.product_images'::pg_catalog.text),
+            ('public.products'::pg_catalog.text), ('public.profiles'::pg_catalog.text),
+            ('public.role_permissions'::pg_catalog.text), ('public.roles'::pg_catalog.text),
+            ('public.sale_items'::pg_catalog.text), ('public.sale_status_history'::pg_catalog.text),
+            ('public.sales'::pg_catalog.text), ('public.user_roles'::pg_catalog.text)
+        ) as target(table_name)
+        cross join (values
+            ('SELECT'::pg_catalog.text), ('INSERT'::pg_catalog.text),
+            ('UPDATE'::pg_catalog.text), ('DELETE'::pg_catalog.text),
+            ('TRUNCATE'::pg_catalog.text), ('REFERENCES'::pg_catalog.text),
+            ('TRIGGER'::pg_catalog.text)
+        ) as privilege(name)
+    ),
+    'service_role retains full administrative table privileges'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '20000000-0000-0000-0000-000000000001';
+set local "request.jwt.claims" = '{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated"}';
+select extensions.is(
+    (select pg_catalog.count(*) from public.products),
+    1::bigint,
+    'SALES retains RLS-filtered catalog reads'
+);
+reset role;
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '20000000-0000-0000-0000-000000000007';
+set local "request.jwt.claims" = '{"sub":"20000000-0000-0000-0000-000000000007","role":"authenticated"}';
+select extensions.lives_ok(
+    $$update public.categories
+      set description = 'Actualizada por OWNER'
+      where id = '30000000-0000-0000-0000-000000000001'$$,
+    'OWNER retains catalog administration through RLS'
+);
+reset role;
 
 select * from extensions.finish();
 rollback;
