@@ -61,6 +61,8 @@ Los cambios protegidos deberán pasar por funciones administrativas específicas
 
 Los privilegios generales creados por defaults de Supabase se eliminan explícitamente. `authenticated` conserva lectura sobre las tablas de aplicación, escritura RLS sobre las tres tablas de catálogo y `UPDATE` exclusivamente sobre `profiles.full_name` y `profiles.avatar_path`. `anon` y `PUBLIC` no reciben privilegios de tabla durante esta fase; el acceso público al catálogo se diseñará posteriormente.
 
+La ejecución de funciones también usa una lista blanca. `authenticated` recibe los RPC operativos y `has_permission`; `bootstrap_first_owner` queda reservado a `service_role`; las funciones de trigger no son invocables directamente por clientes. `anon` y `PUBLIC` no ejecutan ninguna función de `public` durante esta fase.
+
 La administración de sucursales usa exclusivamente estos RPC:
 
 - `create_branch(text, text)`

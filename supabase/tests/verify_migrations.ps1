@@ -8,6 +8,7 @@ $authSql = Get-Content (Join-Path $migrationDirectory '202608080001_auth_roles.s
 $salesSql = Get-Content (Join-Path $migrationDirectory '202608080003_sales_cart.sql') -Raw
 $branchSql = Get-Content (Join-Path $migrationDirectory '202608140001_branch_management.sql') -Raw
 $privilegeSql = Get-Content (Join-Path $migrationDirectory '202608150001_harden_table_privileges.sql') -Raw
+$functionPrivilegeSql = Get-Content (Join-Path $migrationDirectory '202608150002_harden_function_privileges.sql') -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -26,11 +27,12 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 5) 'exactly five ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 6) 'exactly six ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
-        '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql'
+        '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql,' +
+        '202608150002_harden_function_privileges.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -144,6 +146,32 @@ Assert-Condition (
     -not $privilegeSql.Contains('service_role') -and
     -not [regex]::IsMatch($privilegeSql, '(?i)alter\s+(role|default\s+privileges)|owner\s+to')
 ) 'service_role, system roles, ownership, and default privileges remain untouched'
+Assert-Condition (
+    [regex]::Matches(
+        $functionPrivilegeSql,
+        '(?is)revoke all on function public\.[a-z_]+\s*\([^;]*?\)\s*from public, anon, authenticated;'
+    ).Count -eq 11
+) 'all eleven public function signatures revoke client and PUBLIC execution'
+Assert-Condition (
+    [regex]::Matches(
+        $functionPrivilegeSql,
+        '(?is)grant execute on function public\.(has_permission|submit_sale_to_cashier|assign_user_role|create_branch|update_branch|set_branch_active|assign_user_branch)\s*\([^;]*?\)\s*to authenticated;'
+    ).Count -eq 7
+) 'authenticated receives exactly the seven approved public functions'
+Assert-Condition (
+    $functionPrivilegeSql.Contains(
+        'grant execute on function public.bootstrap_first_owner(pg_catalog.uuid)'
+    ) -and $functionPrivilegeSql.Contains('to service_role;')
+) 'bootstrap_first_owner remains explicitly reserved for service_role'
+Assert-Condition (
+    -not [regex]::IsMatch(
+        $functionPrivilegeSql,
+        '(?is)grant execute on function public\.(bootstrap_first_owner|handle_new_user|set_updated_at|enforce_product_price_permission).*to authenticated;'
+    )
+) 'administrative and trigger functions are not granted to authenticated'
+Assert-Condition (
+    -not [regex]::IsMatch($functionPrivilegeSql, '(?i)create\s+(or\s+replace\s+)?function|alter\s+default\s+privileges|owner\s+to')
+) 'function hardening changes no bodies, owners, or global defaults'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

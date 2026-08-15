@@ -10,7 +10,7 @@ Ejecutar desde la raíz:
 
 ## Pruebas de seguridad de Supabase
 
-`supabase/tests/database/security_rls.test.sql` contiene 57 pruebas pgTAP para capacidades por rol, aislamiento entre sucursales, protección del perfil, bandeja de Caja, idempotencia, rechazo atómico de tickets, jerarquía entre `OWNER` y `ADMIN`, administración de sucursales, asignaciones idempotentes, privilegios mínimos de tablas y privilegios de ejecución de los RPC.
+`supabase/tests/database/security_rls.test.sql` contiene 63 pruebas pgTAP para capacidades por rol, aislamiento entre sucursales, protección del perfil, bandeja de Caja, idempotencia, rechazo atómico de tickets, jerarquía entre `OWNER` y `ADMIN`, administración de sucursales, asignaciones idempotentes, privilegios mínimos de tablas y lista blanca de ejecución de funciones.
 
 Las pruebas están creadas pero pendientes de ejecución porque requieren un entorno PostgreSQL/Supabase local compatible. Deben aprobarse con `supabase test db` en un entorno de pruebas antes de promover cualquier estructura o versión a producción. No se instalará Docker ni PostgreSQL como parte de esta fase.
 

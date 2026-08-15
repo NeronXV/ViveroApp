@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(57);
+select extensions.plan(63);
 
 insert into public.branches (id, code, name, is_active) values
     ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro', true),
@@ -627,6 +627,108 @@ select extensions.lives_ok(
     'OWNER retains catalog administration through RLS'
 );
 reset role;
+
+select extensions.results_eq(
+    $$
+    select p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')'
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+    order by 1
+    $$,
+    $$values
+        ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
+        ('assign_user_role(p_user_id uuid, p_role_name text)'),
+        ('bootstrap_first_owner(p_user_id uuid)'),
+        ('create_branch(p_code text, p_name text)'),
+        ('enforce_product_price_permission()'),
+        ('handle_new_user()'),
+        ('has_permission(required_permission text)'),
+        ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
+        ('set_updated_at()'),
+        ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
+        ('update_branch(p_branch_id uuid, p_code text, p_name text)')
+    $$,
+    'the public function inventory contains exactly eleven approved signatures'
+);
+
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            not pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
+        )
+        from pg_catalog.pg_proc p
+        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+    ),
+    'anon cannot execute any public function'
+);
+
+select extensions.ok(
+    not exists (
+        select 1
+        from pg_catalog.pg_proc p
+        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+        cross join lateral pg_catalog.aclexplode(
+            coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
+        ) acl
+        where n.nspname = 'public'
+          and acl.grantee = 0
+          and acl.privilege_type = 'EXECUTE'
+    ),
+    'PUBLIC cannot execute any public function'
+);
+
+select extensions.results_eq(
+    $$
+    select p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')'
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    order by 1
+    $$,
+    $$values
+        ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
+        ('assign_user_role(p_user_id uuid, p_role_name text)'),
+        ('create_branch(p_code text, p_name text)'),
+        ('has_permission(required_permission text)'),
+        ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
+        ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
+        ('update_branch(p_branch_id uuid, p_code text, p_name text)')
+    $$,
+    'authenticated can execute exactly the seven-function whitelist'
+);
+
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            pg_catalog.has_function_privilege('service_role', p.oid, 'EXECUTE')
+        )
+        from pg_catalog.pg_proc p
+        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+    ),
+    'service_role retains administrative execution of every public function'
+);
+
+select extensions.ok(
+    (
+        select pg_catalog.count(*) = 3
+           and pg_catalog.bool_and(
+               not pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
+               and not pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
+               and exists (
+                   select 1 from pg_catalog.pg_trigger t where t.tgfoid = p.oid
+               )
+           )
+        from pg_catalog.pg_proc p
+        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+    ),
+    'trigger functions remain bound to triggers but are not client-invocable'
+);
 
 select * from extensions.finish();
 rollback;
