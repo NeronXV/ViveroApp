@@ -5,8 +5,11 @@ Las migraciones actuales son:
 - `202608080001_auth_roles.sql`: perfiles, roles, asignaciones y sucursales.
 - `202608080002_catalog.sql`: categorías, productos e imágenes de productos.
 - `202608080003_sales_cart.sql`: ventas, partidas, historial de estados y envío idempotente a caja.
+- `202608140001_branch_management.sql`: RPC controlados para crear, actualizar, activar y desactivar sucursales, y asignar personal a una sucursal activa.
 
-Todas incluyen restricciones, índices, marcas de tiempo y RLS.
+El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS; la cuarta migración añade solo funciones controladas y privilegios de ejecución.
+
+Las mutaciones de `branches` y `profiles.branch_id` no se conceden directamente a `authenticated`. Se realizan mediante `create_branch`, `update_branch`, `set_branch_active` y `assign_user_branch`. Reactivar conserva el identificador y los datos de la sucursal; repetir el mismo estado o la misma asignación no genera cambios adicionales. Una sucursal no puede eliminarse físicamente mediante estos RPC.
 
 ## Modelo previsto
 

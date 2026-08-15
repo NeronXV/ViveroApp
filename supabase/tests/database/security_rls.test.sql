@@ -2,11 +2,13 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(25);
+select extensions.plan(40);
 
-insert into public.branches (id, code, name) values
-    ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro'),
-    ('10000000-0000-0000-0000-000000000002', 'NORTE', 'Sucursal Norte');
+insert into public.branches (id, code, name, is_active) values
+    ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro', true),
+    ('10000000-0000-0000-0000-000000000002', 'NORTE', 'Sucursal Norte', true),
+    ('10000000-0000-0000-0000-000000000003', 'PENDIENTE', 'Sucursal con venta pendiente', true),
+    ('10000000-0000-0000-0000-000000000004', 'INACTIVA', 'Sucursal inactiva', false);
 
 insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -59,7 +61,8 @@ insert into public.sales (
     ('50000000-0000-0000-0000-000000000001', 'VD-000001-AAAAAA', '10000000-0000-0000-0000-000000000001', 1500, 1500, 'SENT_TO_CASHIER', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001'),
     ('50000000-0000-0000-0000-000000000002', 'VD-000002-BBBBBB', '10000000-0000-0000-0000-000000000001', 1500, 1500, 'PAYMENT_PENDING', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000002'),
     ('50000000-0000-0000-0000-000000000003', 'VD-000003-CCCCCC', '10000000-0000-0000-0000-000000000001', 1500, 1500, 'PAID', '20000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000003'),
-    ('50000000-0000-0000-0000-000000000004', 'VD-000004-DDDDDD', '10000000-0000-0000-0000-000000000002', 1500, 1500, 'SENT_TO_CASHIER', '20000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000004');
+    ('50000000-0000-0000-0000-000000000004', 'VD-000004-DDDDDD', '10000000-0000-0000-0000-000000000002', 1500, 1500, 'SENT_TO_CASHIER', '20000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000004'),
+    ('50000000-0000-0000-0000-000000000005', 'VD-000005-HHHHHH', '10000000-0000-0000-0000-000000000003', 1500, 1500, 'PAYMENT_PENDING', '20000000-0000-0000-0000-000000000007', '50000000-0000-0000-0000-000000000005');
 
 select extensions.results_eq(
     $$select name from public.roles order by id$$,
@@ -260,6 +263,137 @@ select extensions.throws_ok(
     'the final OWNER cannot be removed accidentally'
 );
 reset role;
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '20000000-0000-0000-0000-000000000001';
+set local "request.jwt.claims" = '{"sub":"20000000-0000-0000-0000-000000000001","role":"authenticated"}';
+select extensions.throws_ok(
+    $$select public.create_branch('VENTAS', 'Sucursal Ventas')$$,
+    '42501',
+    'Branch management is not allowed',
+    'a user without MANAGE_BRANCHES cannot create branches'
+);
+select extensions.throws_ok(
+    $$select public.update_branch('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Centro cambiado')$$,
+    '42501',
+    'Branch management is not allowed',
+    'a user without MANAGE_BRANCHES cannot modify branches'
+);
+select extensions.throws_ok(
+    $$select public.assign_user_branch('20000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-000000000002')$$,
+    '42501',
+    'Branch assignment is not allowed',
+    'a user without MANAGE_USERS cannot assign branches'
+);
+reset role;
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '20000000-0000-0000-0000-000000000006';
+set local "request.jwt.claims" = '{"sub":"20000000-0000-0000-0000-000000000006","role":"authenticated"}';
+select extensions.throws_ok(
+    $$select public.assign_user_branch('20000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000002')$$,
+    '42501',
+    'Branch assignment is not allowed',
+    'ADMIN cannot modify an OWNER branch assignment'
+);
+reset role;
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '20000000-0000-0000-0000-000000000007';
+set local "request.jwt.claims" = '{"sub":"20000000-0000-0000-0000-000000000007","role":"authenticated"}';
+select extensions.lives_ok(
+    $$select public.create_branch('  campo_01  ', '  Sucursal   Campo  ')$$,
+    'OWNER can create a normalized branch'
+);
+select extensions.throws_ok(
+    $$select public.create_branch('centro', 'Otra sucursal')$$,
+    '23505',
+    'Branch code is unavailable',
+    'a duplicate normalized branch code is rejected'
+);
+select extensions.throws_ok(
+    $$select public.create_branch('   ', 'Sucursal valida')$$,
+    '22023',
+    'Branch data is invalid',
+    'an empty branch code is rejected'
+);
+select extensions.throws_ok(
+    $$select public.create_branch('VALIDA', '   ')$$,
+    '22023',
+    'Branch data is invalid',
+    'an empty branch name is rejected'
+);
+select extensions.lives_ok(
+    $$select public.assign_user_branch(
+        '20000000-0000-0000-0000-000000000007',
+        (select id from public.branches where code = 'CAMPO_01')
+    )$$,
+    'OWNER can assign their own active branch'
+);
+select extensions.throws_ok(
+    $$select public.assign_user_branch(
+        '20000000-0000-0000-0000-000000000008',
+        '10000000-0000-0000-0000-000000000004'
+    )$$,
+    '22023',
+    'Target branch is unavailable',
+    'an inactive branch cannot be assigned'
+);
+select extensions.throws_ok(
+    $$select public.set_branch_active('10000000-0000-0000-0000-000000000001', false)$$,
+    '55000',
+    'Branch cannot be deactivated',
+    'a branch with active personnel cannot be deactivated'
+);
+select extensions.throws_ok(
+    $$select public.set_branch_active('10000000-0000-0000-0000-000000000003', false)$$,
+    '55000',
+    'Branch cannot be deactivated',
+    'a branch with pending sales cannot be deactivated'
+);
+select extensions.lives_ok(
+    $$select public.assign_user_branch(
+        '20000000-0000-0000-0000-000000000007',
+        (select id from public.branches where code = 'CAMPO_01')
+    )$$,
+    'an identical branch assignment is idempotent'
+);
+reset role;
+
+select extensions.ok(
+    not exists (
+        select 1
+        from pg_catalog.pg_proc p
+        cross join lateral pg_catalog.aclexplode(
+            coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
+        ) acl
+        where p.oid = any(array[
+            'public.create_branch(text,text)'::regprocedure::oid,
+            'public.update_branch(uuid,text,text)'::regprocedure::oid,
+            'public.set_branch_active(uuid,boolean)'::regprocedure::oid,
+            'public.assign_user_branch(uuid,uuid)'::regprocedure::oid
+        ])
+          and acl.grantee = 0
+          and acl.privilege_type = 'EXECUTE'
+    ),
+    'PUBLIC cannot execute branch management RPCs'
+);
+
+select extensions.ok(
+    (
+        select pg_catalog.bool_and(
+            not pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
+        )
+        from pg_catalog.pg_proc p
+        where p.oid = any(array[
+            'public.create_branch(text,text)'::regprocedure::oid,
+            'public.update_branch(uuid,text,text)'::regprocedure::oid,
+            'public.set_branch_active(uuid,boolean)'::regprocedure::oid,
+            'public.assign_user_branch(uuid,uuid)'::regprocedure::oid
+        ])
+    ),
+    'anon cannot execute branch management RPCs'
+);
 
 select * from extensions.finish();
 rollback;

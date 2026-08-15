@@ -59,6 +59,38 @@ Son campos protegidos y no tienen privilegio de actualización directa:
 
 Los cambios protegidos deberán pasar por funciones administrativas específicas y auditables. No se entregan permisos directos de escritura sobre `user_roles` a `authenticated`.
 
+La administración de sucursales usa exclusivamente estos RPC:
+
+- `create_branch(text, text)`
+- `update_branch(uuid, text, text)`
+- `set_branch_active(uuid, boolean)`
+- `assign_user_branch(uuid, uuid)`
+
+Los tres primeros requieren `MANAGE_BRANCHES`; el cuarto requiere `MANAGE_USERS`. `ADMIN` no puede cambiar la sucursal de un `OWNER`. Reactivar una sucursal conserva su UUID, código, nombre e historial; desactivarla se rechaza si mantiene personal activo o ventas pendientes.
+
 ## Alcance por sucursal
 
 RLS limita la bandeja de `CASHIER` a `SENT_TO_CASHIER` y `PAYMENT_PENDING` de su sucursal. `MANAGER` consulta ventas de su sucursal mediante una política independiente. `ADMIN` y `OWNER` pueden consultar todas las sucursales. El historial de caja específico se incorporará con su propia consulta o función.
+
+## Cobertura de capacidades
+
+| Capacidad | Política RLS | RPC o trigger | Estado |
+|---|---|---|---|
+| `VIEW_CATALOG` | `categories_read`, `products_read`, `product_images_read` | — | Activa; el acceso público se diseñará con la web |
+| `SCAN_PRODUCTS` | Reutiliza lectura de catálogo | — | Activa en Android |
+| `CREATE_SALES` | — | `submit_sale_to_cashier` | Activa |
+| `VIEW_OWN_SALES` | `sales_creator_read_own` | — | Activa |
+| `OPERATE_CASHIER` | `sales_cashier_read_pending` | — | Lectura activa; cobro futuro |
+| `VIEW_BRANCH_SALES` | `sales_management_read_branch` | — | Activa |
+| `VIEW_ALL_SALES` | `sales_management_read_all` | — | Activa |
+| `MANAGE_PRODUCTS` | `categories_manage`, `products_manage`, `product_images_manage` | `enforce_product_price_permission` | Activa |
+| `MANAGE_PRICES` | `products_manage` | `enforce_product_price_permission` | Activa |
+| `MANAGE_DISCOUNTS` | — | — | Fase futura |
+| `MANAGE_INVENTORY` | — | — | Fase `stock_balances` |
+| `VIEW_INVENTORY_ALERTS` | — | — | Fase `stock_balances` |
+| `VIEW_REPORTS` | `branches_read_authenticated` | — | Parcial; reportes futuros |
+| `MANAGE_BRANCHES` | `branches_read_authenticated` para lectura | `create_branch`, `update_branch`, `set_branch_active` | Activa tras cuarta migración |
+| `MANAGE_USERS` | `profiles_read_self_or_management`, `user_roles_read_self_or_management` | `assign_user_branch` | Asignación de sucursal activa; otras operaciones futuras |
+| `ASSIGN_ROLES` | — | `assign_user_role`, `bootstrap_first_owner` controlado | Activa |
+| `VIEW_AUDIT` | — | — | Fase futura |
+| `MANAGE_SETTINGS` | — | — | Fase futura |

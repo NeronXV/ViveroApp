@@ -6,6 +6,7 @@ $migrationFiles = @(Get-ChildItem $migrationDirectory -Filter '*.sql' | Sort-Obj
 $allSql = ($migrationFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 $authSql = Get-Content (Join-Path $migrationDirectory '202608080001_auth_roles.sql') -Raw
 $salesSql = Get-Content (Join-Path $migrationDirectory '202608080003_sales_cart.sql') -Raw
+$branchSql = Get-Content (Join-Path $migrationDirectory '202608140001_branch_management.sql') -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -24,10 +25,11 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 3) 'exactly three ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 4) 'exactly four ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
-        '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql'
+        '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
+        '202608140001_branch_management.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -40,7 +42,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 5 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 9 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -99,6 +101,25 @@ Assert-Condition (
     $salesSql.Contains('v_valid_product_count <> v_item_count') -and
     $salesSql.Contains('v_distinct_item_count <> v_item_count')
 ) 'ticket validation requires every distinct item to be valid'
+Assert-Condition (
+    [regex]::Matches($branchSql, "public\.has_permission\('MANAGE_BRANCHES'\)").Count -eq 3 -and
+    $branchSql.Contains("public.has_permission('MANAGE_USERS')")
+) 'branch RPCs enforce their platform-independent capabilities'
+Assert-Condition (
+    $branchSql.Contains("v_actor_role = 'ADMIN' and v_target_role = 'OWNER'")
+) 'ADMIN cannot change an OWNER branch assignment'
+Assert-Condition (
+    $branchSql.Contains("s.status in ('SENT_TO_CASHIER', 'PAYMENT_PENDING')") -and
+    $branchSql.Contains('p.branch_id = p_branch_id and p.is_active')
+) 'branch deactivation checks active personnel and pending sales'
+Assert-Condition (
+    [regex]::Matches($branchSql, '(?i)revoke all on function public\.(create_branch|update_branch|set_branch_active|assign_user_branch).* from public;').Count -eq 4 -and
+    [regex]::Matches($branchSql, '(?i)revoke all on function public\.(create_branch|update_branch|set_branch_active|assign_user_branch).* from anon;').Count -eq 4 -and
+    [regex]::Matches($branchSql, '(?i)grant execute on function public\.(create_branch|update_branch|set_branch_active|assign_user_branch).* to authenticated;').Count -eq 4
+) 'branch RPC execution is revoked from PUBLIC and anon and granted to authenticated'
+Assert-Condition (
+    -not [regex]::IsMatch($branchSql, '(?i)grant\s+(insert|update|delete).+public\.(branches|profiles).+authenticated')
+) 'branch management adds no direct authenticated table writes'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }
