@@ -16,6 +16,10 @@ interface CartDao {
     @Query("SELECT * FROM cart_drafts WHERE id = :cartId")
     suspend fun getCart(cartId: String): CartWithItems?
 
+    @Transaction
+    @Query("SELECT * FROM sales WHERE id = :saleId")
+    suspend fun getSale(saleId: String): SaleWithItems?
+
     @Upsert
     suspend fun upsertCart(cart: CartHeaderEntity)
 
@@ -49,4 +53,52 @@ interface CartDao {
         upsertHistory(history)
         deleteCart(cartId)
     }
+
+    @Query(
+        """
+        UPDATE sales
+        SET sync_state = 'SYNCING', sync_pending = 1,
+            sync_attempt_count = sync_attempt_count + 1,
+            sync_last_error = NULL, sync_last_attempt_at_epoch_ms = :attemptedAt
+        WHERE id = :saleId AND sync_state = 'PENDING'
+        """,
+    )
+    suspend fun claimPendingSale(saleId: String, attemptedAt: Long): Int
+
+    @Query(
+        """
+        UPDATE sales
+        SET sync_state = 'PENDING', sync_pending = 1, sync_last_error = :message
+        WHERE id = :saleId AND sync_state = 'SYNCING'
+        """,
+    )
+    suspend fun markSalePending(saleId: String, message: String): Int
+
+    @Query(
+        """
+        UPDATE sales
+        SET sync_state = 'FAILED', sync_pending = 1, sync_last_error = :message
+        WHERE id = :saleId AND sync_state = 'SYNCING'
+        """,
+    )
+    suspend fun markSaleFailed(saleId: String, message: String): Int
+
+    @Query(
+        """
+        UPDATE sales
+        SET sync_state = 'SYNCED', sync_pending = 0, sync_last_error = NULL, status = :serverStatus
+        WHERE id = :saleId AND sync_state = 'SYNCING'
+        """,
+    )
+    suspend fun markSaleSynced(saleId: String, serverStatus: String): Int
+
+    @Query(
+        """
+        UPDATE sales
+        SET sync_state = 'PENDING', sync_pending = 1,
+            sync_last_error = 'Sincronización interrumpida; lista para reintentar.'
+        WHERE sync_state = 'SYNCING'
+        """,
+    )
+    suspend fun recoverInterruptedSales(): Int
 }

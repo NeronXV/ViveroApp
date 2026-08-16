@@ -149,10 +149,17 @@ private fun ProductDetailContent(product: Product, onAddToCart: () -> Unit) {
                     Spacer(Modifier.height(24.dp))
                     Button(
                         onClick = onAddToCart,
-                        enabled = product.isAvailable,
+                        enabled = product.isActive && (!product.stockKnown || product.isAvailable),
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = MaterialTheme.shapes.large,
-                    ) { Text(if (product.isAvailable) "Agregar al carrito" else if (!product.stockKnown) "Existencia pendiente" else "Producto sin existencia", fontWeight = FontWeight.Bold) }
+                    ) {
+                        Text(
+                            if (!product.stockKnown) "Agregar · existencia pendiente"
+                            else if (product.isAvailable) "Agregar al carrito"
+                            else "Producto sin existencia",
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Spacer(Modifier.height(30.dp))
                 }
             }

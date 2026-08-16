@@ -361,10 +361,14 @@ private fun FoundProduct(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Button(onClick = onAddToCart, enabled = product.isAvailable && product.stockKnown, modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = onAddToCart,
+            enabled = product.isActive && (!product.stockKnown || product.isAvailable),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Icon(Icons.Outlined.ShoppingBag, null)
             Spacer(Modifier.width(8.dp))
-            Text(if (!product.stockKnown) "Existencia pendiente" else if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
+            Text(if (!product.stockKnown) "Agregar · existencia pendiente" else if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onScanAgain, modifier = Modifier.weight(1f)) { Text("Otro código") }

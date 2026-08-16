@@ -11,6 +11,8 @@ enum class SaleStatus {
     DELIVERED,
 }
 
+enum class SaleSyncState { PENDING, SYNCING, SYNCED, FAILED }
+
 data class SaleTicket(
     val id: String,
     val folio: String,
@@ -21,10 +23,16 @@ data class SaleTicket(
     val totalCents: Long,
     val status: SaleStatus,
     val createdBy: String,
+    val branchId: String,
     val createdAt: Instant,
-    val syncPending: Boolean,
+    val syncState: SaleSyncState,
+    val syncAttemptCount: Int,
+    val syncLastError: String?,
+    val syncLastAttemptAt: Instant?,
     val history: List<SaleStatusChange>,
-)
+) {
+    val syncPending: Boolean get() = syncState != SaleSyncState.SYNCED
+}
 
 data class SaleStatusChange(
     val id: String,

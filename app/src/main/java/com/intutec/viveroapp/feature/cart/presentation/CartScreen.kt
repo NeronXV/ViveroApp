@@ -64,6 +64,7 @@ import com.intutec.viveroapp.core.designsystem.StatusPill
 import com.intutec.viveroapp.feature.cart.domain.model.Cart
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
+import com.intutec.viveroapp.feature.cart.domain.model.SaleSyncState
 import com.intutec.viveroapp.feature.catalog.presentation.productImageResource
 
 @Composable
@@ -215,12 +216,22 @@ private fun CartItemCard(item: CartItem, working: Boolean, onIncrement: (String)
                     Text(item.unitPriceCents.asMxn(), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     if (item.promotionName != null) Text(item.listPriceCents.asMxn(), textDecoration = TextDecoration.LineThrough, style = MaterialTheme.typography.bodySmall)
                 }
+                if (!item.stockKnown) {
+                    Text(
+                        "Existencia aún no sincronizada",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { onDecrement(item.productId) }, enabled = !working) { Icon(Icons.Outlined.Remove, "Disminuir") }
                     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
                         Text(item.quantity.toString(), Modifier.padding(horizontal = 14.dp, vertical = 6.dp), fontWeight = FontWeight.Bold)
                     }
-                    IconButton(onClick = { onIncrement(item.productId) }, enabled = !working && item.quantity < item.stockAvailable) { Icon(Icons.Outlined.Add, "Aumentar") }
+                    IconButton(
+                        onClick = { onIncrement(item.productId) },
+                        enabled = !working && (!item.stockKnown || item.quantity < item.stockAvailable),
+                    ) { Icon(Icons.Outlined.Add, "Aumentar") }
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = { onRemove(item.productId) }, enabled = !working) { Icon(Icons.Outlined.DeleteOutline, "Eliminar", tint = MaterialTheme.colorScheme.error) }
                 }
@@ -280,11 +291,15 @@ private fun EmptyCart(onBrowseCatalog: () -> Unit) {
 private fun SentTicketContent(ticket: SaleTicket, onStartNew: () -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(Icons.Outlined.CheckCircle, null, Modifier.size(76.dp), tint = MaterialTheme.colorScheme.primary)
-        StatusPill("Enviado a caja")
+        StatusPill(if (ticket.syncState == SaleSyncState.SYNCED) "Enviado a caja" else "Guardado localmente")
         Text("Orden preparada", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
         Text(ticket.folio, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("${ticket.items.sumOf(CartItem::quantity)} unidades · ${ticket.totalCents.asMxn()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (ticket.syncPending) Text("Pendiente de sincronizar con Supabase", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+        when (ticket.syncState) {
+            SaleSyncState.PENDING -> Text("Pendiente de sincronizar con Supabase", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+            SaleSyncState.FAILED -> Text(ticket.syncLastError ?: "La sincronización requiere revisión.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+            else -> Unit
+        }
         Spacer(Modifier.height(10.dp))
         Button(onClick = onStartNew, modifier = Modifier.fillMaxWidth()) { Text("Preparar otra venta") }
         FilledTonalButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Volver al inicio") }

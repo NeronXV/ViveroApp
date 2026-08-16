@@ -30,12 +30,13 @@ data class CartItem(
     val unitPriceCents: Long,
     val quantity: Int,
     val stockAvailable: Int,
+    val stockKnown: Boolean = true,
     val promotionName: String? = null,
 ) {
     init {
         require(quantity > 0) { "La cantidad debe ser mayor que cero." }
         require(stockAvailable >= 0) { "La existencia no puede ser negativa." }
-        require(quantity <= stockAvailable) { "La cantidad supera la existencia disponible." }
+        require(!stockKnown || quantity <= stockAvailable) { "La cantidad supera la existencia disponible." }
         require(listPriceCents >= 0 && unitPriceCents >= 0) { "Los precios no pueden ser negativos." }
         require(unitPriceCents <= listPriceCents) { "El descuento no puede aumentar el precio." }
     }

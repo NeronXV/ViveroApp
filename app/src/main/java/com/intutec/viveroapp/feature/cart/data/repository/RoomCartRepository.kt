@@ -12,9 +12,12 @@ import com.intutec.viveroapp.feature.cart.domain.model.CartCustomer
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
 import com.intutec.viveroapp.feature.cart.domain.model.SaleStatus
 import com.intutec.viveroapp.feature.cart.domain.model.SaleStatusChange
+import com.intutec.viveroapp.feature.cart.domain.model.SaleSyncState
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
 import com.intutec.viveroapp.feature.cart.domain.repository.CartRepository
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
+import com.intutec.viveroapp.core.session.SessionMode
+import com.intutec.viveroapp.core.session.UserSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -35,11 +38,14 @@ class RoomCartRepository @Inject constructor(
 
     override suspend fun addProduct(product: Product): Result<Unit> = runCatching {
         mutationMutex.withLock {
-            require(product.stockKnown && product.isAvailable) { "Este producto no tiene existencia confirmada." }
+            require(product.isActive) { "Este producto no está activo." }
+            require(!product.stockKnown || product.isAvailable) { "Este producto no tiene existencia disponible." }
             val current = dao.getCart(Cart.ACTIVE_CART_ID)?.toDomain() ?: Cart()
             val existing = current.items.firstOrNull { it.productId == product.id }
             val quantity = (existing?.quantity ?: 0) + 1
-            require(quantity <= product.stockAvailable) { "Solo hay ${product.stockAvailable} ${product.unit}(s) disponibles." }
+            if (product.stockKnown) {
+                require(quantity <= product.stockAvailable) { "Solo hay ${product.stockAvailable} ${product.unit}(s) disponibles." }
+            }
             dao.upsertCart(current.copy(updatedAt = Instant.now()).toHeaderEntity())
             dao.upsertItem(
                 CartItem(
@@ -52,6 +58,7 @@ class RoomCartRepository @Inject constructor(
                     unitPriceCents = product.effectivePriceCents,
                     quantity = quantity,
                     stockAvailable = product.stockAvailable,
+                    stockKnown = product.stockKnown,
                     promotionName = product.promotion?.name,
                 ).toEntity(current.id),
             )
@@ -63,7 +70,9 @@ class RoomCartRepository @Inject constructor(
             require(quantity > 0) { "La cantidad debe ser mayor que cero." }
             val current = dao.getCart(Cart.ACTIVE_CART_ID)?.toDomain() ?: error("El carrito está vacío.")
             val item = current.items.firstOrNull { it.productId == productId } ?: error("El producto ya no está en el carrito.")
-            require(quantity <= item.stockAvailable) { "Solo hay ${item.stockAvailable} ${item.unit}(s) disponibles." }
+            if (item.stockKnown) {
+                require(quantity <= item.stockAvailable) { "Solo hay ${item.stockAvailable} ${item.unit}(s) disponibles." }
+            }
             dao.upsertCart(current.copy(updatedAt = Instant.now()).toHeaderEntity())
             dao.upsertItem(item.copy(quantity = quantity).toEntity(current.id))
         }
@@ -92,18 +101,26 @@ class RoomCartRepository @Inject constructor(
         mutationMutex.withLock { dao.deleteCart(Cart.ACTIVE_CART_ID) }
     }
 
-    override suspend fun sendToCashier(userId: String): Result<SaleTicket> = runCatching {
+    override suspend fun createPendingSale(session: UserSession): Result<SaleTicket> = runCatching {
         mutationMutex.withLock {
+            require(session.mode == SessionMode.REMOTE) { "Solo una sesión remota puede enviar comandas." }
+            requireCanonicalUuid(session.userId, "La cuenta autenticada no tiene un identificador válido.")
+            val branch = requireNotNull(session.branch) { "Asigna una sucursal antes de enviar comandas." }
+            require(branch.isActive) { "La sucursal asignada está inactiva." }
+            requireCanonicalUuid(branch.id, "La sucursal no tiene un identificador válido.")
             val cart = dao.getCart(Cart.ACTIVE_CART_ID)?.toDomain() ?: error("El carrito está vacío.")
             require(cart.items.isNotEmpty()) { "Agrega al menos un producto antes de enviar a caja." }
-            cart.items.forEach { require(it.quantity <= it.stockAvailable) { "${it.name} supera la existencia disponible." } }
+            cart.items.forEach {
+                requireCanonicalUuid(it.productId, "El carrito contiene un producto que no pertenece al catálogo remoto.")
+                require(!it.stockKnown || it.quantity <= it.stockAvailable) { "${it.name} supera la existencia disponible." }
+            }
 
             val now = Instant.now()
             val saleId = UUID.randomUUID().toString()
             val folio = createFolio(saleId, now)
             val history = listOf(
-                SaleStatusChange(UUID.randomUUID().toString(), null, SaleStatus.DRAFT, userId, now, "Borrador creado en el dispositivo."),
-                SaleStatusChange(UUID.randomUUID().toString(), SaleStatus.DRAFT, SaleStatus.SENT_TO_CASHIER, userId, now, "Orden enviada a caja."),
+                SaleStatusChange(UUID.randomUUID().toString(), null, SaleStatus.DRAFT, session.userId, now, "Borrador creado en el dispositivo."),
+                SaleStatusChange(UUID.randomUUID().toString(), SaleStatus.DRAFT, SaleStatus.SENT_TO_CASHIER, session.userId, now, "Orden pendiente de confirmación remota."),
             )
             val ticket = SaleTicket(
                 id = saleId,
@@ -114,9 +131,13 @@ class RoomCartRepository @Inject constructor(
                 discountCents = cart.discountCents,
                 totalCents = cart.totalCents,
                 status = SaleStatus.SENT_TO_CASHIER,
-                createdBy = userId,
+                createdBy = session.userId,
+                branchId = branch.id,
                 createdAt = now,
-                syncPending = true,
+                syncState = SaleSyncState.PENDING,
+                syncAttemptCount = 0,
+                syncLastError = null,
+                syncLastAttemptAt = null,
                 history = history,
             )
             dao.persistSentSale(
@@ -135,6 +156,11 @@ class RoomCartRepository @Inject constructor(
     }
 }
 
+private fun requireCanonicalUuid(value: String, message: String) {
+    val parsed = runCatching { UUID.fromString(value) }.getOrNull()
+    require(parsed != null && parsed.toString().equals(value, ignoreCase = true)) { message }
+}
+
 private fun CartWithItems.toDomain(): Cart = Cart(
     id = header.id,
     items = items.map(CartItemEntity::toDomain).sortedBy(CartItem::name),
@@ -146,7 +172,7 @@ private fun CartWithItems.toDomain(): Cart = Cart(
 
 private fun CartItemEntity.toDomain() = CartItem(
     productId, internalCode, name, imageKey, unit, listPriceCents, unitPriceCents,
-    quantity, stockAvailable, promotionName,
+    quantity, stockAvailable, stockKnown, promotionName,
 )
 
 private fun Cart.toHeaderEntity() = CartHeaderEntity(
@@ -155,17 +181,18 @@ private fun Cart.toHeaderEntity() = CartHeaderEntity(
 
 private fun CartItem.toEntity(cartId: String) = CartItemEntity(
     cartId, productId, internalCode, name, imageKey, unit, listPriceCents, unitPriceCents,
-    quantity, stockAvailable, promotionName,
+    quantity, stockAvailable, stockKnown, promotionName,
 )
 
 private fun SaleTicket.toEntity() = SaleEntity(
     id, folio, customer?.id, customer?.name, customer?.memberNumber, subtotalCents,
-    discountCents, totalCents, status.name, createdBy, createdAt.toEpochMilli(), syncPending,
+    discountCents, totalCents, status.name, createdBy, branchId, createdAt.toEpochMilli(), syncPending,
+    syncState.name, syncAttemptCount, syncLastError, syncLastAttemptAt?.toEpochMilli(),
 )
 
 private fun CartItem.toSaleItemEntity(saleId: String) = SaleItemEntity(
     saleId, productId, internalCode, name, imageKey, unit, listPriceCents, unitPriceCents,
-    quantity, stockAvailable, promotionName,
+    quantity, stockAvailable, stockKnown, promotionName,
 )
 
 private fun SaleStatusChange.toEntity(saleId: String) = SaleStatusHistoryEntity(

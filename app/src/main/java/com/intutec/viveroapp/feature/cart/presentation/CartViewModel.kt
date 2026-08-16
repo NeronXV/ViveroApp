@@ -2,7 +2,6 @@ package com.intutec.viveroapp.feature.cart.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.feature.cart.domain.model.Cart
 import com.intutec.viveroapp.feature.cart.domain.model.CartCustomer
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
@@ -30,8 +29,7 @@ data class CartUiState(
 class CartViewModel @Inject constructor(
     private val repository: CartRepository,
     private val changeQuantity: ChangeCartQuantityUseCase,
-    private val sendToCashier: SendCartToCashierUseCase,
-    private val sessionStore: SessionStore,
+    private val sendCartToCashier: SendCartToCashierUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CartUiState())
     val uiState = _uiState.asStateFlow()
@@ -68,10 +66,9 @@ class CartViewModel @Inject constructor(
 
     fun sendToCashier() {
         if (_uiState.value.working) return
-        val userId = sessionStore.session.value?.userId.orEmpty()
         _uiState.update { it.copy(working = true, error = null) }
         viewModelScope.launch {
-            sendToCashier(userId).fold(
+            sendCartToCashier().fold(
                 onSuccess = { ticket -> _uiState.update { it.copy(working = false, sentTicket = ticket) } },
                 onFailure = { error -> _uiState.update { it.copy(working = false, error = error.message ?: "No pudimos enviar la orden.") } },
             )

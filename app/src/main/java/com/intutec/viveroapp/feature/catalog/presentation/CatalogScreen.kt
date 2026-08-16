@@ -254,12 +254,16 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
                 Text("/ ${product.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(12.dp))
-            Button(onClick = onAddToCart, enabled = product.isAvailable && product.stockKnown, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onAddToCart,
+                enabled = product.isActive && (!product.stockKnown || product.isAvailable),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Icon(Icons.Outlined.ShoppingCart, null)
                 Spacer(Modifier.size(8.dp))
                 Text(
                     when {
-                        !product.stockKnown -> "Existencia pendiente"
+                        !product.stockKnown -> "Agregar · existencia pendiente"
                         product.isAvailable -> "Agregar al carrito"
                         else -> "Sin existencia"
                     },

@@ -8,6 +8,14 @@ import com.intutec.viveroapp.feature.cart.domain.usecase.AddProductToCartUseCase
 import com.intutec.viveroapp.feature.cart.domain.usecase.SendCartToCashierUseCase
 import com.intutec.viveroapp.feature.catalog.domain.model.Category
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
+import com.intutec.viveroapp.core.session.SessionStore
+import com.intutec.viveroapp.core.session.UserSession
+import com.intutec.viveroapp.feature.cart.domain.model.SaleStatus
+import com.intutec.viveroapp.feature.cart.sync.PendingSaleSynchronizer
+import com.intutec.viveroapp.feature.cart.sync.SaleOutboxStore
+import com.intutec.viveroapp.feature.cart.sync.SaleSyncRemoteDataSource
+import com.intutec.viveroapp.feature.cart.sync.SaleSyncRequest
+import com.intutec.viveroapp.feature.cart.sync.SaleSyncResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -18,12 +26,12 @@ import java.time.Instant
 
 class CartUseCasesTest {
     @Test
-    fun `does not add product with unknown stock`() = runTest {
+    fun `remote active product with unknown stock can be added`() = runTest {
         val repository = RecordingCartRepository()
         val result = AddProductToCartUseCase(repository)(product(stockKnown = false))
 
-        assertTrue(result.isFailure)
-        assertFalse(repository.addCalled)
+        assertTrue(result.isSuccess)
+        assertTrue(repository.addCalled)
     }
 
     @Test
@@ -38,7 +46,9 @@ class CartUseCasesTest {
     @Test
     fun `send requires authenticated user id`() = runTest {
         val repository = RecordingCartRepository()
-        val result = SendCartToCashierUseCase(repository)("  ")
+        val store = SessionStore()
+        val synchronizer = PendingSaleSynchronizer(EmptyOutboxStore, UnusedRemote, store)
+        val result = SendCartToCashierUseCase(repository, synchronizer, store)()
 
         assertTrue(result.isFailure)
         assertFalse(repository.sendCalled)
@@ -63,8 +73,21 @@ private class RecordingCartRepository : CartRepository {
     override suspend fun associateCustomer(customer: CartCustomer?) = Result.success(Unit)
     override suspend fun saveDraft() = Result.success(Unit)
     override suspend fun cancelCart() = Result.success(Unit)
-    override suspend fun sendToCashier(userId: String): Result<SaleTicket> {
+    override suspend fun createPendingSale(session: UserSession): Result<SaleTicket> {
         sendCalled = true
         return Result.failure(NotImplementedError())
     }
+}
+
+private object EmptyOutboxStore : SaleOutboxStore {
+    override suspend fun load(saleId: String) = null
+    override suspend fun claimPending(saleId: String, attemptedAt: Instant) = false
+    override suspend fun markPending(saleId: String, message: String) = false
+    override suspend fun markFailed(saleId: String, message: String) = false
+    override suspend fun markSynced(saleId: String, serverStatus: SaleStatus) = false
+    override suspend fun recoverInterrupted() = 0
+}
+
+private object UnusedRemote : SaleSyncRemoteDataSource {
+    override suspend fun submitSale(request: SaleSyncRequest): SaleSyncResponse = error("No debe llamarse")
 }

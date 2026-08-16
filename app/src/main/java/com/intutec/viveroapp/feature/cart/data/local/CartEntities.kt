@@ -41,6 +41,7 @@ data class CartItemEntity(
     @ColumnInfo("unit_price_cents") val unitPriceCents: Long,
     val quantity: Int,
     @ColumnInfo("stock_available") val stockAvailable: Int,
+    @ColumnInfo(name = "stock_known", defaultValue = "1") val stockKnown: Boolean,
     @ColumnInfo("promotion_name") val promotionName: String?,
 )
 
@@ -49,7 +50,13 @@ data class CartWithItems(
     @Relation(parentColumn = "id", entityColumn = "cart_id") val items: List<CartItemEntity>,
 )
 
-@Entity(tableName = "sales", indices = [Index(value = ["folio"], unique = true)])
+@Entity(
+    tableName = "sales",
+    indices = [
+        Index(value = ["folio"], unique = true),
+        Index(value = ["sync_state", "created_at_epoch_ms"]),
+    ],
+)
 data class SaleEntity(
     @PrimaryKey val id: String,
     val folio: String,
@@ -61,8 +68,13 @@ data class SaleEntity(
     @ColumnInfo("total_cents") val totalCents: Long,
     val status: String,
     @ColumnInfo("created_by") val createdBy: String,
+    @ColumnInfo("branch_id") val branchId: String?,
     @ColumnInfo("created_at_epoch_ms") val createdAtEpochMs: Long,
     @ColumnInfo("sync_pending") val syncPending: Boolean,
+    @ColumnInfo(name = "sync_state", defaultValue = "'PENDING'") val syncState: String,
+    @ColumnInfo(name = "sync_attempt_count", defaultValue = "0") val syncAttemptCount: Int,
+    @ColumnInfo("sync_last_error") val syncLastError: String?,
+    @ColumnInfo("sync_last_attempt_at_epoch_ms") val syncLastAttemptAtEpochMs: Long?,
 )
 
 @Entity(
@@ -82,7 +94,13 @@ data class SaleItemEntity(
     @ColumnInfo("unit_price_cents") val unitPriceCents: Long,
     val quantity: Int,
     @ColumnInfo("stock_available") val stockAvailable: Int,
+    @ColumnInfo(name = "stock_known", defaultValue = "1") val stockKnown: Boolean,
     @ColumnInfo("promotion_name") val promotionName: String?,
+)
+
+data class SaleWithItems(
+    @Embedded val sale: SaleEntity,
+    @Relation(parentColumn = "id", entityColumn = "sale_id") val items: List<SaleItemEntity>,
 )
 
 @Entity(

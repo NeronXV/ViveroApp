@@ -12,6 +12,10 @@ import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogRemoteDa
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
 import com.intutec.viveroapp.feature.cart.data.repository.RoomCartRepository
 import com.intutec.viveroapp.feature.cart.domain.repository.CartRepository
+import com.intutec.viveroapp.feature.cart.sync.RoomSaleOutboxStore
+import com.intutec.viveroapp.feature.cart.sync.SaleOutboxStore
+import com.intutec.viveroapp.feature.cart.sync.SaleSyncRemoteDataSource
+import com.intutec.viveroapp.feature.cart.sync.SupabaseSaleSyncRemoteDataSource
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -36,6 +40,16 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindCartRepository(implementation: RoomCartRepository): CartRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSaleOutboxStore(implementation: RoomSaleOutboxStore): SaleOutboxStore
+
+    @Binds
+    @Singleton
+    abstract fun bindSaleSyncRemoteDataSource(
+        implementation: SupabaseSaleSyncRemoteDataSource,
+    ): SaleSyncRemoteDataSource
 
     @Binds
     @Singleton

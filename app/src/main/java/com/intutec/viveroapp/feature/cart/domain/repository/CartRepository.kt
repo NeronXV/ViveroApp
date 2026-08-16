@@ -4,6 +4,7 @@ import com.intutec.viveroapp.feature.cart.domain.model.Cart
 import com.intutec.viveroapp.feature.cart.domain.model.CartCustomer
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
+import com.intutec.viveroapp.core.session.UserSession
 import kotlinx.coroutines.flow.Flow
 
 interface CartRepository {
@@ -14,5 +15,5 @@ interface CartRepository {
     suspend fun associateCustomer(customer: CartCustomer?): Result<Unit>
     suspend fun saveDraft(): Result<Unit>
     suspend fun cancelCart(): Result<Unit>
-    suspend fun sendToCashier(userId: String): Result<SaleTicket>
+    suspend fun createPendingSale(session: UserSession): Result<SaleTicket>
 }
