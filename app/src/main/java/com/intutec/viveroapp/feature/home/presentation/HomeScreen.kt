@@ -70,14 +70,20 @@ fun HomeScreenRoute(
     HomeScreen(
         state = state,
         onRetry = viewModel::retry,
-        onModuleClick = {
-            when (it.id) {
-                "catalog" -> onCatalogClick()
-                "cart" -> onCartClick()
-            }
-        },
+        onModuleClick = { onHomeModuleClick(it, onCatalogClick, onCartClick) },
         onProfileClick = onProfileClick,
     )
+}
+
+internal fun onHomeModuleClick(
+    module: DashboardModule,
+    onCatalogClick: () -> Unit,
+    onCartClick: () -> Unit,
+) {
+    when (module.id) {
+        "catalog" -> onCatalogClick()
+        "cart" -> onCartClick()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

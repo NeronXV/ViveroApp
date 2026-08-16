@@ -27,11 +27,13 @@ class FakeDashboardRepository @Inject constructor(
         )
     }
 
-    private fun modulesFor(session: UserSession): List<DashboardModule> = when (session.role) {
+    private fun modulesFor(session: UserSession): List<DashboardModule> =
+        roleModulesFor(session) + listOfNotNull(cartModuleFor(session))
+
+    private fun roleModulesFor(session: UserSession): List<DashboardModule> = when (session.role) {
         UserRole.SALES -> listOf(
             module("catalog", "Catálogo", "Consulta plantas y existencias", session.hasCapability(AppPermission.VIEW_CATALOG)),
             module("scanner", "Escáner", "Identifica plantas por código"),
-            module("cart", "Carrito actual", "Prepara una nueva venta", session.canOperateAtBranch(AppPermission.CREATE_SALES)),
             module("tickets", "Mis tickets", "Revisa órdenes enviadas"),
         )
         UserRole.CASHIER -> listOf(
@@ -65,6 +67,18 @@ class FakeDashboardRepository @Inject constructor(
             module("promotions", "Promociones", "Resultados de campañas"),
         )
     }
+
+    private fun cartModuleFor(session: UserSession): DashboardModule? =
+        if (session.hasCapability(AppPermission.CREATE_SALES)) {
+            module(
+                "cart",
+                "Carrito actual",
+                "Prepara una nueva venta",
+                session.canOperateAtBranch(AppPermission.CREATE_SALES),
+            )
+        } else {
+            null
+        }
 
     private fun module(id: String, title: String, description: String, enabled: Boolean = false) =
         DashboardModule(id, title, description, enabled)
