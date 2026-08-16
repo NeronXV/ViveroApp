@@ -5,8 +5,17 @@ data class AuthenticatedUser(
     val email: String,
 )
 
+sealed interface InitialAuthState {
+    data class Authenticated(val user: AuthenticatedUser) : InitialAuthState
+    data object NotAuthenticated : InitialAuthState
+    data object InvalidSession : InitialAuthState
+    data class RefreshFailure(val kind: RefreshFailureKind) : InitialAuthState
+}
+
+enum class RefreshFailureKind { NETWORK, SERVER }
+
 interface AuthRemoteDataSource {
-    fun currentUserOrNull(): AuthenticatedUser?
+    suspend fun awaitInitialAuthState(): InitialAuthState
     suspend fun signIn(email: String, password: String): AuthenticatedUser
     suspend fun sendPasswordReset(email: String)
     suspend fun signOut()

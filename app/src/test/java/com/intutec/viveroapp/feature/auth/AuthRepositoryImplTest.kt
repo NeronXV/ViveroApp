@@ -11,7 +11,13 @@ import com.intutec.viveroapp.feature.auth.data.remote.PermissionDto
 import com.intutec.viveroapp.feature.auth.data.remote.ProfileDto
 import com.intutec.viveroapp.feature.auth.data.remote.RoleDto
 import com.intutec.viveroapp.feature.auth.data.remote.UserRoleAssignmentDto
+import com.intutec.viveroapp.feature.auth.data.remote.InitialAuthState
+import com.intutec.viveroapp.feature.auth.data.remote.RefreshFailureKind
 import com.intutec.viveroapp.feature.auth.data.repository.AuthRepositoryImpl
+import com.intutec.viveroapp.feature.auth.data.repository.InvalidStoredSessionException
+import com.intutec.viveroapp.feature.auth.data.repository.TransientSessionRefreshException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,6 +26,58 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuthRepositoryImplTest {
+    @Test
+    fun `initializing waits before restoring authenticated owner`() = runTest {
+        val fixture = fixture()
+        fixture.remote.initializationGate = CompletableDeferred()
+
+        val restoration = async { fixture.repository.restoreSession() }
+
+        assertFalse(restoration.isCompleted)
+        assertNull(fixture.store.session.value)
+        fixture.remote.initializationGate?.complete(Unit)
+
+        assertEquals("OWNER", restoration.await().getOrThrow()?.role?.name)
+        assertEquals("CENTRO", fixture.store.session.value?.branch?.code)
+    }
+
+    @Test
+    fun `not authenticated after initialization clears operational context`() = runTest {
+        val fixture = fixture(initialState = InitialAuthState.NotAuthenticated)
+
+        val restored = fixture.repository.restoreSession().getOrThrow()
+
+        assertNull(restored)
+        assertNull(fixture.store.session.value)
+        assertEquals(0, fixture.remote.signOutCalls)
+    }
+
+    @Test
+    fun `transient refresh failure preserves published context and does not sign out`() = runTest {
+        val fixture = fixture()
+        val existing = fixture.repository.restoreSession().getOrThrow()
+        fixture.remote.initialState = InitialAuthState.RefreshFailure(RefreshFailureKind.NETWORK)
+
+        val error = fixture.repository.restoreSession().exceptionOrNull()
+
+        assertTrue(error is TransientSessionRefreshException)
+        assertEquals(existing, fixture.store.session.value)
+        assertEquals(0, fixture.remote.signOutCalls)
+    }
+
+    @Test
+    fun `definitely invalid stored session is cleared with explicit error`() = runTest {
+        val fixture = fixture()
+        fixture.repository.restoreSession().getOrThrow()
+        fixture.remote.initialState = InitialAuthState.InvalidSession
+
+        val error = fixture.repository.restoreSession().exceptionOrNull()
+
+        assertTrue(error is InvalidStoredSessionException)
+        assertNull(fixture.store.session.value)
+        assertTrue(error?.message?.contains("ya no es válida") == true)
+    }
+
     @Test
     fun `maps profile role remote capabilities and branch`() = runTest {
         val fixture = fixture()
@@ -137,6 +195,9 @@ class AuthRepositoryImplTest {
         profile: ProfileDto = profile(),
         assignments: List<UserRoleAssignmentDto> = listOf(assignment()),
         branches: List<BranchDto> = listOf(branch()),
+        initialState: InitialAuthState = InitialAuthState.Authenticated(
+            AuthenticatedUser(USER_ID, "owner@example.test"),
+        ),
     ): Fixture {
         val remote = FakeAuthRemoteDataSource(
             profiles = listOf(profile),
@@ -148,6 +209,7 @@ class AuthRepositoryImplTest {
                 PermissionDto("CAPABILITY_UNKNOWN_TO_THIS_APP"),
             ),
             branches = branches,
+            initialState = initialState,
         )
         val store = SessionStore()
         return Fixture(
@@ -168,13 +230,18 @@ class AuthRepositoryImplTest {
         var assignments: List<UserRoleAssignmentDto>,
         var capabilities: List<PermissionDto>,
         var branches: List<BranchDto>,
+        var initialState: InitialAuthState,
     ) : AuthRemoteDataSource {
         var signInCalls = 0
         var signOutCalls = 0
         var capabilityFailure: Throwable? = null
         var signOutFailure: Throwable? = null
+        var initializationGate: CompletableDeferred<Unit>? = null
 
-        override fun currentUserOrNull() = AuthenticatedUser(USER_ID, "owner@example.test")
+        override suspend fun awaitInitialAuthState(): InitialAuthState {
+            initializationGate?.await()
+            return initialState
+        }
 
         override suspend fun signIn(email: String, password: String): AuthenticatedUser {
             signInCalls += 1

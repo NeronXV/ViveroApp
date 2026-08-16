@@ -10,6 +10,7 @@ import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
 import com.intutec.viveroapp.feature.auth.presentation.AuthStatus
 import com.intutec.viveroapp.feature.auth.presentation.AuthViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -33,6 +34,63 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun `slow initialization stays on checking without login flash then restores owner`() =
+        runTest(dispatcherRule.testDispatcher) {
+            val restoration = CompletableDeferred<Result<UserSession?>>()
+            val session = ownerSession()
+            val viewModel = AuthViewModel(FakeAuthRepository(restoration = restoration))
+
+            assertEquals(AuthStatus.CHECKING, viewModel.uiState.value.status)
+            assertEquals(null, viewModel.uiState.value.session)
+
+            restoration.complete(Result.success(session))
+            advanceUntilIdle()
+
+            assertEquals(AuthStatus.AUTHENTICATED, viewModel.uiState.value.status)
+            assertEquals("OWNER", viewModel.uiState.value.session?.role?.name)
+            assertEquals("CENTRO", viewModel.uiState.value.session?.branch?.code)
+        }
+
+    @Test
+    fun `initialization without stored session shows login`() = runTest(dispatcherRule.testDispatcher) {
+        val restoration = CompletableDeferred<Result<UserSession?>>()
+        val viewModel = AuthViewModel(FakeAuthRepository(restoration = restoration))
+
+        assertEquals(AuthStatus.CHECKING, viewModel.uiState.value.status)
+        restoration.complete(Result.success(null))
+        advanceUntilIdle()
+
+        assertEquals(AuthStatus.SIGNED_OUT, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun `refresh failure leaves checking and presents recoverable message`() =
+        runTest(dispatcherRule.testDispatcher) {
+            val restoration = CompletableDeferred<Result<UserSession?>>()
+            val viewModel = AuthViewModel(FakeAuthRepository(restoration = restoration))
+
+            restoration.complete(Result.failure(IllegalStateException("Problema transitorio de sesión.")))
+            advanceUntilIdle()
+
+            assertEquals(AuthStatus.SIGNED_OUT, viewModel.uiState.value.status)
+            assertTrue(viewModel.uiState.value.errorMessage?.contains("transitorio") == true)
+        }
+
+    @Test
+    fun `invalid session leaves checking and presents understandable message`() =
+        runTest(dispatcherRule.testDispatcher) {
+            val restoration = CompletableDeferred<Result<UserSession?>>()
+            val viewModel = AuthViewModel(FakeAuthRepository(restoration = restoration))
+
+            restoration.complete(Result.failure(IllegalStateException("Tu sesión ya no es válida.")))
+            advanceUntilIdle()
+
+            assertEquals(AuthStatus.SIGNED_OUT, viewModel.uiState.value.status)
+            assertEquals("Tu sesión ya no es válida.", viewModel.uiState.value.errorMessage)
+            assertEquals(null, viewModel.uiState.value.session)
+        }
+
+    @Test
     fun `demo access authenticates without remote configuration`() = runTest(dispatcherRule.testDispatcher) {
         val viewModel = AuthViewModel(FakeAuthRepository())
         advanceUntilIdle()
@@ -44,10 +102,13 @@ class AuthViewModelTest {
         assertTrue(viewModel.uiState.value.session?.isDemo == true)
     }
 
-    private class FakeAuthRepository(private val restored: UserSession? = null) : AuthRepository {
+    private class FakeAuthRepository(
+        private val restored: UserSession? = null,
+        private val restoration: CompletableDeferred<Result<UserSession?>>? = null,
+    ) : AuthRepository {
         override val isRemoteConfigured = false
         override val isDemoAvailable = true
-        override suspend fun restoreSession() = Result.success(restored)
+        override suspend fun restoreSession() = restoration?.await() ?: Result.success(restored)
         override suspend fun signIn(email: String, password: String) = Result.success(demoSession())
         override suspend fun signInDemo() = Result.success(demoSession())
         override suspend fun sendPasswordReset(email: String) = Result.success(Unit)
@@ -63,6 +124,16 @@ class AuthViewModelTest {
             capabilities = RolePermissions.permissionsFor(UserRole.SALES),
             branch = UserBranch("demo-branch", "CENTRO", "Centro", true),
             mode = SessionMode.DEMO,
+        )
+
+        private fun ownerSession() = UserSession(
+            userId = "owner",
+            email = "",
+            fullName = "Owner",
+            role = UserRole.OWNER,
+            capabilities = RolePermissions.permissionsFor(UserRole.OWNER),
+            branch = UserBranch("branch", "CENTRO", "Sucursal Centro", true),
+            mode = SessionMode.REMOTE,
         )
     }
 }

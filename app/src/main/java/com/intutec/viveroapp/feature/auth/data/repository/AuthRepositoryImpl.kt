@@ -11,6 +11,8 @@ import com.intutec.viveroapp.core.session.UserBranch
 import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.auth.data.remote.AuthRemoteDataSource
 import com.intutec.viveroapp.feature.auth.data.remote.AuthenticatedUser
+import com.intutec.viveroapp.feature.auth.data.remote.InitialAuthState
+import com.intutec.viveroapp.feature.auth.data.remote.RefreshFailureKind
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -25,10 +27,25 @@ class AuthRepositoryImpl @Inject constructor(
     override val isDemoAvailable: Boolean get() = BuildConfig.DEBUG
 
     override suspend fun restoreSession(): Result<UserSession?> {
-        val user = remote.currentUserOrNull()
-        if (user == null) {
-            sessionStore.clear()
-            return Result.success(null)
+        val initialState = try {
+            remote.awaitInitialAuthState()
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            return Result.failure(error)
+        }
+        val user = when (initialState) {
+            is InitialAuthState.Authenticated -> initialState.user
+            InitialAuthState.NotAuthenticated -> {
+                sessionStore.clear()
+                return Result.success(null)
+            }
+            InitialAuthState.InvalidSession -> {
+                sessionStore.clear()
+                return Result.failure(InvalidStoredSessionException())
+            }
+            is InitialAuthState.RefreshFailure -> {
+                return Result.failure(TransientSessionRefreshException(initialState.kind))
+            }
         }
         return try {
             Result.success(loadAndPublish(user))
@@ -159,6 +176,19 @@ class AuthRepositoryImpl @Inject constructor(
         return Result.failure(error)
     }
 }
+
+class TransientSessionRefreshException(kind: RefreshFailureKind) : IllegalStateException(
+    when (kind) {
+        RefreshFailureKind.NETWORK ->
+            "No pudimos restaurar la sesión por un problema de red. Intenta de nuevo."
+        RefreshFailureKind.SERVER ->
+            "El servicio de sesión no está disponible temporalmente. Intenta de nuevo."
+    },
+)
+
+class InvalidStoredSessionException : IllegalStateException(
+    "Tu sesión ya no es válida. Inicia sesión nuevamente.",
+)
 
 private fun <T> List<T>.singleOrSessionError(message: String): T =
     singleOrNull() ?: throw IllegalStateException(message)

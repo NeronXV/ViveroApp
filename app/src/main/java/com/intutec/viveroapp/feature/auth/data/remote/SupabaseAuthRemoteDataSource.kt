@@ -3,6 +3,8 @@ package com.intutec.viveroapp.feature.auth.data.remote
 import com.intutec.viveroapp.core.network.SupabaseProvider
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.RefreshFailureCause
+import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import javax.inject.Inject
@@ -10,10 +12,31 @@ import javax.inject.Inject
 class SupabaseAuthRemoteDataSource @Inject constructor(
     private val supabaseProvider: SupabaseProvider,
 ) : AuthRemoteDataSource {
-    override fun currentUserOrNull(): AuthenticatedUser? =
-        supabaseProvider.client?.auth?.currentUserOrNull()?.let {
-            AuthenticatedUser(id = it.id, email = it.email.orEmpty())
+    @Suppress("DEPRECATION")
+    override suspend fun awaitInitialAuthState(): InitialAuthState {
+        val auth = requireClient().auth
+        auth.awaitInitialization()
+        return when (val status = auth.sessionStatus.value) {
+            is SessionStatus.Authenticated -> {
+                val user = status.session.user ?: return InitialAuthState.InvalidSession
+                InitialAuthState.Authenticated(
+                    AuthenticatedUser(id = user.id, email = user.email.orEmpty()),
+                )
+            }
+            is SessionStatus.NotAuthenticated -> if (status.isSignOut) {
+                InitialAuthState.InvalidSession
+            } else {
+                InitialAuthState.NotAuthenticated
+            }
+            is SessionStatus.RefreshFailure -> InitialAuthState.RefreshFailure(
+                when (status.cause) {
+                    is RefreshFailureCause.NetworkError -> RefreshFailureKind.NETWORK
+                    is RefreshFailureCause.InternalServerError -> RefreshFailureKind.SERVER
+                },
+            )
+            SessionStatus.Initializing -> error("Auth no terminó de inicializarse.")
         }
+    }
 
     override suspend fun signIn(email: String, password: String): AuthenticatedUser {
         val client = requireClient()
