@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(63);
+select extensions.plan(66);
 
 insert into public.branches (id, code, name, is_active) values
     ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro', true),
@@ -193,6 +193,27 @@ select extensions.lives_ok(
         '[]'::jsonb
     )$$,
     'the same caller receives the original idempotent result'
+);
+
+select extensions.is(
+    (select pg_catalog.count(*) from public.sale_status_history
+     where sale_id = '60000000-0000-0000-0000-000000000001'),
+    2::bigint,
+    'initial sale submission creates exactly two legitimate history transitions'
+);
+select extensions.is(
+    (select pg_catalog.count(*) from public.sale_status_history
+     where sale_id = '60000000-0000-0000-0000-000000000001'
+       and previous_status is null and new_status = 'DRAFT'),
+    1::bigint,
+    'initial sale history contains exactly one null to DRAFT transition'
+);
+select extensions.is(
+    (select pg_catalog.count(*) from public.sale_status_history
+     where sale_id = '60000000-0000-0000-0000-000000000001'
+       and previous_status = 'DRAFT' and new_status = 'SENT_TO_CASHIER'),
+    1::bigint,
+    'initial sale history contains exactly one DRAFT to SENT_TO_CASHIER transition'
 );
 reset role;
 

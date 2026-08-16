@@ -87,6 +87,7 @@ class PendingSaleSynchronizer @Inject constructor(
 
     private fun validateResponse(response: SaleSyncResponse, sale: SaleTicket): String? = when {
         response.id != sale.id -> "El servidor devolvió una venta diferente."
+        response.folio != sale.folio -> "El servidor devolvió un folio diferente."
         response.createdBy != sale.createdBy -> "El servidor devolvió un creador diferente."
         response.branchId != sale.branchId -> "El servidor devolvió una sucursal diferente."
         response.status != SaleStatus.SENT_TO_CASHIER.name -> "El servidor devolvió un estado inesperado."

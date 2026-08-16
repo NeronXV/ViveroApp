@@ -30,13 +30,20 @@ import java.time.Instant
 class PendingSaleSynchronizerTest {
     @Test
     fun `pending transitions through syncing to synced`() = runTest {
-        val fixture = fixture()
+        val fixture = fixture(
+            ticket = ticket().copy(
+                syncAttemptCount = 1,
+                syncLastError = "Error temporal anterior.",
+            ),
+        )
 
         val outcome = fixture.synchronizer.synchronize(SALE_ID)
 
         assertTrue(outcome is SaleSyncOutcome.Synced)
         assertEquals(SaleSyncState.SYNCED, fixture.store.ticket.syncState)
-        assertEquals(1, fixture.store.ticket.syncAttemptCount)
+        assertEquals(2, fixture.store.ticket.syncAttemptCount)
+        assertEquals(false, fixture.store.ticket.syncPending)
+        assertEquals(null, fixture.store.ticket.syncLastError)
         assertEquals(1, fixture.remote.requests.size)
     }
 
@@ -69,6 +76,7 @@ class PendingSaleSynchronizerTest {
     fun `inconsistent response fields never mark synced`() = runTest {
         val invalidResponses = listOf(
             response().copy(id = OTHER_ID),
+            response().copy(folio = "VD-260815-555555"),
             response().copy(createdBy = OTHER_ID),
             response().copy(branchId = OTHER_ID),
             response().copy(status = "PAYMENT_PENDING"),
@@ -222,7 +230,7 @@ class PendingSaleSynchronizerTest {
         private const val OTHER_ID = "55555555-5555-4555-8555-555555555555"
         private const val FOLIO = "VD-260815-111111"
 
-        private fun response() = SaleSyncResponse(SALE_ID, USER_ID, BRANCH_ID, "SENT_TO_CASHIER")
+        private fun response() = SaleSyncResponse(SALE_ID, FOLIO, USER_ID, BRANCH_ID, "SENT_TO_CASHIER")
 
         private fun session(userId: String = USER_ID) = UserSession(
             userId = userId,

@@ -12,10 +12,11 @@ class SupabaseSaleSyncRemoteDataSource @Inject constructor(
     override suspend fun submitSale(request: SaleSyncRequest): SaleSyncResponse {
         val client = checkNotNull(supabaseProvider.client) { "Supabase no está configurado." }
         return try {
-            client.postgrest.rpc(
+            val result = client.postgrest.rpc(
                 function = "submit_sale_to_cashier",
                 parameters = request.toRpcParameters(),
-            ).decodeSingle()
+            )
+            decodeSaleSyncResponse(result.data)
         } catch (error: PostgrestRestException) {
             throw classifyPostgrestError(error)
         } catch (error: SaleSyncRemoteException) {

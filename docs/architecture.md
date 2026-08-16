@@ -43,7 +43,7 @@ Los precios se guardan como centavos mediante `Long`. El ViewModel combina consu
 
 `RoomCartRepository` mantiene un único borrador activo y conserva instantáneas del nombre, código, precio y promoción del producto. Un `Mutex` serializa mutaciones y envío, por lo que dos pulsaciones no pueden crear dos tickets. Al enviar, Room persiste venta, partidas y dos eventos de estado de manera transaccional, y elimina el borrador únicamente después de completar la transacción.
 
-El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios desde PostgreSQL. La existencia se validará contra `stock_balances` en la Fase 7 y el descuento promocional completo se conectará en la Fase 9; la aplicación no presenta el envío local como pago confirmado.
+El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios desde PostgreSQL. Su respuesta es un registro compuesto escalar de `public.sales`; Android valida que UUID, folio, creador, sucursal y estado coincidan antes de marcar `SYNCED`. El envío inicial crea exactamente dos historiales remotos legítimos: `null → DRAFT` y `DRAFT → SENT_TO_CASHIER`. Una repetición con la misma clave devuelve la venta existente sin agregar partidas ni historiales. La existencia se validará contra `stock_balances` en la Fase 7 y el descuento promocional completo se conectará en la Fase 9; la aplicación no presenta el envío local como pago confirmado.
 
 ## Estado de pantalla
 
