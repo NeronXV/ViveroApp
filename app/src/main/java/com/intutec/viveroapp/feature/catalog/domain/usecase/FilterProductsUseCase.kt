@@ -18,7 +18,7 @@ class FilterProductsUseCase @Inject constructor() {
                 product.internalCode.lowercase().contains(normalizedQuery) ||
                 product.barcode?.contains(normalizedQuery) == true
             val matchesCategory = categoryId == null || product.category.id == categoryId
-            val matchesAvailability = !availableOnly || product.isAvailable
+            val matchesAvailability = !availableOnly || !product.stockKnown || product.isAvailable
             matchesQuery && matchesCategory && matchesAvailability
         }.sortedWith(compareByDescending<Product> { it.isAvailable }.thenBy { it.commonName })
     }

@@ -24,10 +24,21 @@ data class Product(
     val createdAt: Instant,
     val updatedAt: Instant,
     val stockKnown: Boolean = true,
+    val images: List<ProductImage> = emptyList(),
 ) {
     val isAvailable: Boolean get() = isActive && stockAvailable > 0
     val effectivePriceCents: Long get() = promotion?.priceCents ?: priceCents
+    val primaryImage: ProductImage? get() = images.firstOrNull()
 }
+
+data class ProductImage(
+    val id: String,
+    val productId: String,
+    val storagePath: String,
+    val altText: String?,
+    val sortOrder: Int,
+    val isPrimary: Boolean,
+)
 
 data class ProductPromotion(
     val name: String,

@@ -6,7 +6,9 @@ import com.intutec.viveroapp.feature.auth.data.repository.AuthRepositoryImpl
 import com.intutec.viveroapp.feature.auth.data.remote.AuthRemoteDataSource
 import com.intutec.viveroapp.feature.auth.data.remote.SupabaseAuthRemoteDataSource
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
-import com.intutec.viveroapp.feature.catalog.data.repository.FakeCatalogRepository
+import com.intutec.viveroapp.feature.catalog.data.repository.SessionCatalogRepository
+import com.intutec.viveroapp.feature.catalog.data.remote.CatalogRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogRemoteDataSource
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
 import com.intutec.viveroapp.feature.cart.data.repository.RoomCartRepository
 import com.intutec.viveroapp.feature.cart.domain.repository.CartRepository
@@ -27,11 +29,17 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindCatalogRemoteDataSource(
+        implementation: SupabaseCatalogRemoteDataSource,
+    ): CatalogRemoteDataSource
+
+    @Binds
+    @Singleton
     abstract fun bindCartRepository(implementation: RoomCartRepository): CartRepository
 
     @Binds
     @Singleton
-    abstract fun bindCatalogRepository(implementation: FakeCatalogRepository): CatalogRepository
+    abstract fun bindCatalogRepository(implementation: SessionCatalogRepository): CatalogRepository
 
     @Binds
     @Singleton

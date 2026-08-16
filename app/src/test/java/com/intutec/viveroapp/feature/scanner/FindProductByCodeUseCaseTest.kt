@@ -1,6 +1,7 @@
 package com.intutec.viveroapp.feature.scanner
 
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
+import com.intutec.viveroapp.feature.catalog.domain.model.CatalogSnapshot
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
 import com.intutec.viveroapp.feature.scanner.domain.usecase.FindProductByCodeUseCase
 import kotlinx.coroutines.flow.Flow
@@ -16,7 +17,7 @@ class FindProductByCodeUseCaseTest {
     fun `normalizes code before querying repository`() = runTest {
         var received = ""
         val useCase = FindProductByCodeUseCase(object : CatalogRepository {
-            override fun observeProducts(): Flow<List<Product>> = emptyFlow()
+            override fun observeCatalog(): Flow<CatalogSnapshot> = emptyFlow()
             override suspend fun getProduct(productId: String): Result<Product> = Result.failure(NotImplementedError())
             override suspend fun findProductByCode(code: String): Result<Product?> {
                 received = code
@@ -32,7 +33,7 @@ class FindProductByCodeUseCaseTest {
     fun `blank code fails without querying repository`() = runTest {
         var queried = false
         val useCase = FindProductByCodeUseCase(object : CatalogRepository {
-            override fun observeProducts(): Flow<List<Product>> = emptyFlow()
+            override fun observeCatalog(): Flow<CatalogSnapshot> = emptyFlow()
             override suspend fun getProduct(productId: String): Result<Product> = Result.failure(NotImplementedError())
             override suspend fun findProductByCode(code: String): Result<Product?> {
                 queried = true

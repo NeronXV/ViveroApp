@@ -3,6 +3,7 @@ package com.intutec.viveroapp.feature.catalog.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intutec.viveroapp.feature.catalog.domain.model.Category
+import com.intutec.viveroapp.feature.catalog.domain.model.CatalogSnapshot
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
 import com.intutec.viveroapp.feature.catalog.domain.usecase.FilterProductsUseCase
 import com.intutec.viveroapp.feature.catalog.domain.usecase.ObserveCatalogUseCase
@@ -37,6 +38,7 @@ sealed interface CatalogUiState {
         val query: String,
         val selectedCategoryId: String?,
         val availableOnly: Boolean,
+        val catalogIsEmpty: Boolean,
     ) : CatalogUiState
     data class Error(val message: String) : CatalogUiState
 }
@@ -55,21 +57,26 @@ class CatalogViewModel @Inject constructor(
     private val _notices = MutableSharedFlow<String>()
     val notices = _notices.asSharedFlow()
 
-    private val products: Flow<Result<List<Product>>> = refresh.flatMapLatest {
+    private val catalog: Flow<Result<CatalogSnapshot>> = refresh.flatMapLatest {
         observeCatalog()
-            .map<List<Product>, Result<List<Product>>> { Result.success(it) }
+            .map<CatalogSnapshot, Result<CatalogSnapshot>> { Result.success(it) }
             .catch { emit(Result.failure(it)) }
     }
 
-    val uiState = combine(products, query, categoryId, availableOnly) { productResult, currentQuery, currentCategory, onlyAvailable ->
-        productResult.fold(
-            onSuccess = { allProducts ->
-                val categories = allProducts.map(Product::category).distinctBy(Category::id).sortedBy(Category::name)
-                val filtered = filterProducts(allProducts, currentQuery, currentCategory, onlyAvailable)
+    val uiState = combine(catalog, query, categoryId, availableOnly) { catalogResult, currentQuery, currentCategory, onlyAvailable ->
+        catalogResult.fold(
+            onSuccess = { snapshot ->
+                val filtered = filterProducts(snapshot.products, currentQuery, currentCategory, onlyAvailable)
                 if (filtered.isEmpty()) {
-                    CatalogUiState.Empty(categories, currentQuery, currentCategory, onlyAvailable)
+                    CatalogUiState.Empty(
+                        categories = snapshot.categories,
+                        query = currentQuery,
+                        selectedCategoryId = currentCategory,
+                        availableOnly = onlyAvailable,
+                        catalogIsEmpty = snapshot.products.isEmpty(),
+                    )
                 } else {
-                    CatalogUiState.Content(filtered, categories, currentQuery, currentCategory, onlyAvailable)
+                    CatalogUiState.Content(filtered, snapshot.categories, currentQuery, currentCategory, onlyAvailable)
                 }
             },
             onFailure = { error -> CatalogUiState.Error(error.message ?: "No pudimos cargar el catálogo.") },

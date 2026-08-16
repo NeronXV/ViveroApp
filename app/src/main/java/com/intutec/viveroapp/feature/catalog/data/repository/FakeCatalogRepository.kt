@@ -1,27 +1,27 @@
 package com.intutec.viveroapp.feature.catalog.data.repository
 
+import com.intutec.viveroapp.feature.catalog.domain.model.CatalogSnapshot
 import com.intutec.viveroapp.feature.catalog.domain.model.Category
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
 import com.intutec.viveroapp.feature.catalog.domain.model.ProductPromotion
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
-import com.intutec.viveroapp.core.network.SupabaseProvider
-import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
-import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.time.Instant
 import javax.inject.Inject
 
-class FakeCatalogRepository @Inject constructor(
-    private val supabaseProvider: SupabaseProvider,
-) : CatalogRepository {
+class FakeCatalogRepository @Inject constructor() : CatalogRepository {
     private val products = demoProducts()
 
-    override fun observeProducts(): Flow<List<Product>> = flow {
+    override fun observeCatalog(): Flow<CatalogSnapshot> = flow {
         delay(450)
-        emit(products)
+        emit(
+            CatalogSnapshot(
+                categories = products.map(Product::category).distinctBy(Category::id),
+                products = products,
+            ),
+        )
     }
 
     override suspend fun getProduct(productId: String): Result<Product> = runCatching {
@@ -35,23 +35,7 @@ class FakeCatalogRepository @Inject constructor(
         products.firstOrNull {
             it.barcode.equals(normalized, ignoreCase = true) ||
                 it.internalCode.equals(normalized, ignoreCase = true)
-        } ?: findRemoteProduct(normalized)
-    }
-
-    private suspend fun findRemoteProduct(code: String): Product? {
-        val client = supabaseProvider.client ?: return null
-        val columns = Columns.raw(
-            "id,internal_code,barcode,common_name,scientific_name,description," +
-                "category:categories(id,name),price_cents,wholesale_price_cents,unit," +
-                "minimum_stock,watering_advice,light_type,recommended_climate,is_active,created_at,updated_at",
-        )
-        val byBarcode = client.from("products").select(columns) {
-            filter { eq("barcode", code); eq("is_active", true) }
-        }.decodeList<RemoteProductDto>().firstOrNull()
-        val remote = byBarcode ?: client.from("products").select(columns) {
-            filter { eq("internal_code", code); eq("is_active", true) }
-        }.decodeList<RemoteProductDto>().firstOrNull()
-        return remote?.toDomain()
+        }
     }
 
     private fun demoProducts(): List<Product> {

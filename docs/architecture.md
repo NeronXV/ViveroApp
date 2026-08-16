@@ -25,7 +25,7 @@ Los composables reciben estado y emiten eventos; no contienen reglas de negocio.
 
 ## Catálogo
 
-`CatalogRepository` expone productos de dominio y actualmente está implementado por `FakeCatalogRepository`. `ObserveCatalogUseCase`, `FilterProductsUseCase` y `GetProductUseCase` separan observación, búsqueda y detalle. La UI convierte `imageKey` a un recurso demo; el dominio no conoce `R.drawable` ni otras APIs Android.
+`CatalogRepository` expone categorías y productos mediante `CatalogSnapshot`. `SessionCatalogRepository` selecciona estrictamente `SupabaseCatalogRepository` para sesiones remotas y `FakeCatalogRepository` para demo, sin fallback entre ambos. Las imágenes remotas conservan UUID, ruta y orden en el dominio; `imageKey` queda reservado a recursos del catálogo demo y el dominio no conoce `R.drawable` ni otras APIs Android.
 
 Los precios se guardan como centavos mediante `Long`. El ViewModel combina consulta, categoría y disponibilidad con el flujo del repositorio, y conserva estados explícitos de carga, contenido, vacío y error reintentable.
 

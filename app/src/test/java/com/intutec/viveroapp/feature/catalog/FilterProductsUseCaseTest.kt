@@ -37,6 +37,16 @@ class FilterProductsUseCaseTest {
         assertTrue(result.all(Product::isAvailable))
     }
 
+    @Test
+    fun `available filter keeps active products while stock is unknown`() {
+        val unknown = product("remote", "PL-099", "75999", "Remoto", interior, stock = 0)
+            .copy(stockKnown = false)
+
+        val result = filter(listOf(unknown), "", null, true)
+
+        assertEquals(listOf("remote"), result.map(Product::id))
+    }
+
     private fun product(id: String, code: String, barcode: String, name: String, category: Category, stock: Int) = Product(
         id = id,
         internalCode = code,

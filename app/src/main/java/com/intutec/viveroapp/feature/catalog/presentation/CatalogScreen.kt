@@ -1,6 +1,5 @@
 package com.intutec.viveroapp.feature.catalog.presentation
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +50,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -158,9 +156,20 @@ private fun EmptyCatalog(
         CatalogControls(state.query, state.categories, state.selectedCategoryId, state.availableOnly, onQueryChanged, onCategorySelected, onAvailableOnlyChanged)
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("No encontramos plantas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Prueba otro nombre, código o categoría.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { onQueryChanged(""); onCategorySelected(null); onAvailableOnlyChanged(false) }) { Text("Limpiar filtros") }
+                Text(
+                    if (state.catalogIsEmpty) "Catálogo sin productos" else "No encontramos plantas",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (state.catalogIsEmpty) "Aún no hay productos activos disponibles." else "Prueba otro nombre, código o categoría.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!state.catalogIsEmpty) {
+                    Button(onClick = { onQueryChanged(""); onCategorySelected(null); onAvailableOnlyChanged(false) }) {
+                        Text("Limpiar filtros")
+                    }
+                }
             }
         }
     }
@@ -215,9 +224,8 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Box {
-            Image(
-                painter = painterResource(productImageResource(product.imageKey)),
-                contentDescription = "Fotografía de ${product.commonName}",
+            CatalogProductImage(
+                product = product,
                 modifier = Modifier.fillMaxWidth().height(218.dp),
                 contentScale = ContentScale.Crop,
             )
@@ -225,7 +233,11 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
                 StatusPill("Promoción", Modifier.align(Alignment.TopStart).padding(12.dp), MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
             }
             StatusPill(
-                text = if (product.isAvailable) "${product.stockAvailable} disponibles" else "Sin existencia",
+                text = when {
+                    !product.stockKnown -> "Existencia pendiente"
+                    product.isAvailable -> "${product.stockAvailable} disponibles"
+                    else -> "Sin existencia"
+                },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 containerColor = if (product.isAvailable) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
                 contentColor = if (product.isAvailable) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
@@ -245,7 +257,13 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
             Button(onClick = onAddToCart, enabled = product.isAvailable && product.stockKnown, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Outlined.ShoppingCart, null)
                 Spacer(Modifier.size(8.dp))
-                Text(if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
+                Text(
+                    when {
+                        !product.stockKnown -> "Existencia pendiente"
+                        product.isAvailable -> "Agregar al carrito"
+                        else -> "Sin existencia"
+                    },
+                )
             }
         }
     }

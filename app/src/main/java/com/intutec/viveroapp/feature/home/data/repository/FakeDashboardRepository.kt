@@ -58,6 +58,7 @@ class FakeDashboardRepository @Inject constructor(
             module("settings", "Configuración", "Preferencias del sistema"),
         )
         UserRole.OWNER -> listOf(
+            module("catalog", "Catálogo", "Consulta productos y categorías", session.hasCapability(AppPermission.VIEW_CATALOG)),
             module("reports", "Resumen ejecutivo", "Indicadores generales"),
             module("sales", "Ventas", "Resultados y tendencias"),
             module("inventory", "Inventario", "Valor y disponibilidad"),

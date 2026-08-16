@@ -13,7 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -63,7 +62,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,7 +75,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.core.designsystem.StatusPill
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
-import com.intutec.viveroapp.feature.catalog.presentation.productImageResource
+import com.intutec.viveroapp.feature.catalog.presentation.CatalogProductImage
 import com.intutec.viveroapp.feature.scanner.camera.BarcodeAnalyzer
 import com.intutec.viveroapp.feature.scanner.domain.model.ScanFormat
 import java.util.concurrent.Executors
@@ -339,9 +337,8 @@ private fun FoundProduct(
 ) {
     Column(Modifier.padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(productImageResource(product.imageKey)),
-                contentDescription = null,
+            CatalogProductImage(
+                product = product,
                 modifier = Modifier.size(88.dp),
                 contentScale = ContentScale.Crop,
             )
@@ -364,10 +361,10 @@ private fun FoundProduct(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Button(onClick = onAddToCart, enabled = product.isAvailable, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onAddToCart, enabled = product.isAvailable && product.stockKnown, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Outlined.ShoppingBag, null)
             Spacer(Modifier.width(8.dp))
-            Text(if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
+            Text(if (!product.stockKnown) "Existencia pendiente" else if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onScanAgain, modifier = Modifier.weight(1f)) { Text("Otro código") }
