@@ -14,6 +14,7 @@ import com.intutec.viveroapp.feature.catalog.data.repository.SessionCatalogRepos
 import com.intutec.viveroapp.feature.catalog.data.repository.SupabaseCatalogRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -33,6 +34,24 @@ class SupabaseCatalogRepositoryTest {
         assertFalse(mapped.stockKnown)
         assertEquals(0, mapped.stockAvailable)
         assertEquals("", mapped.imageKey)
+    }
+
+    @Test
+    fun `catalog timestamps accept PostgreSQL ISO 8601 representations`() = runTest {
+        val cases = mapOf(
+            "2026-08-16T04:04:38Z" to Instant.parse("2026-08-16T04:04:38Z"),
+            "2026-08-16T04:04:38+00:00" to Instant.parse("2026-08-16T04:04:38Z"),
+            "2026-08-16T04:04:38.071382+00:00" to Instant.parse("2026-08-16T04:04:38.071382Z"),
+            "2026-08-15T21:04:38.071382-07:00" to Instant.parse("2026-08-16T04:04:38.071382Z"),
+        )
+
+        cases.forEach { (timestamp, expected) ->
+            val remote = remote(products = listOf(product(createdAt = timestamp, updatedAt = timestamp)))
+            val mapped = SupabaseCatalogRepository(remote).observeCatalog().first().products.single()
+
+            assertEquals(expected, mapped.createdAt)
+            assertEquals(expected, mapped.updatedAt)
+        }
     }
 
     @Test
@@ -188,6 +207,8 @@ class SupabaseCatalogRepositoryTest {
             id: String = PRODUCT_ID,
             priceCents: Long = 58_900L,
             images: List<RemoteProductImageDto> = emptyList(),
+            createdAt: String = "2026-08-15T12:00:00Z",
+            updatedAt: String = "2026-08-15T12:00:00Z",
         ) = RemoteProductDto(
             id = id,
             internalCode = "PL-001",
@@ -204,8 +225,8 @@ class SupabaseCatalogRepositoryTest {
             lightType = "Indirecta",
             recommendedClimate = "Templado",
             isActive = true,
-            createdAt = "2026-08-15T12:00:00Z",
-            updatedAt = "2026-08-15T12:00:00Z",
+            createdAt = createdAt,
+            updatedAt = updatedAt,
             images = images,
         )
 

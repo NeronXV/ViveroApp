@@ -40,7 +40,16 @@ sealed interface CatalogUiState {
         val availableOnly: Boolean,
         val catalogIsEmpty: Boolean,
     ) : CatalogUiState
-    data class Error(val message: String) : CatalogUiState
+    data class Error(
+        val message: String,
+        val diagnosticCause: CatalogDiagnosticCause,
+    ) : CatalogUiState
+}
+
+enum class CatalogDiagnosticCause {
+    REMOTE_REQUEST,
+    INVALID_REMOTE_DATA,
+    UNEXPECTED,
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -79,7 +88,7 @@ class CatalogViewModel @Inject constructor(
                     CatalogUiState.Content(filtered, snapshot.categories, currentQuery, currentCategory, onlyAvailable)
                 }
             },
-            onFailure = { error -> CatalogUiState.Error(error.message ?: "No pudimos cargar el catálogo.") },
+            onFailure = Throwable::toCatalogErrorState,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CatalogUiState.Loading)
 
@@ -95,5 +104,21 @@ class CatalogViewModel @Inject constructor(
                 onFailure = { _notices.emit(it.message ?: "No pudimos agregar el producto.") },
             )
         }
+    }
+}
+
+internal fun Throwable.toCatalogErrorState() = CatalogUiState.Error(
+    message = "No pudimos cargar el catálogo. Intenta nuevamente",
+    diagnosticCause = toCatalogDiagnosticCause(),
+)
+
+private fun Throwable.toCatalogDiagnosticCause(): CatalogDiagnosticCause = when (this) {
+    is IllegalArgumentException,
+    is IllegalStateException,
+    -> CatalogDiagnosticCause.INVALID_REMOTE_DATA
+    else -> if (this::class.qualifiedName.orEmpty().startsWith("io.github.jan.supabase")) {
+        CatalogDiagnosticCause.REMOTE_REQUEST
+    } else {
+        CatalogDiagnosticCause.UNEXPECTED
     }
 }

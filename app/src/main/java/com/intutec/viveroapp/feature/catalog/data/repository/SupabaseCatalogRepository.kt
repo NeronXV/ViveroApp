@@ -12,6 +12,9 @@ import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.UUID
 import javax.inject.Inject
 
@@ -109,8 +112,8 @@ private fun RemoteProductDto.toDomain(categoriesById: Map<String, Category>): Pr
         recommendedClimate = recommendedClimate,
         isActive = true,
         promotion = null,
-        createdAt = Instant.parse(createdAt),
-        updatedAt = Instant.parse(updatedAt),
+        createdAt = createdAt.parseSupabaseTimestamp("product created_at"),
+        updatedAt = updatedAt.parseSupabaseTimestamp("product updated_at"),
         stockKnown = false,
         images = mappedImages,
     )
@@ -135,5 +138,11 @@ private fun RemoteProductImageDto.toDomain(expectedProductId: String): ProductIm
 private fun String.requireUuid(field: String): String = try {
     UUID.fromString(this).toString()
 } catch (_: IllegalArgumentException) {
+    throw IllegalStateException("El catálogo remoto contiene un $field inválido.")
+}
+
+internal fun String.parseSupabaseTimestamp(field: String): Instant = try {
+    OffsetDateTime.parse(this, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant()
+} catch (_: DateTimeParseException) {
     throw IllegalStateException("El catálogo remoto contiene un $field inválido.")
 }
