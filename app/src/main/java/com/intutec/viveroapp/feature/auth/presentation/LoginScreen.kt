@@ -142,7 +142,7 @@ private fun LoginForm(
     val working = state.status == AuthStatus.WORKING
     PremiumCard(modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)) {
         Column(modifier = Modifier.padding(horizontal = 28.dp, vertical = 32.dp)) {
-            StatusPill(if (state.remoteConfigured) "Supabase conectado" else "Modo demostración")
+            StatusPill(if (state.remoteConfigured) "Supabase conectado" else "Configuración requerida")
             Spacer(Modifier.height(20.dp))
             Text("Bienvenido de nuevo", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Ingresa con tu cuenta de trabajo", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -197,23 +197,25 @@ private fun LoginForm(
                 if (working) CircularProgressIndicator(modifier = Modifier.width(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Iniciar sesión", fontWeight = FontWeight.Bold)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 18.dp)) {
-                HorizontalDivider(Modifier.weight(1f))
-                Text("  o  ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
-                HorizontalDivider(Modifier.weight(1f))
-            }
-            OutlinedButton(
-                onClick = onDemoLogin,
-                enabled = !working,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = MaterialTheme.shapes.large,
-            ) {
-                Text("Explorar demostración", fontWeight = FontWeight.SemiBold)
+            if (state.demoAvailable) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 18.dp)) {
+                    HorizontalDivider(Modifier.weight(1f))
+                    Text("  o  ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                    HorizontalDivider(Modifier.weight(1f))
+                }
+                OutlinedButton(
+                    onClick = onDemoLogin,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text("Explorar demostración", fontWeight = FontWeight.SemiBold)
+                }
             }
             if (!state.remoteConfigured) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Configura SUPABASE_URL y SUPABASE_ANON_KEY para habilitar cuentas reales.",
+                    "Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para habilitar cuentas reales.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

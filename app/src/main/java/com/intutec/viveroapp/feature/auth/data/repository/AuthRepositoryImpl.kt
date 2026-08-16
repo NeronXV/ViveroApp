@@ -1,87 +1,164 @@
 package com.intutec.viveroapp.feature.auth.data.repository
 
+import com.intutec.viveroapp.BuildConfig
 import com.intutec.viveroapp.core.model.UserRole
 import com.intutec.viveroapp.core.network.SupabaseProvider
+import com.intutec.viveroapp.core.security.AppPermission
+import com.intutec.viveroapp.core.security.RolePermissions
+import com.intutec.viveroapp.core.session.SessionMode
 import com.intutec.viveroapp.core.session.SessionStore
+import com.intutec.viveroapp.core.session.UserBranch
 import com.intutec.viveroapp.core.session.UserSession
-import com.intutec.viveroapp.feature.auth.data.remote.ProfileDto
-import com.intutec.viveroapp.feature.auth.data.remote.UserRoleDto
+import com.intutec.viveroapp.feature.auth.data.remote.AuthRemoteDataSource
+import com.intutec.viveroapp.feature.auth.data.remote.AuthenticatedUser
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.postgrest.from
-import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 class AuthRepositoryImpl @Inject constructor(
     private val supabaseProvider: SupabaseProvider,
+    private val remote: AuthRemoteDataSource,
     private val sessionStore: SessionStore,
 ) : AuthRepository {
     override val isRemoteConfigured: Boolean get() = supabaseProvider.isConfigured
+    override val isDemoAvailable: Boolean get() = BuildConfig.DEBUG
 
-    override suspend fun restoreSession(): Result<UserSession?> = runCatching {
-        val client = supabaseProvider.client ?: return@runCatching null
-        val user = client.auth.currentUserOrNull() ?: return@runCatching null
-        loadProfile(user.id, user.email.orEmpty(), isDemo = false).also(sessionStore::update)
-    }
-
-    override suspend fun signIn(email: String, password: String): Result<UserSession> = runCatching {
-        require(email.isNotBlank()) { "Escribe tu correo." }
-        require(password.length >= 6) { "La contraseña debe tener al menos 6 caracteres." }
-        val client = supabaseProvider.client
-            ?: error("Supabase aún no está configurado. Usa el acceso de demostración.")
-        client.auth.signInWith(Email) {
-            this.email = email.trim()
-            this.password = password
+    override suspend fun restoreSession(): Result<UserSession?> {
+        val user = remote.currentUserOrNull()
+        if (user == null) {
+            sessionStore.clear()
+            return Result.success(null)
         }
-        val user = client.auth.currentUserOrNull() ?: error("No se pudo iniciar la sesión.")
-        loadProfile(user.id, user.email ?: email, isDemo = false).also(sessionStore::update)
+        return try {
+            Result.success(loadAndPublish(user))
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            failClosed(error)
+        }
     }
 
-    override suspend fun signInDemo(): Result<UserSession> = runCatching {
-        delay(350)
-        UserSession(
-            userId = "demo-sales",
-            email = "ventas@vivero.demo",
-            fullName = "Mariana López",
-            role = UserRole.SALES,
-            branchName = "Vivero Centro",
-            isDemo = true,
-        ).also(sessionStore::update)
+    override suspend fun signIn(email: String, password: String): Result<UserSession> {
+        if (email.isBlank()) return Result.failure(IllegalArgumentException("Escribe tu correo."))
+        if (password.length < 6) {
+            return Result.failure(IllegalArgumentException("La contraseña debe tener al menos 6 caracteres."))
+        }
+        if (!isRemoteConfigured) {
+            return Result.failure(IllegalStateException("Supabase no está configurado para cuentas reales."))
+        }
+
+        return try {
+            val user = remote.signIn(email.trim(), password)
+            Result.success(loadAndPublish(user))
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            failClosed(error)
+        }
+    }
+
+    override suspend fun signInDemo(): Result<UserSession> {
+        if (!isDemoAvailable) {
+            return Result.failure(IllegalStateException("El modo demostración no está disponible en esta compilación."))
+        }
+        return try {
+            remote.signOut()
+            delay(350)
+            val session = UserSession(
+                userId = "demo-sales",
+                email = "ventas@vivero.demo",
+                fullName = "Mariana López",
+                role = UserRole.SALES,
+                capabilities = RolePermissions.permissionsFor(UserRole.SALES),
+                branch = UserBranch(
+                    id = "demo-branch",
+                    code = "CENTRO",
+                    name = "Vivero Centro",
+                    isActive = true,
+                ),
+                mode = SessionMode.DEMO,
+            )
+            sessionStore.update(session)
+            Result.success(session)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            sessionStore.clear()
+            Result.failure(error)
+        }
     }
 
     override suspend fun sendPasswordReset(email: String): Result<Unit> = runCatching {
         require(email.contains('@')) { "Escribe un correo válido." }
-        val client = supabaseProvider.client
-            ?: error("La recuperación estará disponible al configurar Supabase.")
-        client.auth.resetPasswordForEmail(email.trim())
+        check(isRemoteConfigured) { "Supabase no está configurado para cuentas reales." }
+        remote.sendPasswordReset(email.trim())
     }
 
-    override suspend fun signOut(): Result<Unit> = runCatching {
-        supabaseProvider.client?.auth?.signOut()
-        sessionStore.update(null)
+    override suspend fun signOut(): Result<Unit> {
+        return try {
+            remote.signOut()
+            Result.success(Unit)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Result.failure(error)
+        } finally {
+            sessionStore.clear()
+        }
     }
 
-    private suspend fun loadProfile(userId: String, email: String, isDemo: Boolean): UserSession {
-        val client = checkNotNull(supabaseProvider.client)
-        val profile = client.from("profiles").select(
-            columns = Columns.raw("id,full_name,branch:branches(name)"),
-        ) {
-            filter { eq("id", userId) }
-        }.decodeSingle<ProfileDto>()
-        val assignedRole = client.from("user_roles").select(columns = Columns.raw("role:roles(name)")) {
-            filter { eq("user_id", userId) }
-        }.decodeSingle<UserRoleDto>()
-        val role = UserRole.entries.firstOrNull { it.name == assignedRole.role.name }
-            ?: error("Tu perfil no tiene un rol válido. Contacta al administrador.")
+    private suspend fun loadAndPublish(user: AuthenticatedUser): UserSession {
+        val profile = remote.loadProfiles(user.id).singleOrSessionError(
+            "No existe un perfil único para esta cuenta.",
+        )
+        check(profile.id == user.id) { "El perfil recibido no corresponde a la cuenta autenticada." }
+        check(profile.isActive) { "Tu perfil está inactivo. Contacta al administrador." }
+
+        val assignment = remote.loadRoleAssignments(user.id).singleOrSessionError(
+            "La cuenta debe tener exactamente un rol asignado.",
+        )
+        val role = UserRole.entries.firstOrNull { it.name == assignment.role.name }
+            ?: error("La cuenta tiene un rol no reconocido por esta versión de la aplicación.")
+
+        val capabilities = remote.loadCapabilities(assignment.roleId)
+            .mapNotNull { permission ->
+                AppPermission.entries.firstOrNull { it.name == permission.permissionName }
+            }
+            .toSet()
+
+        val branch = profile.branchId?.let { branchId ->
+            val remoteBranch = remote.loadBranches(branchId).singleOrSessionError(
+                "La sucursal asignada no está activa o disponible.",
+            )
+            check(remoteBranch.id == branchId) { "La sucursal recibida no corresponde al perfil." }
+            check(remoteBranch.isActive) { "La sucursal asignada está inactiva." }
+            UserBranch(
+                id = remoteBranch.id,
+                code = remoteBranch.code,
+                name = remoteBranch.name,
+                isActive = true,
+            )
+        }
+
         return UserSession(
-            userId = userId,
-            email = email,
+            userId = user.id,
+            email = user.email,
             fullName = profile.fullName,
             role = role,
-            branchName = profile.branch?.name ?: "Sin sucursal",
-            isDemo = isDemo,
-        )
+            capabilities = capabilities,
+            branch = branch,
+            mode = SessionMode.REMOTE,
+        ).also(sessionStore::update)
+    }
+
+    private suspend fun <T> failClosed(error: Throwable): Result<T> {
+        sessionStore.clear()
+        try {
+            remote.signOut()
+        } catch (signOutError: Throwable) {
+            if (signOutError is CancellationException) throw signOutError
+            error.addSuppressed(signOutError)
+        }
+        return Result.failure(error)
     }
 }
+
+private fun <T> List<T>.singleOrSessionError(message: String): T =
+    singleOrNull() ?: throw IllegalStateException(message)

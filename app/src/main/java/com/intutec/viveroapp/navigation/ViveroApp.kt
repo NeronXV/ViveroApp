@@ -22,7 +22,6 @@ import com.intutec.viveroapp.core.designsystem.PlaceholderScreen
 import com.intutec.viveroapp.feature.scanner.presentation.ScannerScreenRoute
 import com.intutec.viveroapp.feature.cart.presentation.CartScreenRoute
 import com.intutec.viveroapp.core.security.AppPermission
-import com.intutec.viveroapp.core.security.RolePermissions
 
 @Composable
 fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -75,8 +74,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
             )
         }
         composable<CatalogRoute> {
-            val role = authState.session?.role
-            if (role != null && RolePermissions.can(role, AppPermission.VIEW_CATALOG)) {
+            if (authState.session?.hasCapability(AppPermission.VIEW_CATALOG) == true) {
                 CatalogScreenRoute(
                     onBack = navController::navigateUp,
                     onProductClick = { navController.navigate(ProductDetailRoute(it)) },
@@ -95,8 +93,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
             )
         }
         composable<ScannerPreviewRoute> {
-            val role = authState.session?.role
-            if (role != null && RolePermissions.can(role, AppPermission.SCAN_PRODUCTS)) {
+            if (authState.session?.hasCapability(AppPermission.SCAN_PRODUCTS) == true) {
                 ScannerScreenRoute(
                     onBack = navController::navigateUp,
                     onProductDetails = { navController.navigate(ProductDetailRoute(it)) },
@@ -106,8 +103,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
             }
         }
         composable<CartRoute> {
-            val role = authState.session?.role
-            if (role != null && RolePermissions.can(role, AppPermission.CREATE_SALES)) {
+            if (authState.session?.canOperateAtBranch(AppPermission.CREATE_SALES) == true) {
                 CartScreenRoute(
                     onBack = navController::navigateUp,
                     onBrowseCatalog = { navController.navigate(CatalogRoute) },

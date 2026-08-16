@@ -2,6 +2,9 @@ package com.intutec.viveroapp.feature.auth
 
 import com.intutec.viveroapp.MainDispatcherRule
 import com.intutec.viveroapp.core.model.UserRole
+import com.intutec.viveroapp.core.security.RolePermissions
+import com.intutec.viveroapp.core.session.SessionMode
+import com.intutec.viveroapp.core.session.UserBranch
 import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
 import com.intutec.viveroapp.feature.auth.presentation.AuthStatus
@@ -43,6 +46,7 @@ class AuthViewModelTest {
 
     private class FakeAuthRepository(private val restored: UserSession? = null) : AuthRepository {
         override val isRemoteConfigured = false
+        override val isDemoAvailable = true
         override suspend fun restoreSession() = Result.success(restored)
         override suspend fun signIn(email: String, password: String) = Result.success(demoSession())
         override suspend fun signInDemo() = Result.success(demoSession())
@@ -56,8 +60,9 @@ class AuthViewModelTest {
             email = "demo@vivero.test",
             fullName = "Demo",
             role = UserRole.SALES,
-            branchName = "Centro",
-            isDemo = true,
+            capabilities = RolePermissions.permissionsFor(UserRole.SALES),
+            branch = UserBranch("demo-branch", "CENTRO", "Centro", true),
+            mode = SessionMode.DEMO,
         )
     }
 }

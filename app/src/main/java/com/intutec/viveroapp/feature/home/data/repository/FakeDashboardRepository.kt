@@ -1,7 +1,9 @@
 package com.intutec.viveroapp.feature.home.data.repository
 
 import com.intutec.viveroapp.core.model.UserRole
+import com.intutec.viveroapp.core.security.AppPermission
 import com.intutec.viveroapp.core.session.SessionStore
+import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.home.domain.model.Dashboard
 import com.intutec.viveroapp.feature.home.domain.model.DashboardModule
 import com.intutec.viveroapp.feature.home.domain.repository.DashboardRepository
@@ -21,15 +23,15 @@ class FakeDashboardRepository @Inject constructor(
             pendingTickets = 3,
             lowStockProducts = 7,
             activePromotions = 2,
-            modules = modulesFor(session.role),
+            modules = modulesFor(session),
         )
     }
 
-    private fun modulesFor(role: UserRole): List<DashboardModule> = when (role) {
+    private fun modulesFor(session: UserSession): List<DashboardModule> = when (session.role) {
         UserRole.SALES -> listOf(
-            module("catalog", "Catálogo", "Consulta plantas y existencias", true),
+            module("catalog", "Catálogo", "Consulta plantas y existencias", session.hasCapability(AppPermission.VIEW_CATALOG)),
             module("scanner", "Escáner", "Identifica plantas por código"),
-            module("cart", "Carrito actual", "Prepara una nueva venta", true),
+            module("cart", "Carrito actual", "Prepara una nueva venta", session.canOperateAtBranch(AppPermission.CREATE_SALES)),
             module("tickets", "Mis tickets", "Revisa órdenes enviadas"),
         )
         UserRole.CASHIER -> listOf(

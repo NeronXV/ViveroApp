@@ -11,13 +11,13 @@ import javax.inject.Singleton
 @Singleton
 class SupabaseProvider @Inject constructor() {
     val isConfigured: Boolean = BuildConfig.SUPABASE_URL.isNotBlank() &&
-        BuildConfig.SUPABASE_ANON_KEY.isNotBlank()
+        BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()
 
     val client: SupabaseClient? by lazy {
         if (!isConfigured) return@lazy null
         createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,
-            supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+            supabaseKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
         ) {
             install(Auth)
             install(Postgrest)

@@ -9,7 +9,7 @@
 
 ```properties
 SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_ANON_KEY=tu_clave_publicable_o_anon
+SUPABASE_PUBLISHABLE_KEY=tu_clave_publicable
 ```
 
 5. Crea el primer usuario desde **Authentication > Users** y confirma que el trigger haya creado su fila activa en `public.profiles`, inicialmente con `branch_id = null`.

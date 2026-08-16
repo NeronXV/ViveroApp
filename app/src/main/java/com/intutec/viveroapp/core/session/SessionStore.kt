@@ -14,4 +14,8 @@ class SessionStore @Inject constructor() {
     fun update(session: UserSession?) {
         _session.value = session
     }
+
+    fun clear() {
+        _session.value = null
+    }
 }

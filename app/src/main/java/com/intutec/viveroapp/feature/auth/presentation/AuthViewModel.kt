@@ -20,6 +20,7 @@ data class AuthUiState(
     val password: String = "",
     val passwordVisible: Boolean = false,
     val remoteConfigured: Boolean = false,
+    val demoAvailable: Boolean = false,
     val session: UserSession? = null,
     val errorMessage: String? = null,
     val infoMessage: String? = null,
@@ -29,7 +30,12 @@ data class AuthUiState(
 class AuthViewModel @Inject constructor(
     private val repository: AuthRepository,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(AuthUiState(remoteConfigured = repository.isRemoteConfigured))
+    private val _uiState = MutableStateFlow(
+        AuthUiState(
+            remoteConfigured = repository.isRemoteConfigured,
+            demoAvailable = repository.isDemoAvailable,
+        ),
+    )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
@@ -70,7 +76,12 @@ class AuthViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     _uiState.update {
-                        it.copy(status = AuthStatus.SIGNED_OUT, errorMessage = error.readableMessage())
+                        it.copy(
+                            status = AuthStatus.SIGNED_OUT,
+                            password = "",
+                            session = null,
+                            errorMessage = error.readableMessage(),
+                        )
                     }
                 },
             )
@@ -83,6 +94,7 @@ class AuthViewModel @Inject constructor(
             _uiState.value = AuthUiState(
                 status = AuthStatus.SIGNED_OUT,
                 remoteConfigured = repository.isRemoteConfigured,
+                demoAvailable = repository.isDemoAvailable,
             )
         }
     }
@@ -100,8 +112,14 @@ class AuthViewModel @Inject constructor(
                         )
                     }
                 },
-                onFailure = {
-                    _uiState.update { state -> state.copy(status = AuthStatus.SIGNED_OUT) }
+                onFailure = { error ->
+                    _uiState.update { state ->
+                        state.copy(
+                            status = AuthStatus.SIGNED_OUT,
+                            session = null,
+                            errorMessage = error.readableMessage(),
+                        )
+                    }
                 },
             )
         }
@@ -118,7 +136,12 @@ class AuthViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     _uiState.update {
-                        it.copy(status = AuthStatus.SIGNED_OUT, errorMessage = error.readableMessage())
+                        it.copy(
+                            status = AuthStatus.SIGNED_OUT,
+                            password = "",
+                            session = null,
+                            errorMessage = error.readableMessage(),
+                        )
                     }
                 },
             )

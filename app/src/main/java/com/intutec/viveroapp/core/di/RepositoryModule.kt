@@ -3,6 +3,8 @@ package com.intutec.viveroapp.core.di
 import com.intutec.viveroapp.feature.home.data.repository.FakeDashboardRepository
 import com.intutec.viveroapp.feature.home.domain.repository.DashboardRepository
 import com.intutec.viveroapp.feature.auth.data.repository.AuthRepositoryImpl
+import com.intutec.viveroapp.feature.auth.data.remote.AuthRemoteDataSource
+import com.intutec.viveroapp.feature.auth.data.remote.SupabaseAuthRemoteDataSource
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
 import com.intutec.viveroapp.feature.catalog.data.repository.FakeCatalogRepository
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
@@ -17,6 +19,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+    @Binds
+    @Singleton
+    abstract fun bindAuthRemoteDataSource(
+        implementation: SupabaseAuthRemoteDataSource,
+    ): AuthRemoteDataSource
+
     @Binds
     @Singleton
     abstract fun bindCartRepository(implementation: RoomCartRepository): CartRepository
