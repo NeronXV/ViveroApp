@@ -514,7 +514,7 @@ select extensions.ok(
             ('public.user_roles'::pg_catalog.text)
         ) as required(table_name)
     ),
-    'authenticated retains SELECT on all twelve RLS-protected tables'
+    'authenticated retains SELECT on the twelve client-readable RLS tables'
 );
 select extensions.ok(
     (
@@ -529,6 +529,8 @@ select extensions.ok(
             ('public.profiles'::pg_catalog.text),
             ('public.role_permissions'::pg_catalog.text),
             ('public.roles'::pg_catalog.text),
+            ('public.sale_payment_claims'::pg_catalog.text),
+            ('public.sale_payments'::pg_catalog.text),
             ('public.sale_items'::pg_catalog.text),
             ('public.sale_status_history'::pg_catalog.text),
             ('public.sales'::pg_catalog.text),
@@ -579,6 +581,7 @@ select extensions.ok(
             ('public.permissions'::pg_catalog.text), ('public.product_images'::pg_catalog.text),
             ('public.products'::pg_catalog.text), ('public.profiles'::pg_catalog.text),
             ('public.role_permissions'::pg_catalog.text), ('public.roles'::pg_catalog.text),
+            ('public.sale_payment_claims'::pg_catalog.text), ('public.sale_payments'::pg_catalog.text),
             ('public.sale_items'::pg_catalog.text), ('public.sale_status_history'::pg_catalog.text),
             ('public.sales'::pg_catalog.text), ('public.user_roles'::pg_catalog.text)
         ) as target(table_name)
@@ -611,12 +614,8 @@ select extensions.ok(
             pg_catalog.has_table_privilege('service_role', target.table_name, privilege.name)
         )
         from (values
-            ('public.branches'::pg_catalog.text), ('public.categories'::pg_catalog.text),
-            ('public.permissions'::pg_catalog.text), ('public.product_images'::pg_catalog.text),
-            ('public.products'::pg_catalog.text), ('public.profiles'::pg_catalog.text),
-            ('public.role_permissions'::pg_catalog.text), ('public.roles'::pg_catalog.text),
-            ('public.sale_items'::pg_catalog.text), ('public.sale_status_history'::pg_catalog.text),
-            ('public.sales'::pg_catalog.text), ('public.user_roles'::pg_catalog.text)
+            ('public.sale_payment_claims'::pg_catalog.text),
+            ('public.sale_payments'::pg_catalog.text)
         ) as target(table_name)
         cross join (values
             ('SELECT'::pg_catalog.text), ('INSERT'::pg_catalog.text),
@@ -625,7 +624,7 @@ select extensions.ok(
             ('TRIGGER'::pg_catalog.text)
         ) as privilege(name)
     ),
-    'service_role retains full administrative table privileges'
+    'service_role has administrative privileges on the new payment tables'
 );
 
 set local role authenticated;
@@ -651,26 +650,30 @@ reset role;
 
 select extensions.results_eq(
     $$
-    select p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')'
+    select (p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')') collate "C"
     from pg_catalog.pg_proc p
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
     order by 1
     $$,
-    $$values
+    $$select signature collate "C" from (values
         ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
         ('assign_user_role(p_user_id uuid, p_role_name text)'),
         ('bootstrap_first_owner(p_user_id uuid)'),
+        ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
+        ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
         ('enforce_product_price_permission()'),
         ('handle_new_user()'),
         ('has_permission(required_permission text)'),
+        ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
         ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
         ('set_updated_at()'),
         ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
+    ) as expected(signature)
     $$,
-    'the public function inventory contains exactly eleven approved signatures'
+    'the public function inventory contains exactly fourteen approved signatures'
 );
 
 select extensions.ok(
@@ -702,35 +705,40 @@ select extensions.ok(
 
 select extensions.results_eq(
     $$
-    select p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')'
+    select (p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')') collate "C"
     from pg_catalog.pg_proc p
     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
     order by 1
     $$,
-    $$values
+    $$select signature collate "C" from (values
         ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
         ('assign_user_role(p_user_id uuid, p_role_name text)'),
+        ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
+        ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
         ('has_permission(required_permission text)'),
+        ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
         ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
         ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
+    ) as expected(signature)
     $$,
-    'authenticated can execute exactly the seven-function whitelist'
+    'authenticated can execute exactly the ten-function whitelist'
 );
 
 select extensions.ok(
-    (
-        select pg_catalog.bool_and(
-            pg_catalog.has_function_privilege('service_role', p.oid, 'EXECUTE')
-        )
-        from pg_catalog.pg_proc p
-        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public'
+    pg_catalog.has_function_privilege(
+        'service_role', 'public.claim_sale_for_payment(uuid,uuid)', 'EXECUTE'
+    ) and pg_catalog.has_function_privilege(
+        'service_role', 'public.release_sale_payment_claim(uuid,uuid)', 'EXECUTE'
+    ) and pg_catalog.has_function_privilege(
+        'service_role',
+        'public.confirm_sale_payment(uuid,uuid,uuid,public.payment_method,bigint,text)',
+        'EXECUTE'
     ),
-    'service_role retains administrative execution of every public function'
+    'service_role can execute the three payment RPCs'
 );
 
 select extensions.ok(

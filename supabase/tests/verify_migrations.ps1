@@ -9,6 +9,10 @@ $salesSql = Get-Content (Join-Path $migrationDirectory '202608080003_sales_cart.
 $branchSql = Get-Content (Join-Path $migrationDirectory '202608140001_branch_management.sql') -Raw
 $privilegeSql = Get-Content (Join-Path $migrationDirectory '202608150001_harden_table_privileges.sql') -Raw
 $functionPrivilegeSql = Get-Content (Join-Path $migrationDirectory '202608150002_harden_function_privileges.sql') -Raw
+$paymentSql = Get-Content (Join-Path $migrationDirectory '202608220001_cashier_payments.sql') -Raw
+$paymentTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
+) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -27,12 +31,13 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 6) 'exactly six ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 7) 'exactly seven ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
         '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql,' +
-        '202608150002_harden_function_privileges.sql'
+        '202608150002_harden_function_privileges.sql,' +
+        '202608220001_cashier_payments.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -45,7 +50,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 9 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 12 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -172,6 +177,71 @@ Assert-Condition (
 Assert-Condition (
     -not [regex]::IsMatch($functionPrivilegeSql, '(?i)create\s+(or\s+replace\s+)?function|alter\s+default\s+privileges|owner\s+to')
 ) 'function hardening changes no bodies, owners, or global defaults'
+
+Assert-Condition (
+    $paymentSql.Contains("create type public.payment_method as enum ('CASH', 'CARD', 'TRANSFER');") -and
+    $paymentSql.Contains('create table public.sale_payments') -and
+    $paymentSql.Contains('create table public.sale_payment_claims')
+) 'cashier payments use the approved methods and separate auditable claim table'
+Assert-Condition (
+    $paymentSql.Contains('sale_id pg_catalog.uuid not null unique references public.sales') -and
+    $paymentSql.Contains('idempotency_key pg_catalog.uuid not null unique') -and
+    $paymentSql.Contains('sale_payment_claims_one_open_per_sale_idx')
+) 'database constraints enforce one payment and one open claim per sale'
+Assert-Condition (
+    [regex]::Matches($paymentSql, '(?is)from\s+public\.sales\s+s.*?for\s+update').Count -eq 3 -and
+    $paymentSql.Contains("set status = 'PAID'") -and
+    $paymentSql.Contains("'SENT_TO_CASHIER', 'PAID'")
+) 'claim, release, and confirmation serialize on the sale while confirmation records PAID atomically'
+Assert-Condition (
+    $paymentSql.Contains('v_payment.requested_amount_received_cents is distinct from p_amount_received_cents') -and
+    $paymentSql.Contains("message = 'IDEMPOTENCY_CONFLICT'") -and
+    $paymentSql.Contains("message = 'SALE_ALREADY_PAID'")
+) 'payment retries compare the canonical request and reject conflicting keys or second payments'
+Assert-Condition (
+    $paymentSql.Contains('pg_catalog.clock_timestamp()') -and
+    $paymentSql.Contains('pg_catalog.make_interval(mins => 5)') -and
+    -not $paymentSql.Contains("set status = 'PAYMENT_PENDING'")
+) 'claims use server time without moving sales to PAYMENT_PENDING'
+Assert-Condition (
+    [regex]::Matches(
+        $paymentSql,
+        '(?is)revoke all on function public\.(claim_sale_for_payment|release_sale_payment_claim|confirm_sale_payment)\s*\([^;]*?\)\s*from public, anon, authenticated;'
+    ).Count -eq 3 -and
+    [regex]::Matches(
+        $paymentSql,
+        '(?is)grant execute on function public\.(claim_sale_for_payment|release_sale_payment_claim|confirm_sale_payment)\s*\([^;]*?\)\s*to authenticated, service_role;'
+    ).Count -eq 3
+) 'payment RPC execution is limited to authenticated and service_role'
+Assert-Condition (
+    $paymentSql.Contains('alter table public.sale_payment_claims enable row level security;') -and
+    $paymentSql.Contains('alter table public.sale_payments enable row level security;') -and
+    $paymentSql.Contains('from public, anon, authenticated;') -and
+    -not [regex]::IsMatch($paymentSql, '(?i)grant\s+(select|insert|update|delete).*to\s+authenticated')
+) 'payment tables are RLS-enabled and expose no direct client privileges'
+Assert-Condition (
+    $paymentSql.Contains("public.has_permission('OPERATE_CASHIER')") -and
+    [regex]::Matches($paymentSql, 'v_sale\.branch_id\s*<>\s*v_branch_id').Count -eq 3
+) 'all payment RPCs require cashier capability and enforce the active session branch'
+Assert-Condition (
+    $paymentSql.Contains("message = 'CASH_AMOUNT_INSUFFICIENT'") -and
+    $paymentSql.Contains("message = 'TRANSFER_REFERENCE_REQUIRED'") -and
+    $paymentSql.Contains("message = 'CLAIM_EXPIRED'") -and
+    $paymentSql.Contains("message = 'CLAIM_NOT_OWNED'")
+) 'payment RPCs expose stable sanitized application error codes'
+Assert-Condition (
+    $paymentTestSql.Contains('select extensions.plan(50);') -and
+    [regex]::Matches(
+        $paymentTestSql,
+        '(?im)^select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
+    ).Count -eq 50
+) 'cashier payment pgTAP plan matches its fifty assertions'
+Assert-Condition (
+    $paymentTestSql.Contains('OWNER cannot operate a sale in another branch') -and
+    $paymentTestSql.Contains('ADMIN cannot operate a sale in another branch') -and
+    $paymentTestSql.Contains('competing confirmations create one payment') -and
+    $paymentTestSql.Contains('idempotent retries leave one PAID history row')
+) 'payment tests cover branch isolation, competition, and idempotent side effects'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }
