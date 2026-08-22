@@ -1,6 +1,6 @@
 package com.intutec.viveroapp.core.di
 
-import com.intutec.viveroapp.feature.home.data.repository.FakeDashboardRepository
+import com.intutec.viveroapp.feature.home.data.repository.SessionDashboardRepository
 import com.intutec.viveroapp.feature.home.domain.repository.DashboardRepository
 import com.intutec.viveroapp.feature.auth.data.repository.AuthRepositoryImpl
 import com.intutec.viveroapp.feature.auth.data.remote.AuthRemoteDataSource
@@ -62,6 +62,6 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindDashboardRepository(
-        implementation: FakeDashboardRepository,
+        implementation: SessionDashboardRepository,
     ): DashboardRepository
 }

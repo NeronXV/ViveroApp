@@ -1,14 +1,14 @@
 package com.intutec.viveroapp.feature.home.domain.model
 
 import com.intutec.viveroapp.core.model.UserRole
+import com.intutec.viveroapp.core.session.SessionMode
 
 data class Dashboard(
     val userName: String,
     val role: UserRole,
     val branchName: String,
-    val pendingTickets: Int,
-    val lowStockProducts: Int,
-    val activePromotions: Int,
+    val sessionMode: SessionMode,
+    val canCreateSales: Boolean,
     val modules: List<DashboardModule>,
 )
 

@@ -6,7 +6,7 @@ import com.intutec.viveroapp.core.session.SessionMode
 import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.core.session.UserBranch
 import com.intutec.viveroapp.core.session.UserSession
-import com.intutec.viveroapp.feature.home.data.repository.FakeDashboardRepository
+import com.intutec.viveroapp.feature.home.data.repository.SessionDashboardRepository
 import com.intutec.viveroapp.feature.home.domain.model.DashboardModule
 import com.intutec.viveroapp.feature.home.presentation.onHomeModuleClick
 import kotlinx.coroutines.test.runTest
@@ -50,7 +50,7 @@ class DashboardCartCapabilityTest {
     }
 
     private suspend fun dashboardFor(role: UserRole, capabilities: Set<AppPermission>) =
-        FakeDashboardRepository(
+        SessionDashboardRepository(
             SessionStore().apply {
                 update(
                     UserSession(
