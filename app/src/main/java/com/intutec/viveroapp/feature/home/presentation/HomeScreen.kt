@@ -79,6 +79,7 @@ private val Muted = Color(0xFF5F6F67)
 fun HomeScreenRoute(
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
+    onCashierClick: () -> Unit,
     onProfileClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -88,6 +89,7 @@ fun HomeScreenRoute(
         onRetry = viewModel::retry,
         onCatalogClick = onCatalogClick,
         onCartClick = onCartClick,
+        onCashierClick = onCashierClick,
         onProfileClick = onProfileClick,
     )
 }
@@ -96,10 +98,12 @@ internal fun onHomeModuleClick(
     module: DashboardModule,
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
+    onCashierClick: () -> Unit,
 ) {
     when (module.id) {
         "catalog" -> onCatalogClick()
         "cart" -> onCartClick()
+        "cashier" -> onCashierClick()
     }
 }
 
@@ -109,6 +113,7 @@ fun HomeScreen(
     onRetry: () -> Unit,
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
+    onCashierClick: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
     Scaffold(containerColor = Cream) { padding ->
@@ -124,6 +129,7 @@ fun HomeScreen(
                     content = state.data,
                     onCatalogClick = onCatalogClick,
                     onCartClick = onCartClick,
+                    onCashierClick = onCashierClick,
                     onProfileClick = onProfileClick,
                 )
             }
@@ -136,6 +142,7 @@ private fun DashboardContent(
     content: HomeContent,
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
+    onCashierClick: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -171,7 +178,9 @@ private fun DashboardContent(
                             modules = content.dashboard.modules,
                             cart = content.cart,
                             expanded = expanded,
-                            onModuleClick = { module -> onHomeModuleClick(module, onCatalogClick, onCartClick) },
+                            onModuleClick = { module ->
+                                onHomeModuleClick(module, onCatalogClick, onCartClick, onCashierClick)
+                            },
                         )
                     }
                 }
@@ -427,6 +436,7 @@ private fun QuickAccessCard(module: DashboardModule, description: String, onClic
 private fun DashboardModule.icon(): ImageVector = when (id) {
     "catalog" -> Icons.Outlined.LocalFlorist
     "cart" -> Icons.Outlined.ShoppingCart
+    "cashier" -> Icons.Outlined.PointOfSale
     else -> Icons.Outlined.LocalFlorist
 }
 
@@ -508,6 +518,7 @@ private fun HomePreview(dashboard: Dashboard, cart: Cart) {
             onRetry = {},
             onCatalogClick = {},
             onCartClick = {},
+            onCashierClick = {},
             onProfileClick = {},
         )
     }

@@ -43,10 +43,37 @@ class DashboardCartCapabilityTest {
         var cartOpens = 0
         val module = DashboardModule("cart", "Carrito actual", "Prepara una nueva venta", true)
 
-        onHomeModuleClick(module, onCatalogClick = { catalogOpens += 1 }, onCartClick = { cartOpens += 1 })
+        onHomeModuleClick(
+            module,
+            onCatalogClick = { catalogOpens += 1 },
+            onCartClick = { cartOpens += 1 },
+            onCashierClick = {},
+        )
 
         assertEquals(0, catalogOpens)
         assertEquals(1, cartOpens)
+    }
+
+    @Test
+    fun `cashier module depends on OPERATE_CASHIER and active branch`() = runTest {
+        val allowed = dashboardFor(UserRole.CASHIER, setOf(AppPermission.OPERATE_CASHIER))
+        val denied = dashboardFor(UserRole.CASHIER, setOf(AppPermission.VIEW_CATALOG))
+
+        assertTrue(allowed.modules.any { it.id == "cashier" })
+        assertFalse(denied.modules.any { it.id == "cashier" })
+    }
+
+    @Test
+    fun `cashier module invokes cashier navigation callback`() {
+        var cashierOpens = 0
+        onHomeModuleClick(
+            DashboardModule("cashier", "Caja", "Comandas", true),
+            onCatalogClick = {},
+            onCartClick = {},
+            onCashierClick = { cashierOpens += 1 },
+        )
+
+        assertEquals(1, cashierOpens)
     }
 
     private suspend fun dashboardFor(role: UserRole, capabilities: Set<AppPermission>) =

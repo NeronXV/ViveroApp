@@ -22,6 +22,8 @@ import com.intutec.viveroapp.core.designsystem.PlaceholderScreen
 import com.intutec.viveroapp.feature.scanner.presentation.ScannerScreenRoute
 import com.intutec.viveroapp.feature.cart.presentation.CartScreenRoute
 import com.intutec.viveroapp.core.security.AppPermission
+import com.intutec.viveroapp.feature.cashier.presentation.CashierDetailScreenRoute
+import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueScreenRoute
 
 @Composable
 fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -70,6 +72,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
             HomeScreenRoute(
                 onCatalogClick = { navController.navigate(CatalogRoute) },
                 onCartClick = { navController.navigate(CartRoute) },
+                onCashierClick = { navController.navigate(CashierQueueRoute) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
             )
         }
@@ -110,6 +113,24 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
+            }
+        }
+        composable<CashierQueueRoute> {
+            if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
+                CashierQueueScreenRoute(
+                    onBack = navController::navigateUp,
+                    onOrderClick = { navController.navigate(CashierDetailRoute(it)) },
+                )
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
+            }
+        }
+        composable<CashierDetailRoute> { entry ->
+            if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
+                val route = entry.toRoute<CashierDetailRoute>()
+                CashierDetailScreenRoute(orderId = route.orderId, onBack = navController::navigateUp)
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
             }
         }
         composable<ProfileRoute> {

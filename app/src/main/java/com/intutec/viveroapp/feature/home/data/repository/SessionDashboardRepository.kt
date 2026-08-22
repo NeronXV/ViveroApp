@@ -26,6 +26,9 @@ class SessionDashboardRepository @Inject constructor(
                 if (canCreateSales) {
                     add(DashboardModule("cart", "Carrito actual", "Retoma la comanda guardada", true))
                 }
+                if (session.canOperateAtBranch(AppPermission.OPERATE_CASHIER)) {
+                    add(DashboardModule("cashier", "Caja", "Atiende comandas de esta sucursal", true))
+                }
             },
         )
     }

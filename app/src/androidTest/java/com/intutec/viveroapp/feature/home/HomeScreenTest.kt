@@ -127,6 +127,7 @@ class HomeScreenTest {
                         onRetry = {},
                         onCatalogClick = onCatalog,
                         onCartClick = onCart,
+                        onCashierClick = {},
                         onProfileClick = {},
                     )
                 }

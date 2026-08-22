@@ -16,6 +16,10 @@ import com.intutec.viveroapp.feature.cart.sync.RoomSaleOutboxStore
 import com.intutec.viveroapp.feature.cart.sync.SaleOutboxStore
 import com.intutec.viveroapp.feature.cart.sync.SaleSyncRemoteDataSource
 import com.intutec.viveroapp.feature.cart.sync.SupabaseSaleSyncRemoteDataSource
+import com.intutec.viveroapp.feature.cashier.data.remote.CashierRemoteDataSource
+import com.intutec.viveroapp.feature.cashier.data.remote.SupabaseCashierRemoteDataSource
+import com.intutec.viveroapp.feature.cashier.data.repository.SupabaseCashierRepository
+import com.intutec.viveroapp.feature.cashier.domain.repository.CashierRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -64,4 +68,16 @@ abstract class RepositoryModule {
     abstract fun bindDashboardRepository(
         implementation: SessionDashboardRepository,
     ): DashboardRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCashierRemoteDataSource(
+        implementation: SupabaseCashierRemoteDataSource,
+    ): CashierRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCashierRepository(
+        implementation: SupabaseCashierRepository,
+    ): CashierRepository
 }
