@@ -262,11 +262,33 @@ private fun CashierStatusLabel() {
 fun CashierDetailScreenRoute(
     orderId: String,
     onBack: () -> Unit,
+    onPaymentFinished: () -> Unit,
     viewModel: CashierDetailViewModel = hiltViewModel(),
+    paymentViewModel: CashierPaymentViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val paymentState by paymentViewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(orderId) { viewModel.load(orderId) }
-    CashierDetailScreen(state, onBack, viewModel::refresh)
+    val order = (state as? CashierDetailUiState.Content)?.order
+    LaunchedEffect(order?.summary?.id) { order?.let(paymentViewModel::attachOrder) }
+    CashierDetailScreen(state, onBack, viewModel::refresh, paymentViewModel::start)
+    order?.let {
+        CashierPaymentFlow(
+            order = it,
+            state = paymentState,
+            secondsRemaining = paymentViewModel::secondsRemaining,
+            onMethod = paymentViewModel::selectMethod,
+            onCashAmount = paymentViewModel::updateCashAmount,
+            onReference = paymentViewModel::updateReference,
+            onRequestConfirmation = paymentViewModel::requestConfirmation,
+            onDismissConfirmation = paymentViewModel::dismissConfirmation,
+            onConfirm = paymentViewModel::confirm,
+            onRetry = paymentViewModel::retryUncertain,
+            onRenew = paymentViewModel::renew,
+            onCancel = { paymentViewModel.cancel(onPaymentFinished) },
+            onDone = onPaymentFinished,
+        )
+    }
 }
 
 @Composable
@@ -274,6 +296,7 @@ fun CashierDetailScreen(
     state: CashierDetailUiState,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
+    onStartPayment: () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize(), color = CashierCream) {
         Column(Modifier.fillMaxSize()) {
@@ -288,14 +311,18 @@ fun CashierDetailScreen(
                     onAction = onRefresh,
                     isError = true,
                 )
-                is CashierDetailUiState.Content -> CashierDetailContent(state, onRefresh)
+                is CashierDetailUiState.Content -> CashierDetailContent(state, onRefresh, onStartPayment)
             }
         }
     }
 }
 
 @Composable
-private fun CashierDetailContent(state: CashierDetailUiState.Content, onRefresh: () -> Unit) {
+private fun CashierDetailContent(
+    state: CashierDetailUiState.Content,
+    onRefresh: () -> Unit,
+    onStartPayment: () -> Unit,
+) {
     val order = state.order
     PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -306,7 +333,7 @@ private fun CashierDetailContent(state: CashierDetailUiState.Content, onRefresh:
                     horizontalArrangement = Arrangement.spacedBy(22.dp),
                 ) {
                     CashierDetailItems(order, state.refreshError, Modifier.weight(1.35f).fillMaxHeight())
-                    CashierDetailSummary(order, Modifier.weight(.65f).fillMaxHeight())
+                    CashierDetailSummary(order, onStartPayment, Modifier.weight(.65f).fillMaxHeight())
                 }
             } else {
                 LazyColumn(
@@ -320,7 +347,7 @@ private fun CashierDetailContent(state: CashierDetailUiState.Content, onRefresh:
                     }
                     item { CashierItemsCard(order.items) }
                     item { CashierTotalsCard(order) }
-                    item { ReadOnlyNotice() }
+                    item { StartPaymentAction(onStartPayment) }
                 }
             }
         }
@@ -339,10 +366,10 @@ private fun CashierDetailItems(order: CashierOrderDetail, refreshError: String?,
 }
 
 @Composable
-private fun CashierDetailSummary(order: CashierOrderDetail, modifier: Modifier) {
+private fun CashierDetailSummary(order: CashierOrderDetail, onStartPayment: () -> Unit, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         CashierTotalsCard(order)
-        ReadOnlyNotice()
+        StartPaymentAction(onStartPayment)
     }
 }
 
@@ -412,17 +439,15 @@ private fun TotalRow(label: String, amount: Long) {
 }
 
 @Composable
-private fun ReadOnlyNotice() {
-    Surface(shape = RoundedCornerShape(18.dp), color = CashierPaper) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.PointOfSale, null, tint = CashierForest)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                "Cobro no disponible en esta fase. Esta pantalla no modifica la comanda.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = CashierMuted,
-            )
-        }
+private fun StartPaymentAction(onStartPayment: () -> Unit) {
+    Button(
+        onClick = onStartPayment,
+        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("cashier_start_payment"),
+        colors = ButtonDefaults.buttonColors(containerColor = CashierForest, contentColor = Color.White),
+    ) {
+        Icon(Icons.Rounded.PointOfSale, null)
+        Spacer(Modifier.width(10.dp))
+        Text("Iniciar cobro")
     }
 }
 

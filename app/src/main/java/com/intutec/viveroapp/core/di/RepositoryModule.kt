@@ -20,6 +20,12 @@ import com.intutec.viveroapp.feature.cashier.data.remote.CashierRemoteDataSource
 import com.intutec.viveroapp.feature.cashier.data.remote.SupabaseCashierRemoteDataSource
 import com.intutec.viveroapp.feature.cashier.data.repository.SupabaseCashierRepository
 import com.intutec.viveroapp.feature.cashier.domain.repository.CashierRepository
+import com.intutec.viveroapp.feature.cashier.data.local.CashierPaymentAttemptStore
+import com.intutec.viveroapp.feature.cashier.data.local.RoomCashierPaymentAttemptStore
+import com.intutec.viveroapp.feature.cashier.data.remote.CashierPaymentRemoteDataSource
+import com.intutec.viveroapp.feature.cashier.data.remote.SupabaseCashierPaymentRemoteDataSource
+import com.intutec.viveroapp.feature.cashier.data.repository.SupabaseCashierPaymentRepository
+import com.intutec.viveroapp.feature.cashier.domain.repository.CashierPaymentRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -80,4 +86,22 @@ abstract class RepositoryModule {
     abstract fun bindCashierRepository(
         implementation: SupabaseCashierRepository,
     ): CashierRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCashierPaymentAttemptStore(
+        implementation: RoomCashierPaymentAttemptStore,
+    ): CashierPaymentAttemptStore
+
+    @Binds
+    @Singleton
+    abstract fun bindCashierPaymentRemoteDataSource(
+        implementation: SupabaseCashierPaymentRemoteDataSource,
+    ): CashierPaymentRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCashierPaymentRepository(
+        implementation: SupabaseCashierPaymentRepository,
+    ): CashierPaymentRepository
 }

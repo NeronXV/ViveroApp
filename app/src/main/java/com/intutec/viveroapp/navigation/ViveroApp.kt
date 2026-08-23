@@ -128,7 +128,15 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
         composable<CashierDetailRoute> { entry ->
             if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
                 val route = entry.toRoute<CashierDetailRoute>()
-                CashierDetailScreenRoute(orderId = route.orderId, onBack = navController::navigateUp)
+                CashierDetailScreenRoute(
+                    orderId = route.orderId,
+                    onBack = navController::navigateUp,
+                    onPaymentFinished = {
+                        navController.navigate(CashierQueueRoute) {
+                            popUpTo<CashierQueueRoute> { inclusive = true }
+                        }
+                    },
+                )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
             }
