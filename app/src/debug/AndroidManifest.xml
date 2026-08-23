@@ -5,5 +5,9 @@
             android:name=".feature.cashier.prototype.CashierPrototypeActivity"
             android:exported="true"
             android:screenOrientation="unspecified" />
+        <activity
+            android:name=".feature.cashier.prototype.CashierPaymentPreviewActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified" />
     </application>
 </manifest>
