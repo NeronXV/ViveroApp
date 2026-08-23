@@ -84,6 +84,34 @@ interface CashierPaymentAttemptDao {
         observedAtEpochMs: Long,
     ): Int
 
+    @Query(
+        """
+        UPDATE sales
+        SET status = 'PAID', sync_state = 'SYNCED', sync_pending = 0,
+            sync_last_error = NULL
+        WHERE id = :saleId AND status = 'SENT_TO_CASHIER'
+          AND EXISTS (
+              SELECT 1 FROM cashier_payment_attempts attempt
+              WHERE attempt.sale_id = sales.id AND attempt.state = 'SUCCEEDED'
+          )
+        """,
+    )
+    suspend fun reconcileSucceededSale(saleId: String): Int
+
+    @Query(
+        """
+        UPDATE sales
+        SET status = 'PAID', sync_state = 'SYNCED', sync_pending = 0,
+            sync_last_error = NULL
+        WHERE status = 'SENT_TO_CASHIER'
+          AND EXISTS (
+              SELECT 1 FROM cashier_payment_attempts attempt
+              WHERE attempt.sale_id = sales.id AND attempt.state = 'SUCCEEDED'
+          )
+        """,
+    )
+    suspend fun reconcileAllSucceededSales(): Int
+
     @Transaction
     suspend fun persistAndLock(
         saleId: String,

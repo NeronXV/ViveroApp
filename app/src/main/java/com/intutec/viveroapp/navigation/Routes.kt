@@ -11,5 +11,5 @@ import kotlinx.serialization.Serializable
 @Serializable data object ScannerPreviewRoute
 @Serializable data object CartRoute
 @Serializable data object ProfileRoute
-@Serializable data object CashierQueueRoute
+@Serializable data class CashierQueueRoute(val completedFolio: String? = null)
 @Serializable data class CashierDetailRoute(val orderId: String)

@@ -21,6 +21,8 @@ interface CashierPaymentAttemptStore {
         state: CashierPaymentAttemptState,
         errorCode: String? = null,
     ): CashierPaymentAttempt
+    suspend fun reconcileSucceededSale(saleId: String): Int
+    suspend fun reconcileAllSucceededSales(): Int
 }
 
 @Singleton
@@ -99,6 +101,10 @@ class RoomCashierPaymentAttemptStore @Inject constructor(
         }
         return checkNotNull(get(saleId))
     }
+
+    override suspend fun reconcileSucceededSale(saleId: String): Int = dao.reconcileSucceededSale(saleId)
+
+    override suspend fun reconcileAllSucceededSales(): Int = dao.reconcileAllSucceededSales()
 
     private companion object {
         val TERMINAL_STATES = setOf(

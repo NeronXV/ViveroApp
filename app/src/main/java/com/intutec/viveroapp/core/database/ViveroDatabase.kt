@@ -106,6 +106,19 @@ abstract class ViveroDatabase : RoomDatabase() {
             WHERE state = 'CONFIRMING'
             """.trimIndent()
 
+        // A SUCCEEDED attempt is canonical evidence of a remote PAID response. No history or outbox row is created.
+        val RECONCILE_SUCCEEDED_PAYMENT_SALES_SQL =
+            """
+            UPDATE sales
+            SET status = 'PAID', sync_state = 'SYNCED', sync_pending = 0,
+                sync_last_error = NULL
+            WHERE status = 'SENT_TO_CASHIER'
+              AND EXISTS (
+                  SELECT 1 FROM cashier_payment_attempts attempt
+                  WHERE attempt.sale_id = sales.id AND attempt.state = 'SUCCEEDED'
+              )
+            """.trimIndent()
+
         // Terminal attempts are diagnostic only after settlement. UNCERTAIN and active attempts are never removed.
         val CLEANUP_TERMINAL_PAYMENT_ATTEMPTS_SQL =
             """

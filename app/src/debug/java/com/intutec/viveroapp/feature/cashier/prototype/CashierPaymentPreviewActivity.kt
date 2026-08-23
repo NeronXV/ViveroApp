@@ -36,7 +36,7 @@ private fun PaymentPreview(state: CashierPaymentUiState) {
         state = state,
         secondsRemaining = { 238 },
         onMethod = {}, onCashAmount = {}, onReference = {}, onRequestConfirmation = {},
-        onDismissConfirmation = {}, onConfirm = {}, onRetry = {}, onRenew = {}, onCancel = {}, onDone = {},
+        onDismissConfirmation = {}, onConfirm = {}, onRetry = {}, onRenew = {}, onCancel = {}, onDone = { _ -> },
     )
 }
 

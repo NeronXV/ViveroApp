@@ -2,10 +2,13 @@ package com.intutec.viveroapp.feature.cashier
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performScrollTo
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderDetail
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderItem
@@ -18,8 +21,11 @@ import com.intutec.viveroapp.feature.cashier.domain.model.CashierPaymentResult
 import com.intutec.viveroapp.feature.cashier.presentation.CashierPaymentFlow
 import com.intutec.viveroapp.feature.cashier.presentation.CashierPaymentStage
 import com.intutec.viveroapp.feature.cashier.presentation.CashierPaymentUiState
+import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueScreen
+import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueUiState
 import com.intutec.viveroapp.ui.theme.ViveroAppTheme
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -55,15 +61,82 @@ class CashierPaymentScreenTest {
     @Test fun successShowsDefinitiveServerChangeAndNavigationAction() {
         show(CashierPaymentUiState(CashierPaymentStage.SUCCESS, attempt = attempt, result = result))
         compose.onNodeWithText("Pago confirmado").assertIsDisplayed()
-        compose.onNodeWithText("Cambio definitivo: \$20.00").assertIsDisplayed()
-        compose.onNodeWithText("Volver a la bandeja").assertHasClickAction()
+        compose.onNodeWithText(order.summary.folio).assertIsDisplayed()
+        compose.onNodeWithText("Total cobrado").assertIsDisplayed()
+        compose.onNodeWithText("Importe recibido").assertIsDisplayed()
+        compose.onNodeWithText("Cambio confirmado por servidor").assertIsDisplayed()
+        compose.onNodeWithText("\$20.00").assertIsDisplayed()
+        compose.onNodeWithText("Hora confirmada por servidor").assertIsDisplayed()
+        compose.onNodeWithText("Volver a comandas").assertHasClickAction()
+    }
+
+    @Test fun confirmationRepeatsFolioAndCompleteCashSummary() {
+        show(CashierPaymentUiState(CashierPaymentStage.CONFIRMATION, CashierPaymentMethod.CASH, "120.00", attempt = attempt))
+        compose.onNodeWithText("Confirma que estás cobrando la comanda ${order.summary.folio}").assertIsDisplayed()
+        compose.onNodeWithTag("payment_confirmation_folio").assertIsDisplayed()
+        compose.onAllNodesWithText("Importe recibido").assertCountEquals(2)
+        compose.onNodeWithText("Cambio estimado").assertIsDisplayed()
+    }
+
+    @Test fun cardSuccessDoesNotShowCashReceivedOrChangeFields() {
+        show(
+            CashierPaymentUiState(
+                CashierPaymentStage.SUCCESS,
+                attempt = attempt,
+                result = result.copy(
+                    method = CashierPaymentMethod.CARD,
+                    amountReceivedCents = result.amountDueCents,
+                    changeCents = 0,
+                ),
+            ),
+        )
+        compose.onNodeWithText("Método").assertIsDisplayed()
+        compose.onNodeWithText("Tarjeta").assertIsDisplayed()
+        compose.onNodeWithText("Importe recibido").assertDoesNotExist()
+        compose.onNodeWithText("Cambio confirmado por servidor").assertDoesNotExist()
+    }
+
+    @Test fun completionBannerSurvivesStateRestoreThenExpiresWithoutOpeningAnOrder() {
+        compose.mainClock.autoAdvance = false
+        var opened = 0
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            ViveroAppTheme(darkTheme = false, dynamicColor = false) {
+                CashierQueueScreen(
+                    state = CashierQueueUiState.Content("Sucursal Centro", listOf(order.summary)),
+                    onBack = {},
+                    onOrderClick = { opened += 1 },
+                    onRefresh = {},
+                    completedFolio = order.summary.folio,
+                )
+            }
+        }
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText("Cobro completado: ${order.summary.folio}").assertIsDisplayed()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithText("Cobro completado: ${order.summary.folio}").assertIsDisplayed()
+        assertEquals(0, opened)
+        compose.mainClock.advanceTimeBy(8_100)
+        compose.onNodeWithText("Cobro completado: ${order.summary.folio}").assertDoesNotExist()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("Cobro completado: ${order.summary.folio}").assertDoesNotExist()
+    }
+
+    @Test fun normalQueueEntryDoesNotRecreateCompletionBanner() {
+        compose.setContent {
+            ViveroAppTheme(darkTheme = false, dynamicColor = false) {
+                CashierQueueScreen(CashierQueueUiState.Empty("Sucursal Centro"), {}, {}, {}, completedFolio = null)
+            }
+        }
+        compose.onNodeWithTag("cashier_completed_banner").assertDoesNotExist()
     }
 
     private fun show(state: CashierPaymentUiState) {
         compose.setContent {
             ViveroAppTheme(darkTheme = false, dynamicColor = false) {
                 CashierPaymentFlow(
-                    order, state, { 238 }, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                    order, state, { 238 }, {}, {}, {}, {}, {}, {}, {}, {}, {}, { _ -> },
                 )
             }
         }

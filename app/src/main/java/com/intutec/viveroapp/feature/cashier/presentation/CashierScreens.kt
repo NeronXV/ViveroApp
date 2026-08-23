@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.LocalFlorist
 import androidx.compose.material.icons.rounded.PointOfSale
@@ -48,6 +49,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -69,6 +73,7 @@ import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderItem
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderSummary
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.delay
 
 private val CashierForest = Color(0xFF234D3C)
 private val CashierSage = Color(0xFF789B78)
@@ -78,11 +83,13 @@ private val CashierPaper = Color(0xFFFFFCF6)
 private val CashierTerracotta = Color(0xFFC97754)
 private val CashierInk = Color(0xFF24312B)
 private val CashierMuted = Color(0xFF637068)
+private const val COMPLETED_PAYMENT_BANNER_MILLIS = 8_000L
 
 @Composable
 fun CashierQueueScreenRoute(
     onBack: () -> Unit,
     onOrderClick: (String) -> Unit,
+    completedFolio: String? = null,
     viewModel: CashierQueueViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -90,7 +97,7 @@ fun CashierQueueScreenRoute(
         viewModel.onVisible()
         onPauseOrDispose { viewModel.onHidden() }
     }
-    CashierQueueScreen(state, onBack, onOrderClick, viewModel::refresh)
+    CashierQueueScreen(state, onBack, onOrderClick, viewModel::refresh, completedFolio)
 }
 
 @Composable
@@ -99,10 +106,21 @@ fun CashierQueueScreen(
     onBack: () -> Unit,
     onOrderClick: (String) -> Unit,
     onRefresh: () -> Unit,
+    completedFolio: String? = null,
 ) {
+    var showCompletedPayment by rememberSaveable(completedFolio) { mutableStateOf(completedFolio != null) }
+    LaunchedEffect(completedFolio) {
+        if (completedFolio != null) {
+            delay(COMPLETED_PAYMENT_BANNER_MILLIS)
+            showCompletedPayment = false
+        }
+    }
     Surface(Modifier.fillMaxSize(), color = CashierCream) {
         Column(Modifier.fillMaxSize()) {
             CashierHeader(title = "Caja", subtitle = state.branchNameOrFallback(), onBack = onBack)
+            if (showCompletedPayment && completedFolio != null) {
+                CompletedPaymentBanner(completedFolio)
+            }
             when (state) {
                 CashierQueueUiState.Loading -> CashierLoading("Actualizando comandas…")
                 is CashierQueueUiState.Error -> CashierMessage(
@@ -135,6 +153,26 @@ fun CashierQueueScreen(
                 }
                 is CashierQueueUiState.Content -> CashierQueueContent(state, onOrderClick, onRefresh)
             }
+        }
+    }
+}
+
+@Composable
+private fun CompletedPaymentBanner(folio: String) {
+    Surface(
+        color = CashierPaleSage,
+        contentColor = CashierForest,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)
+            .testTag("cashier_completed_banner"),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(Icons.Rounded.CheckCircle, null)
+            Text("Cobro completado: $folio", fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -262,7 +300,7 @@ private fun CashierStatusLabel() {
 fun CashierDetailScreenRoute(
     orderId: String,
     onBack: () -> Unit,
-    onPaymentFinished: () -> Unit,
+    onPaymentFinished: (String?) -> Unit,
     viewModel: CashierDetailViewModel = hiltViewModel(),
     paymentViewModel: CashierPaymentViewModel = hiltViewModel(),
 ) {
@@ -285,7 +323,7 @@ fun CashierDetailScreenRoute(
             onConfirm = paymentViewModel::confirm,
             onRetry = paymentViewModel::retryUncertain,
             onRenew = paymentViewModel::renew,
-            onCancel = { paymentViewModel.cancel(onPaymentFinished) },
+            onCancel = { paymentViewModel.cancel { onPaymentFinished(null) } },
             onDone = onPaymentFinished,
         )
     }

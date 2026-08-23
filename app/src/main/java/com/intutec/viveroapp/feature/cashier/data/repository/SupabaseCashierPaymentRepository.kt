@@ -25,8 +25,11 @@ class SupabaseCashierPaymentRepository @Inject constructor(
     private val remote: CashierPaymentRemoteDataSource,
     private val store: CashierPaymentAttemptStore,
 ) : CashierPaymentRepository {
-    override suspend fun restore(saleId: String): CashierPaymentAttempt? =
-        store.get(saleId.requireUuid("comanda"))
+    override suspend fun restore(saleId: String): CashierPaymentAttempt? {
+        val canonicalSaleId = saleId.requireUuid("comanda")
+        runCatching { store.reconcileAllSucceededSales() }
+        return store.get(canonicalSaleId)
+    }
 
     override suspend fun claim(order: CashierOrderDetail, cashierId: String): CashierPaymentAttempt {
         val saleId = order.summary.id.requireUuid("comanda")
@@ -91,6 +94,8 @@ class SupabaseCashierPaymentRepository @Inject constructor(
             ).toDomain()
             result.requireMatches(order, cashierId, attempt, lockedInput)
             store.markState(attempt.saleId, CashierPaymentAttemptState.SUCCEEDED)
+            // The canonical remote result remains successful even if the optional local projection needs repair later.
+            runCatching { store.reconcileSucceededSale(attempt.saleId) }
             result
         } catch (error: CashierPaymentException) {
             store.markState(

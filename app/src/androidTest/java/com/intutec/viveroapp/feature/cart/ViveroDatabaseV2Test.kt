@@ -296,6 +296,55 @@ class ViveroDatabaseV2Test {
         }
     }
 
+    @Test
+    fun succeededPaymentRepairIsIdempotentLeavesUncertainSaleCartAndHistoryUntouched() = runBlocking {
+        val name = databaseName("payment-sale-reconciliation")
+        openVersion2(name).also { database ->
+            val dao = database.cartDao()
+            dao.upsertSale(sale().copy(syncPending = false, syncState = "SYNCED"))
+            dao.upsertSale(
+                sale(OTHER_SALE_ID).copy(
+                    folio = "VD-260815-999999",
+                    syncPending = false,
+                    syncState = "SYNCED",
+                ),
+            )
+            dao.upsertCart(cartHeader())
+            dao.upsertItem(cartItem())
+            val now = System.currentTimeMillis()
+            database.cashierPaymentAttemptDao().upsert(
+                paymentAttempt("SUCCEEDED", true).copy(updatedAtEpochMs = now),
+            )
+            database.cashierPaymentAttemptDao().upsert(
+                paymentAttempt("UNCERTAIN", true).copy(
+                    saleId = OTHER_SALE_ID,
+                    idempotencyKey = OTHER_PAYMENT_KEY,
+                    updatedAtEpochMs = now,
+                ),
+            )
+            database.close()
+        }
+
+        repeat(2) {
+            openVersion2(name).also { database ->
+                val paid = database.cartDao().getSale(SALE_ID)?.sale
+                val uncertain = database.cartDao().getSale(OTHER_SALE_ID)?.sale
+                assertEquals("PAID", paid?.status)
+                assertEquals("SYNCED", paid?.syncState)
+                assertTrue(paid?.syncPending == false)
+                assertEquals("SENT_TO_CASHIER", uncertain?.status)
+                assertEquals("UNCERTAIN", database.cashierPaymentAttemptDao().get(OTHER_SALE_ID)?.state)
+                assertEquals(1, database.cartDao().getCart(CART_ID)?.items?.size)
+                val historyCount = database.openHelper.readableDatabase.query(
+                    "SELECT count(*) FROM sale_status_history WHERE sale_id = ?",
+                    arrayOf(SALE_ID),
+                ).use { cursor -> cursor.moveToFirst(); cursor.getInt(0) }
+                assertEquals(0, historyCount)
+                database.close()
+            }
+        }
+    }
+
     private fun createVersion1Database(name: String): SupportSQLiteDatabase {
         val helper = FrameworkSQLiteOpenHelperFactory().create(
             SupportSQLiteOpenHelper.Configuration.builder(context)
@@ -337,6 +386,7 @@ class ViveroDatabaseV2Test {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         db.execSQL(ViveroDatabase.RECOVER_INTERRUPTED_SYNC_SQL)
                         db.execSQL(ViveroDatabase.RECOVER_INTERRUPTED_PAYMENT_SQL)
+                        db.execSQL(ViveroDatabase.RECONCILE_SUCCEEDED_PAYMENT_SALES_SQL)
                         db.execSQL(ViveroDatabase.CLEANUP_TERMINAL_PAYMENT_ATTEMPTS_SQL)
                     }
                 },

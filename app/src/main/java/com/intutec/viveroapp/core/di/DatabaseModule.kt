@@ -27,6 +27,7 @@ object DatabaseModule {
                     override fun onOpen(db: SupportSQLiteDatabase) {
                         db.execSQL(ViveroDatabase.RECOVER_INTERRUPTED_SYNC_SQL)
                         db.execSQL(ViveroDatabase.RECOVER_INTERRUPTED_PAYMENT_SQL)
+                        db.execSQL(ViveroDatabase.RECONCILE_SUCCEEDED_PAYMENT_SALES_SQL)
                         db.execSQL(ViveroDatabase.CLEANUP_TERMINAL_PAYMENT_ATTEMPTS_SQL)
                     }
                 },

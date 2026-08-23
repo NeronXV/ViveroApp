@@ -57,6 +57,9 @@ import androidx.compose.ui.unit.dp
 import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderDetail
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierPaymentMethod
+import com.intutec.viveroapp.feature.cashier.domain.model.CashierPaymentResult
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
 private val PaymentForest = Color(0xFF234D3C)
@@ -79,7 +82,7 @@ fun CashierPaymentFlow(
     onRetry: () -> Unit,
     onRenew: () -> Unit,
     onCancel: () -> Unit,
-    onDone: () -> Unit,
+    onDone: (String?) -> Unit,
 ) {
     if (state.stage == CashierPaymentStage.IDLE) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -99,7 +102,7 @@ fun CashierPaymentFlow(
             onDismissRequest = onDismissConfirmation,
             title = { Text("Confirmar cobro") },
             text = {
-                Text("Se cobrará ${order.summary.totalCents.asMxn()} mediante ${state.method?.label.orEmpty()}. Verifica los datos antes de continuar.")
+                PaymentConfirmationSummary(order, state)
             },
             dismissButton = { OutlinedButton(onClick = onDismissConfirmation) { Text("Revisar") } },
             confirmButton = {
@@ -123,7 +126,7 @@ private fun PaymentContent(
     onRetry: () -> Unit,
     onRenew: () -> Unit,
     onCancel: () -> Unit,
-    onDone: () -> Unit,
+    onDone: (String?) -> Unit,
 ) {
     var remaining by remember(state.attempt?.claimExpiresAt) { mutableLongStateOf(secondsRemaining()) }
     LaunchedEffect(state.attempt?.claimExpiresAt, state.stage) {
@@ -161,29 +164,94 @@ private fun PaymentContent(
                 "Reintentar el mismo intento",
                 onRetry,
             )
-            CashierPaymentStage.SUCCESS -> PaymentStatus(
-                Icons.Rounded.CheckCircle,
-                "Pago confirmado",
-                state.result?.let {
-                    if (it.changeCents > 0) "Cambio definitivo: ${it.changeCents.asMxn()}" else "La comanda quedó pagada correctamente."
-                } ?: "La comanda quedó pagada correctamente.",
-                "Volver a la bandeja",
-                onDone,
-            )
+            CashierPaymentStage.SUCCESS -> state.result?.let { result ->
+                PaymentSuccessStatus(result) { onDone(result.folio) }
+            } ?: PaymentStatus(
+                Icons.Rounded.ErrorOutline,
+                "No pudimos mostrar el comprobante",
+                "El pago fue confirmado, pero falta el resumen canónico.",
+                "Volver a comandas",
+            ) { onDone(order.summary.folio) }
             CashierPaymentStage.CONFLICT -> PaymentStatus(
                 Icons.Rounded.ErrorOutline, "Comanda no disponible",
-                state.message ?: "Otra caja modificó esta comanda.", "Volver a la bandeja", onDone,
-            )
+                state.message ?: "Otra caja modificó esta comanda.", "Volver a la bandeja",
+            ) { onDone(null) }
             CashierPaymentStage.EXPIRED -> PaymentStatus(
                 Icons.Rounded.HourglassBottom, "Reserva vencida",
-                state.message ?: "Actualiza la comanda antes de intentar nuevamente.", "Cerrar", onDone,
-            )
+                state.message ?: "Actualiza la comanda antes de intentar nuevamente.", "Cerrar",
+            ) { onDone(null) }
             CashierPaymentStage.ERROR -> PaymentStatus(
                 Icons.Rounded.ErrorOutline, "No pudimos continuar",
-                state.message ?: "Revisa tu conexión e intenta nuevamente.", "Cerrar", onDone,
-            )
+                state.message ?: "Revisa tu conexión e intenta nuevamente.", "Cerrar",
+            ) { onDone(null) }
             CashierPaymentStage.IDLE -> Unit
         }
+    }
+}
+
+@Composable
+private fun PaymentConfirmationSummary(order: CashierOrderDetail, state: CashierPaymentUiState) {
+    val method = state.method
+    val received = if (method == CashierPaymentMethod.CASH) state.cashAmount.parseMxnCents() else null
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "Confirma que estás cobrando la comanda ${order.summary.folio}",
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            order.summary.folio,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = PaymentForest,
+            modifier = Modifier.testTag("payment_confirmation_folio"),
+        )
+        PaymentSummaryRow("Total", order.summary.totalCents.asMxn())
+        PaymentSummaryRow("Método", method?.label.orEmpty())
+        if (method == CashierPaymentMethod.CASH && received != null) {
+            PaymentSummaryRow("Importe recibido", received.asMxn())
+            PaymentSummaryRow("Cambio estimado", (received - order.summary.totalCents).coerceAtLeast(0).asMxn())
+        }
+    }
+}
+
+@Composable
+private fun PaymentSuccessStatus(result: CashierPaymentResult, onDone: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Rounded.CheckCircle, null, tint = PaymentForest, modifier = Modifier.size(52.dp))
+            Text("Pago confirmado", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text(
+                result.folio,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = PaymentForest,
+                modifier = Modifier.testTag("payment_success_folio"),
+            )
+            HorizontalDivider()
+            PaymentSummaryRow("Total cobrado", result.amountDueCents.asMxn())
+            PaymentSummaryRow("Método", result.method.label)
+            if (result.method == CashierPaymentMethod.CASH) {
+                PaymentSummaryRow("Importe recibido", result.amountReceivedCents.asMxn())
+                PaymentSummaryRow("Cambio confirmado por servidor", result.changeCents.asMxn())
+            }
+            PaymentSummaryRow("Hora confirmada por servidor", PAYMENT_TIME_FORMAT.format(result.createdAt))
+            Button(
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("payment_done"),
+            ) { Text("Volver a comandas") }
+        }
+    }
+}
+
+@Composable
+private fun PaymentSummaryRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, Modifier.weight(1f), color = Color(0xFF637068))
+        Text(value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
     }
 }
 
@@ -339,3 +407,6 @@ private val CashierPaymentMethod.label: String
         CashierPaymentMethod.CARD -> "Tarjeta"
         CashierPaymentMethod.TRANSFER -> "Transferencia"
     }
+
+private val PAYMENT_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm z")
+    .withZone(ZoneId.systemDefault())

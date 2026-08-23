@@ -40,6 +40,7 @@ class CashierPaymentRepositoryTest {
         assertEquals(order.summary.folio, result.folio)
         assertEquals(CashierPaymentAttemptState.SUCCEEDED, store.attempt.state)
         assertEquals(KEY, remote.keys.single())
+        assertEquals(listOf(order.summary.id), store.reconciledSales)
     }
 
     @Test fun `lost response becomes uncertain and retry reuses identical key and payload`() = runTest {
@@ -73,6 +74,7 @@ class CashierPaymentRepositoryTest {
         }
         assertEquals(CashierPaymentAttemptState.UNCERTAIN, store.attempt.state)
         assertTrue(store.attempt.payloadLocked)
+        assertTrue(store.reconciledSales.isEmpty())
     }
 
     @Test fun `card response with contradictory received amount stays uncertain`() = runTest {
@@ -87,6 +89,24 @@ class CashierPaymentRepositoryTest {
             }
         }
         assertEquals(CashierPaymentAttemptState.UNCERTAIN, store.attempt.state)
+        assertTrue(store.reconciledSales.isEmpty())
+    }
+
+    @Test fun `local projection failure after canonical success does not degrade succeeded attempt`() = runTest {
+        val order = sampleDetail()
+        val store = FakeStore().apply { failReconciliation = true }
+        val repository = SupabaseCashierPaymentRepository(FakeRemote(order), store)
+
+        val result = repository.confirm(
+            order,
+            CashierRepositoryTest.USER_ID,
+            CashierPaymentInput(CashierPaymentMethod.CASH, order.summary.totalCents),
+            false,
+        )
+
+        assertEquals(order.summary.id, result.saleId)
+        assertEquals(CashierPaymentAttemptState.SUCCEEDED, store.attempt.state)
+        assertEquals(listOf(order.summary.id), store.reconciledSales)
     }
 
     private class FakeRemote(private val order: com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderDetail) : CashierPaymentRemoteDataSource {
@@ -114,6 +134,9 @@ class CashierPaymentRepositoryTest {
 
     private class FakeStore : CashierPaymentAttemptStore {
         var attempt = baseAttempt()
+        var failReconciliation = false
+        val reconciledSales = mutableListOf<String>()
+        var historicalRepairs = 0
         override suspend fun get(saleId: String) = attempt
         override suspend fun saveClaim(claim: CashierPaymentClaim) = attempt
         override suspend fun renewClaim(claim: CashierPaymentClaim) = attempt
@@ -126,6 +149,15 @@ class CashierPaymentRepositoryTest {
         }
         override suspend fun markState(saleId: String, state: CashierPaymentAttemptState, errorCode: String?): CashierPaymentAttempt {
             attempt = attempt.copy(state = state, lastErrorCode = errorCode); return attempt
+        }
+        override suspend fun reconcileSucceededSale(saleId: String): Int {
+            reconciledSales += saleId
+            if (failReconciliation) error("local projection unavailable")
+            return 1
+        }
+        override suspend fun reconcileAllSucceededSales(): Int {
+            historicalRepairs += 1
+            return 0
         }
     }
 

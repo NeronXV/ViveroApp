@@ -72,7 +72,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
             HomeScreenRoute(
                 onCatalogClick = { navController.navigate(CatalogRoute) },
                 onCartClick = { navController.navigate(CartRoute) },
-                onCashierClick = { navController.navigate(CashierQueueRoute) },
+                onCashierClick = { navController.navigate(CashierQueueRoute()) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
             )
         }
@@ -115,11 +115,13 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
             }
         }
-        composable<CashierQueueRoute> {
+        composable<CashierQueueRoute> { entry ->
             if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
+                val route = entry.toRoute<CashierQueueRoute>()
                 CashierQueueScreenRoute(
                     onBack = navController::navigateUp,
                     onOrderClick = { navController.navigate(CashierDetailRoute(it)) },
+                    completedFolio = route.completedFolio,
                 )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
@@ -131,8 +133,8 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 CashierDetailScreenRoute(
                     orderId = route.orderId,
                     onBack = navController::navigateUp,
-                    onPaymentFinished = {
-                        navController.navigate(CashierQueueRoute) {
+                    onPaymentFinished = { completedFolio ->
+                        navController.navigate(CashierQueueRoute(completedFolio)) {
                             popUpTo<CashierQueueRoute> { inclusive = true }
                         }
                     },
