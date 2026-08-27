@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(18);
+select extensions.plan(20);
 
 select extensions.ok(
     (
@@ -114,7 +114,7 @@ reset role;
 select extensions.is(
     public.get_public_catalog(),
     pg_catalog.jsonb_build_object(
-        'schemaVersion', 1,
+        'schemaVersion', 2,
         'items', '[]'::pg_catalog.jsonb,
         'categories', '[]'::pg_catalog.jsonb,
         'page', pg_catalog.jsonb_build_object(
@@ -153,6 +153,12 @@ select extensions.ok(
     'public catalog includes active records and excludes inactive products or categories'
 );
 
+select extensions.is(
+    public.get_public_catalog()#>'{items,0,image}',
+    'null'::pg_catalog.jsonb,
+    'public catalog returns a null image when no product image exists'
+);
+
 select extensions.ok(
     (
         select pg_catalog.count(*) = 9
@@ -167,6 +173,27 @@ select extensions.ok(
     and public.get_public_catalog()::pg_catalog.text !~
         '(PRIVATE-A|90001|wholesale_price|minimum_stock|internal_code|barcode|created_at|updated_at)',
     'public catalog omits private product fields'
+);
+
+insert into public.product_images (
+    id, product_id, storage_path, alt_text, sort_order, is_primary
+) values (
+    '77000000-0000-0000-0000-000000000001',
+    '73000000-0000-0000-0000-000000000001',
+    'products/aloe/main.webp',
+    'Aloe en maceta',
+    0,
+    true
+);
+
+select extensions.is(
+    public.get_public_catalog()#>'{items,0,image}',
+    pg_catalog.jsonb_build_object(
+        'bucketName', 'catalog-images',
+        'storagePath', 'products/aloe/main.webp',
+        'altText', 'Aloe en maceta'
+    ),
+    'public catalog returns the V2 relative image contract with its bucket name'
 );
 
 select extensions.is(

@@ -12,11 +12,17 @@ $functionPrivilegeSql = Get-Content (Join-Path $migrationDirectory '202608150002
 $paymentSql = Get-Content (Join-Path $migrationDirectory '202608220001_cashier_payments.sql') -Raw
 $accessContextSql = Get-Content (Join-Path $migrationDirectory '202608220002_get_my_access_context.sql') -Raw
 $publicCatalogSql = Get-Content (Join-Path $migrationDirectory '202608240001_get_public_catalog.sql') -Raw
+$catalogImagesSql = Get-Content (
+    Join-Path $migrationDirectory '202608270001_public_catalog_images.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
 $publicRpcTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\public_rpcs.test.sql'
+) -Raw
+$catalogImagesTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\public_catalog_images.test.sql'
 ) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
@@ -36,14 +42,15 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 9) 'exactly nine ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 10) 'exactly ten ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
         '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql,' +
         '202608150002_harden_function_privileges.sql,' +
         '202608220001_cashier_payments.sql,202608220002_get_my_access_context.sql,' +
-        '202608240001_get_public_catalog.sql'
+        '202608240001_get_public_catalog.sql,' +
+        '202608270001_public_catalog_images.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -56,7 +63,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 14 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 15 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -280,17 +287,91 @@ Assert-Condition (
     -not [regex]::IsMatch($publicCatalogSql, '(?i)grant\s+.+\s+on\s+(table\s+)?public\.')
 ) 'public catalog RPC keeps the audited signature, safe body, and exact client grants'
 Assert-Condition (
-    $publicRpcTestSql.Contains('select extensions.plan(18);') -and
+    $catalogImagesSql.Contains('insert into storage.buckets (') -and
+    $catalogImagesSql.Contains("'catalog-images',") -and
+    $catalogImagesSql.Contains('5242880,') -and
+    $catalogImagesSql.Contains(
+        "array['image/jpeg', 'image/png', 'image/webp', 'image/avif']::pg_catalog.text[]"
+    ) -and
+    $catalogImagesSql.Contains(
+        'The existing catalog-images bucket is incompatible with the public catalog contract'
+    )
+) 'catalog image bucket is created with the exact public size and MIME contract and rejects incompatibility'
+Assert-Condition (
+    $catalogImagesSql.Contains(
+        'add constraint product_images_storage_path_catalog_object_key_check'
+    ) -and
+    $catalogImagesSql.Contains('storage_path = pg_catalog.btrim(storage_path)') -and
+    $catalogImagesSql.Contains("storage_path !~* '^[a-z][a-z0-9+.-]*:'") -and
+    $catalogImagesSql.Contains("storage_path !~ '^/'") -and
+    $catalogImagesSql.Contains("storage_path !~ '^catalog-images/'") -and
+    $catalogImagesSql.Contains('pg_catalog.strpos(storage_path, pg_catalog.chr(92)) = 0') -and
+    $catalogImagesSql.Contains("storage_path !~ '(^|/)[.]{1,2}(/|$)'") -and
+    $catalogImagesSql.Contains("storage_path ~* '[.](jpe?g|png|webp|avif)$'") -and
+    $catalogImagesSql.Contains(
+        'validate constraint product_images_storage_path_catalog_object_key_check;'
+    )
+) 'product image paths are validated as safe relative catalog object keys'
+Assert-Condition (
+    -not [regex]::IsMatch($catalogImagesSql, '(?i)create\s+policy') -and
+    -not [regex]::IsMatch(
+        $catalogImagesSql,
+        '(?i)grant\s+(insert|update|delete|all).+storage\.(objects|buckets)'
+    )
+) 'catalog image migration adds no Storage write policy or table grant'
+Assert-Condition (
+    $catalogImagesSql.Contains('create or replace function public.get_public_catalog(') -and
+    $catalogImagesSql.Contains("'schemaVersion', 2") -and
+    $catalogImagesSql.Contains("'bucketName', 'catalog-images'") -and
+    $catalogImagesSql.Contains("'storagePath', row_data.image_storage_path") -and
+    -not $catalogImagesSql.Contains('pg_catalog.coalesce') -and
+    -not [regex]::IsMatch($catalogImagesSql, '(?i)https?://|supabase\.co') -and
+    [regex]::IsMatch(
+        $catalogImagesSql,
+        "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
+    ) -and
+    [regex]::Matches(
+        $catalogImagesSql,
+        '(?is)revoke all on function public\.get_public_catalog\s*\([^;]*?\) from (public|anon|authenticated);'
+    ).Count -eq 3 -and
+    [regex]::IsMatch(
+        $catalogImagesSql,
+        '(?is)grant execute on function public\.get_public_catalog\s*\([^;]*?\) to anon, authenticated;'
+    ) -and
+    -not $catalogImagesSql.Contains('to service_role;')
+) 'public catalog V2 preserves the secure RPC boundary and returns relative bucket references'
+Assert-Condition (
+    $catalogImagesTestSql.Contains('select extensions.plan(18);') -and
+    [regex]::Matches(
+        $catalogImagesTestSql,
+        '(?im)^select\s+extensions\.(ok|is|lives_ok|throws_ok|throws_like)\s*\('
+    ).Count -eq 18
+) 'catalog image pgTAP plan matches its eighteen assertions'
+Assert-Condition (
+    $catalogImagesTestSql.Contains('catalog-images allows exactly the four approved MIME types') -and
+    $catalogImagesTestSql.Contains('catalog migration grants no object write policy to client roles') -and
+    $catalogImagesTestSql.Contains('an absolute URL is rejected') -and
+    $catalogImagesTestSql.Contains('parent traversal is rejected') -and
+    $catalogImagesTestSql.Contains('a leading slash is rejected') -and
+    $catalogImagesTestSql.Contains('a backslash is rejected') -and
+    $catalogImagesTestSql.Contains('an unapproved extension is rejected') -and
+    $catalogImagesTestSql.Contains('a valid relative image object key is accepted')
+) 'catalog image tests cover bucket security and accepted or rejected path shapes'
+Assert-Condition (
+    $publicRpcTestSql.Contains('select extensions.plan(20);') -and
     [regex]::Matches(
         $publicRpcTestSql,
         '(?im)^select\s+extensions\.(ok|is|throws_ok|results_eq)\s*\('
-    ).Count -eq 18
-) 'public RPC pgTAP plan matches its eighteen assertions'
+    ).Count -eq 20
+) 'public RPC pgTAP plan matches its twenty assertions'
 Assert-Condition (
     $publicRpcTestSql.Contains('public catalog omits private product fields') -and
     $publicRpcTestSql.Contains('anon has no direct privileges on catalog tables') -and
-    $publicRpcTestSql.Contains('service_role cannot execute either presentation RPC')
-) 'public RPC tests preserve catalog privacy and the exact role boundaries'
+    $publicRpcTestSql.Contains('service_role cannot execute either presentation RPC') -and
+    $publicRpcTestSql.Contains("'schemaVersion', 2") -and
+    $publicRpcTestSql.Contains("'bucketName', 'catalog-images'") -and
+    $publicRpcTestSql.Contains('public catalog returns a null image when no product image exists')
+) 'public RPC tests preserve privacy, role boundaries, and the complete V2 image contract'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }
