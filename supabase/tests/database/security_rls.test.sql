@@ -664,6 +664,8 @@ select extensions.results_eq(
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
         ('enforce_product_price_permission()'),
+        ('get_my_access_context()'),
+        ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
         ('handle_new_user()'),
         ('has_permission(required_permission text)'),
         ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
@@ -673,19 +675,22 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'the public function inventory contains exactly fourteen approved signatures'
+    'the public function inventory contains exactly sixteen approved signatures'
 );
 
-select extensions.ok(
-    (
-        select pg_catalog.bool_and(
-            not pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
-        )
-        from pg_catalog.pg_proc p
-        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public'
-    ),
-    'anon cannot execute any public function'
+select extensions.results_eq(
+    $$
+    select (p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')') collate "C"
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
+    order by 1
+    $$,
+    $$select signature collate "C" from (values (
+        'get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'::pg_catalog.text
+    )) as expected(signature)$$,
+    'anon can execute exactly the public catalog RPC'
 );
 
 select extensions.ok(
@@ -718,6 +723,8 @@ select extensions.results_eq(
         ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
+        ('get_my_access_context()'),
+        ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
         ('has_permission(required_permission text)'),
         ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
         ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
@@ -725,7 +732,7 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'authenticated can execute exactly the ten-function whitelist'
+    'authenticated can execute exactly the twelve-function whitelist'
 );
 
 select extensions.ok(

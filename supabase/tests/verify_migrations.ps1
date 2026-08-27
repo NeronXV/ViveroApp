@@ -10,8 +10,13 @@ $branchSql = Get-Content (Join-Path $migrationDirectory '202608140001_branch_man
 $privilegeSql = Get-Content (Join-Path $migrationDirectory '202608150001_harden_table_privileges.sql') -Raw
 $functionPrivilegeSql = Get-Content (Join-Path $migrationDirectory '202608150002_harden_function_privileges.sql') -Raw
 $paymentSql = Get-Content (Join-Path $migrationDirectory '202608220001_cashier_payments.sql') -Raw
+$accessContextSql = Get-Content (Join-Path $migrationDirectory '202608220002_get_my_access_context.sql') -Raw
+$publicCatalogSql = Get-Content (Join-Path $migrationDirectory '202608240001_get_public_catalog.sql') -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
+) -Raw
+$publicRpcTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\public_rpcs.test.sql'
 ) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
@@ -31,13 +36,14 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 7) 'exactly seven ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 9) 'exactly nine ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
         '202608140001_branch_management.sql,202608150001_harden_table_privileges.sql,' +
         '202608150002_harden_function_privileges.sql,' +
-        '202608220001_cashier_payments.sql'
+        '202608220001_cashier_payments.sql,202608220002_get_my_access_context.sql,' +
+        '202608240001_get_public_catalog.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -50,7 +56,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 12 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 14 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -242,6 +248,49 @@ Assert-Condition (
     $paymentTestSql.Contains('competing confirmations create one payment') -and
     $paymentTestSql.Contains('idempotent retries leave one PAID history row')
 ) 'payment tests cover branch isolation, competition, and idempotent side effects'
+
+Assert-Condition (
+    $accessContextSql.Contains('create or replace function public.get_my_access_context()') -and
+    [regex]::IsMatch(
+        $accessContextSql,
+        "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
+    ) -and
+    $accessContextSql.Contains('revoke all on function public.get_my_access_context() from public;') -and
+    $accessContextSql.Contains('revoke all on function public.get_my_access_context() from anon;') -and
+    $accessContextSql.Contains('revoke all on function public.get_my_access_context() from authenticated;') -and
+    $accessContextSql.Contains('grant execute on function public.get_my_access_context() to authenticated;') -and
+    -not $accessContextSql.Contains('to service_role;')
+) 'access-context RPC is restricted to authenticated with a secure definer context'
+Assert-Condition (
+    $publicCatalogSql.Contains('create or replace function public.get_public_catalog(') -and
+    [regex]::IsMatch(
+        $publicCatalogSql,
+        "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
+    ) -and
+    -not $publicCatalogSql.Contains('pg_catalog.coalesce') -and
+    [regex]::Matches(
+        $publicCatalogSql,
+        '(?is)revoke all on function public\.get_public_catalog\s*\([^;]*?\) from (public|anon|authenticated);'
+    ).Count -eq 3 -and
+    [regex]::IsMatch(
+        $publicCatalogSql,
+        '(?is)grant execute on function public\.get_public_catalog\s*\([^;]*?\) to anon, authenticated;'
+    ) -and
+    -not $publicCatalogSql.Contains('to service_role;') -and
+    -not [regex]::IsMatch($publicCatalogSql, '(?i)grant\s+.+\s+on\s+(table\s+)?public\.')
+) 'public catalog RPC keeps the audited signature, safe body, and exact client grants'
+Assert-Condition (
+    $publicRpcTestSql.Contains('select extensions.plan(18);') -and
+    [regex]::Matches(
+        $publicRpcTestSql,
+        '(?im)^select\s+extensions\.(ok|is|throws_ok|results_eq)\s*\('
+    ).Count -eq 18
+) 'public RPC pgTAP plan matches its eighteen assertions'
+Assert-Condition (
+    $publicRpcTestSql.Contains('public catalog omits private product fields') -and
+    $publicRpcTestSql.Contains('anon has no direct privileges on catalog tables') -and
+    $publicRpcTestSql.Contains('service_role cannot execute either presentation RPC')
+) 'public RPC tests preserve catalog privacy and the exact role boundaries'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }
