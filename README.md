@@ -7,11 +7,13 @@ Aplicación Android para apoyar la operación de un vivero. El proyecto se desar
 | Módulo | Estado |
 |---|---|
 | Base MVVM, tema y navegación | Fase 1 implementada |
-| Autenticación y roles | Fase 2 implementada; conexión real se activa con claves locales |
-| Catálogo | Fase 3 implementada con datos demo, búsqueda, filtros y detalle |
+| Autenticación y roles | Integración Supabase real con fallback demo explícito |
+| Catálogo | Integración Supabase real con búsqueda, filtros, detalle e imágenes; fallback demo explícito |
 | Escáner inteligente | Fase 4 implementada con CameraX, ML Kit y entrada manual |
-| Carrito y envío a caja | Fase 5 implementada con borrador local Room y ticket pendiente de sincronización |
-| Caja, inventario, clientes y promociones | Pendiente |
+| Carrito y envío a caja | Outbox Room y sincronización idempotente mediante `submit_sale_to_cashier` |
+| Caja y cobro | Integración real con claims, confirmación y recuperación; validación integral actual pendiente |
+| Administración esencial | Contrato backend de presentación implementado; cliente Web pendiente |
+| Inventario, clientes, promociones y reportes | Pendiente o parcial según capacidad |
 
 ## Requisitos
 
@@ -60,14 +62,16 @@ Se usa Supabase Kotlin 3.2.6 por compatibilidad binaria con Kotlin 2.2.10. Las r
 - [Pruebas](docs/testing.md)
 - [Preparación de Supabase](docs/setup-supabase.md)
 
-## Catálogo de demostración
+## Catálogo
 
-Incluye búsqueda por nombre, nombre científico, código interno y código de barras; filtros por categoría y disponibilidad; precios en centavos; promociones y detalle de cuidados. El repositorio actual es simulado y será sustituido por fuentes Room/Supabase conservando el mismo contrato.
+Incluye búsqueda por nombre, nombre científico, código interno y código de barras; filtros por categoría y disponibilidad; precios en centavos y detalle de cuidados. Las sesiones remotas consumen Supabase y el modo de exploración mantiene un repositorio demostrativo claramente separado.
 
 ## Escáner
 
 Reconoce QR, EAN-13, EAN-8 y Code 128 mediante CameraX y ML Kit. Solicita la cámara con una explicación de privacidad, evita lecturas repetidas y ofrece captura manual para emuladores o equipos sin cámara. Puedes probar con `750100000001`, `750100000014`, `750100000022` o con los códigos internos `PL-001`, `PL-014` y `PL-022`.
 
-## Carrito de demostración
+## Carrito y envío a Caja
 
-Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en Room aunque cierres la app. Permite cantidades limitadas por existencia, eliminación, cliente demo opcional, subtotal, descuentos, total, cancelación y envío a caja. El envío genera un UUID y un folio comercial independiente; en modo demo queda marcado como pendiente de sincronización y no representa un cobro.
+Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en Room aunque cierres la app. En sesión remota, el envío genera un UUID idempotente, conserva un outbox local y llama a `submit_sale_to_cashier`; el backend recalcula precios y es la autoridad. El modo demo no representa persistencia ni cobro real.
+
+Las doce migraciones, 251 aserciones pgTAP declaradas y los recorridos integrales deben repetirse desde cero cuando vuelva a estar disponible la infraestructura local. Hasta entonces Caja y Administración no se consideran desplegables.

@@ -18,6 +18,9 @@ $catalogImagesSql = Get-Content (
 $cashierWebSql = Get-Content (
     Join-Path $migrationDirectory '202608280001_cashier_web_contract.sql'
 ) -Raw
+$adminWebSql = Get-Content (
+    Join-Path $migrationDirectory '202608290001_admin_web_contract.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -29,6 +32,9 @@ $catalogImagesTestSql = Get-Content (
 ) -Raw
 $cashierWebTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_web_contract.test.sql'
+) -Raw
+$adminWebTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\admin_web_contract.test.sql'
 ) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
@@ -48,7 +54,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 11) 'exactly eleven ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 12) 'exactly twelve ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -57,7 +63,8 @@ Assert-Condition (
         '202608220001_cashier_payments.sql,202608220002_get_my_access_context.sql,' +
         '202608240001_get_public_catalog.sql,' +
         '202608270001_public_catalog_images.sql,' +
-        '202608280001_cashier_web_contract.sql'
+        '202608280001_cashier_web_contract.sql,' +
+        '202608290001_admin_web_contract.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -70,7 +77,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 18 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 20 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -343,6 +350,65 @@ Assert-Condition (
     $cashierWebTestSql.Contains('attempt processed by another cashier remains hidden') -and
     $cashierWebTestSql.Contains('existing payment RPCs have explicit postgres ownership')
 ) 'cashier Web tests cover FIFO, claim privacy, detail privacy, recovery, and owners'
+
+Assert-Condition (
+    [regex]::Matches(
+        $adminWebSql,
+        '(?is)create or replace function public\.(get_admin_branches|get_admin_staff)\s*\('
+    ).Count -eq 2 -and
+    [regex]::Matches($adminWebSql, "(?is)security\s+definer\s+set\s+search_path\s*=\s*''").Count -eq 2 -and
+    [regex]::Matches(
+        $adminWebSql,
+        '(?is)alter function public\.(get_admin_branches|get_admin_staff)\s*\([^;]*?\) owner to postgres;'
+    ).Count -eq 2
+) 'admin Web contract defines two postgres-owned secure presentation RPCs'
+Assert-Condition (
+    [regex]::Matches(
+        $adminWebSql,
+        '(?is)revoke all on function public\.(get_admin_branches|get_admin_staff)\s*\([^;]*?\) from public, anon, authenticated, service_role;'
+    ).Count -eq 2 -and
+    [regex]::Matches(
+        $adminWebSql,
+        '(?is)grant execute on function public\.(get_admin_branches|get_admin_staff)\s*\([^;]*?\) to authenticated;'
+    ).Count -eq 2 -and
+    -not [regex]::IsMatch(
+        $adminWebSql,
+        '(?is)grant execute on function public\.(get_admin_branches|get_admin_staff)\s*\([^;]*?\) to (anon|service_role|public);'
+    )
+) 'admin Web RPC execution is granted exclusively to authenticated'
+Assert-Condition (
+    $adminWebSql.Contains("message = 'ADMIN_UNAUTHORIZED'") -and
+    $adminWebSql.Contains("message = 'ADMIN_BRANCH_QUERY_INVALID'") -and
+    $adminWebSql.Contains("message = 'ADMIN_STAFF_QUERY_INVALID'") -and
+    $adminWebSql.Contains("public.has_permission('MANAGE_BRANCHES')") -and
+    [regex]::Matches($adminWebSql, "public\.has_permission\('MANAGE_USERS'\)").Count -eq 2
+) 'admin Web RPCs enforce management capabilities and stable errors'
+Assert-Condition (
+    [regex]::Matches($adminWebSql, "'schemaVersion', 1").Count -eq 2 -and
+    [regex]::Matches($adminWebSql, 'p_limit < 1 or p_limit > 100').Count -eq 2 -and
+    $adminWebSql.Contains('order by b.code collate "C" asc, b.id asc') -and
+    $adminWebSql.Contains('order by pg_catalog.lower(staff.full_name) collate "C" asc, staff.id asc') -and
+    -not [regex]::IsMatch($adminWebSql, "(?i)'(email|token|claims|encryptedPassword|rawUserMetadata)'")
+) 'admin Web projections are versioned, bounded, stable and omit auth fields'
+Assert-Condition (
+    -not [regex]::IsMatch($adminWebSql, '(?i)create\s+table|alter\s+table|create\s+policy|drop\s+') -and
+    -not [regex]::IsMatch($adminWebSql, '(?i)grant\s+(select|insert|update|delete|all)\s+on\s+table')
+) 'admin Web migration changes no tables, RLS or table privileges'
+Assert-Condition (
+    $adminWebTestSql.Contains('select extensions.plan(36);') -and
+    [regex]::Matches(
+        $adminWebTestSql,
+        '(?im)^select\s+extensions\.(has_function|function_returns|ok|is|throws_ok|results_eq)\s*\('
+    ).Count -eq 36
+) 'admin Web pgTAP plan matches its thirty-six assertions'
+Assert-Condition (
+    $adminWebTestSql.Contains('branches exclude inactive rows by default') -and
+    $adminWebTestSql.Contains('branch cursor advances without repeating the previous row') -and
+    $adminWebTestSql.Contains('staff projection omits auth email, tokens and claims') -and
+    $adminWebTestSql.Contains('staff search is normalized and case insensitive') -and
+    $adminWebTestSql.Contains('SALES cannot query administrative branches') -and
+    $adminWebTestSql.Contains('CASHIER cannot query administrative staff')
+) 'admin Web tests cover authorization, pagination, filtering and privacy'
 
 Assert-Condition (
     $accessContextSql.Contains('create or replace function public.get_my_access_context()') -and

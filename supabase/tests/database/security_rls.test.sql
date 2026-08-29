@@ -664,6 +664,8 @@ select extensions.results_eq(
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
         ('enforce_product_price_permission()'),
+        ('get_admin_branches(p_limit integer, p_after_code text, p_after_id uuid, p_include_inactive boolean)'),
+        ('get_admin_staff(p_limit integer, p_after_full_name text, p_after_id uuid, p_search text, p_branch_id uuid, p_include_inactive boolean)'),
         ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
         ('get_cashier_sale_detail(p_sale_id uuid)'),
         ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
@@ -678,7 +680,7 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'the public function inventory contains exactly nineteen approved signatures'
+    'the public function inventory contains exactly twenty-one approved signatures'
 );
 
 select extensions.results_eq(
@@ -726,6 +728,8 @@ select extensions.results_eq(
         ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
+        ('get_admin_branches(p_limit integer, p_after_code text, p_after_id uuid, p_include_inactive boolean)'),
+        ('get_admin_staff(p_limit integer, p_after_full_name text, p_after_id uuid, p_search text, p_branch_id uuid, p_include_inactive boolean)'),
         ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
         ('get_cashier_sale_detail(p_sale_id uuid)'),
         ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
@@ -738,7 +742,7 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'authenticated can execute exactly the fifteen-function whitelist'
+    'authenticated can execute exactly the seventeen-function whitelist'
 );
 
 select extensions.ok(
