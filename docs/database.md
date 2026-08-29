@@ -13,7 +13,7 @@ Las migraciones actuales son:
 - `202608240001_get_public_catalog.sql`: proyección pública paginada del catálogo.
 - `202608270001_public_catalog_images.sql`: contrato seguro del bucket e imágenes públicas del catálogo.
 - `202608280001_cashier_web_contract.sql`: bandeja, detalle y recuperación de pagos para Caja Web.
-- `202608290001_admin_web_contract.sql`: proyecciones administrativas V1 de sucursales y personal.
+- `202608280002_admin_web_contract.sql`: proyecciones administrativas V1 de sucursales y personal.
 
 El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución; no cambian tablas ni políticas.
 

@@ -200,6 +200,8 @@ begin
                         'id', row_data.id,
                         'fullName', row_data.full_name,
                         'isActive', row_data.is_active,
+                        'branchId', row_data.branch_id,
+                        'roleName', row_data.role_name,
                         'branch', case when row_data.branch_id is null then null else
                             pg_catalog.jsonb_build_object(
                                 'id', row_data.branch_id,

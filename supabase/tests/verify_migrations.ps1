@@ -19,7 +19,31 @@ $cashierWebSql = Get-Content (
     Join-Path $migrationDirectory '202608280001_cashier_web_contract.sql'
 ) -Raw
 $adminWebSql = Get-Content (
-    Join-Path $migrationDirectory '202608290001_admin_web_contract.sql'
+    Join-Path $migrationDirectory '202608280002_admin_web_contract.sql'
+) -Raw
+$userActivationSql = Get-Content (
+    Join-Path $migrationDirectory '202608290001_admin_user_activation.sql'
+) -Raw
+$inventoryMgmtSql = Get-Content (
+    Join-Path $migrationDirectory '202608290002_inventory_management.sql'
+) -Raw
+$inventoryProjSql = Get-Content (
+    Join-Path $migrationDirectory '202608290003_inventory_projections.sql'
+) -Raw
+$catalogAdminSql = Get-Content (
+    Join-Path $migrationDirectory '202608290004_catalog_administration.sql'
+) -Raw
+$salesInventorySql = Get-Content (
+    Join-Path $migrationDirectory '202608290005_sales_inventory_trigger.sql'
+) -Raw
+$customerMgmtSql = Get-Content (
+    Join-Path $migrationDirectory '202608290006_customer_management.sql'
+) -Raw
+$promoDiscountSql = Get-Content (
+    Join-Path $migrationDirectory '202608290007_promotions_and_discounts.sql'
+) -Raw
+$reportsSql = Get-Content (
+    Join-Path $migrationDirectory '202608290008_basic_reports.sql'
 ) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
@@ -54,7 +78,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 12) 'exactly twelve ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 20) 'exactly twenty ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -64,7 +88,15 @@ Assert-Condition (
         '202608240001_get_public_catalog.sql,' +
         '202608270001_public_catalog_images.sql,' +
         '202608280001_cashier_web_contract.sql,' +
-        '202608290001_admin_web_contract.sql'
+        '202608280002_admin_web_contract.sql,' +
+        '202608290001_admin_user_activation.sql,' +
+        '202608290002_inventory_management.sql,' +
+        '202608290003_inventory_projections.sql,' +
+        '202608290004_catalog_administration.sql,' +
+        '202608290005_sales_inventory_trigger.sql,' +
+        '202608290006_customer_management.sql,' +
+        '202608290007_promotions_and_discounts.sql,' +
+        '202608290008_basic_reports.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -526,6 +558,70 @@ Assert-Condition (
     $publicRpcTestSql.Contains("'bucketName', 'catalog-images'") -and
     $publicRpcTestSql.Contains('public catalog returns a null image when no product image exists')
 ) 'public RPC tests preserve privacy, role boundaries, and the complete V2 image contract'
+
+Assert-Condition (
+    $userActivationSql.Contains("v_actor_role = 'ADMIN' and v_target_role = 'OWNER'") -and
+    $userActivationSql.Contains("The last active OWNER cannot be deactivated")
+) 'ADMIN cannot deactivate an OWNER and the last active OWNER is protected'
+
+Assert-Condition (
+    $inventoryMgmtSql.Contains("on conflict (branch_id, product_id) do update") -and
+    $inventoryMgmtSql.Contains("total_quantity = public.inventory_balances.total_quantity + excluded.total_quantity")
+) 'inventory balances are maintained idempotently via triggers on movements'
+Assert-Condition (
+    $inventoryMgmtSql.Contains("public.has_permission('MANAGE_INVENTORY')") -and
+    $inventoryMgmtSql.Contains("revoke all on function public.record_inventory_movement from public, anon, authenticated;")
+) 'inventory movement RPC enforces MANAGE_INVENTORY and follows hardening'
+
+Assert-Condition (
+    $inventoryProjSql.Contains("'isLowStock', r.total_quantity <= r.minimum_stock") -and
+    $inventoryProjSql.Contains("public.has_permission('VIEW_REPORTS')")
+) 'inventory projections support low stock detection and administrative filtering'
+
+Assert-Condition (
+    $catalogAdminSql.Contains("public.has_permission('MANAGE_PRICES')") -and
+    $catalogAdminSql.Contains("Price management is not allowed")
+) 'catalog administration enforces MANAGE_PRICES for price changes'
+Assert-Condition (
+    $catalogAdminSql.Contains("on conflict (id) do update") -and
+    $catalogAdminSql.Contains("set name = excluded.name")
+) 'catalog administration uses idempotent upsert patterns'
+
+Assert-Condition (
+    $salesInventorySql.Contains("new.status = 'PAID'") -and
+    $salesInventorySql.Contains("'SALE'") -and
+    $salesInventorySql.Contains("-si.quantity")
+) 'inventory movements are automatically recorded when a sale is paid'
+
+Assert-Condition (
+    $customerMgmtSql.Contains("public.customers") -and
+    $customerMgmtSql.Contains("upsert_customer") -and
+    $customerMgmtSql.Contains("search_customers")
+) 'customer management defines the required table and administrative RPCs'
+
+Assert-Condition (
+    $promoDiscountSql.Contains("public.promotions") -and
+    $promoDiscountSql.Contains("public.sale_discounts") -and
+    $promoDiscountSql.Contains("apply_sale_discount")
+) 'promotions and discounts module defines the required tables and logic'
+Assert-Condition (
+    $promoDiscountSql.Contains("public.has_permission('MANAGE_DISCOUNTS')") -and
+    $promoDiscountSql.Contains("v_sale.subtotal_cents")
+) 'discount application enforces authorized role and validates against sale subtotal'
+
+Assert-Condition (
+    $reportsSql.Contains("public.get_report_daily_sales") -and
+    $reportsSql.Contains("public.get_report_top_products")
+) 'reports module defines the daily sales and top products RPCs'
+Assert-Condition (
+    $reportsSql.Contains("public.has_permission('VIEW_REPORTS')") -and
+    $reportsSql.Contains("public.has_permission('VIEW_ALL_SALES')")
+) 'reports enforce granular branch isolation and report-viewing permissions'
+
+Assert-Condition (
+    $userActivationSql.Contains('revoke all on function public.set_user_active(pg_catalog.uuid, pg_catalog.bool) from public, anon, authenticated;') -and
+    $userActivationSql.Contains('grant execute on function public.set_user_active(pg_catalog.uuid, pg_catalog.bool) to authenticated;')
+) 'user activation RPC execution is revoked from PUBLIC and anon and granted to authenticated'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }
