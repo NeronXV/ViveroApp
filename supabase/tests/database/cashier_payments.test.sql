@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(50);
+select extensions.plan(51);
 
 insert into public.branches (id, code, name, is_active) values
     ('11000000-0000-0000-0000-000000000001', 'PAY-CENTRO', 'Caja Centro', true),
@@ -374,6 +374,21 @@ select extensions.ok(
      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname in ('claim_sale_for_payment', 'release_sale_payment_claim', 'confirm_sale_payment')),
     'all payment RPCs are SECURITY DEFINER with empty search_path'
+);
+
+select extensions.ok(
+    (select pg_catalog.count(*) = 3 and pg_catalog.bool_and(
+        pg_catalog.pg_get_userbyid(p.proowner) = 'postgres'
+     )
+     from pg_catalog.pg_proc p
+     join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in (
+           'claim_sale_for_payment',
+           'release_sale_payment_claim',
+           'confirm_sale_payment'
+       )),
+    'all payment RPCs have explicit postgres ownership'
 );
 
 select * from extensions.finish();

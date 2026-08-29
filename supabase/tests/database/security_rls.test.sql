@@ -664,6 +664,9 @@ select extensions.results_eq(
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
         ('enforce_product_price_permission()'),
+        ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
+        ('get_cashier_sale_detail(p_sale_id uuid)'),
+        ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
         ('get_my_access_context()'),
         ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
         ('handle_new_user()'),
@@ -675,7 +678,7 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'the public function inventory contains exactly sixteen approved signatures'
+    'the public function inventory contains exactly nineteen approved signatures'
 );
 
 select extensions.results_eq(
@@ -723,6 +726,9 @@ select extensions.results_eq(
         ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
         ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
         ('create_branch(p_code text, p_name text)'),
+        ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
+        ('get_cashier_sale_detail(p_sale_id uuid)'),
+        ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
         ('get_my_access_context()'),
         ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
         ('has_permission(required_permission text)'),
@@ -732,7 +738,7 @@ select extensions.results_eq(
         ('update_branch(p_branch_id uuid, p_code text, p_name text)')
     ) as expected(signature)
     $$,
-    'authenticated can execute exactly the twelve-function whitelist'
+    'authenticated can execute exactly the fifteen-function whitelist'
 );
 
 select extensions.ok(

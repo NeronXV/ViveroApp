@@ -15,6 +15,9 @@ $publicCatalogSql = Get-Content (Join-Path $migrationDirectory '202608240001_get
 $catalogImagesSql = Get-Content (
     Join-Path $migrationDirectory '202608270001_public_catalog_images.sql'
 ) -Raw
+$cashierWebSql = Get-Content (
+    Join-Path $migrationDirectory '202608280001_cashier_web_contract.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -23,6 +26,9 @@ $publicRpcTestSql = Get-Content (
 ) -Raw
 $catalogImagesTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\public_catalog_images.test.sql'
+) -Raw
+$cashierWebTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\cashier_web_contract.test.sql'
 ) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
@@ -42,7 +48,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 10) 'exactly ten ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 11) 'exactly eleven ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -50,7 +56,8 @@ Assert-Condition (
         '202608150002_harden_function_privileges.sql,' +
         '202608220001_cashier_payments.sql,202608220002_get_my_access_context.sql,' +
         '202608240001_get_public_catalog.sql,' +
-        '202608270001_public_catalog_images.sql'
+        '202608270001_public_catalog_images.sql,' +
+        '202608280001_cashier_web_contract.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -63,7 +70,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 15 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -eq 18 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -243,18 +250,99 @@ Assert-Condition (
     $paymentSql.Contains("message = 'CLAIM_NOT_OWNED'")
 ) 'payment RPCs expose stable sanitized application error codes'
 Assert-Condition (
-    $paymentTestSql.Contains('select extensions.plan(50);') -and
+    $paymentTestSql.Contains('select extensions.plan(51);') -and
     [regex]::Matches(
         $paymentTestSql,
         '(?im)^select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
-    ).Count -eq 50
-) 'cashier payment pgTAP plan matches its fifty assertions'
+    ).Count -eq 51
+) 'cashier payment pgTAP plan matches its fifty-one assertions'
 Assert-Condition (
     $paymentTestSql.Contains('OWNER cannot operate a sale in another branch') -and
     $paymentTestSql.Contains('ADMIN cannot operate a sale in another branch') -and
     $paymentTestSql.Contains('competing confirmations create one payment') -and
     $paymentTestSql.Contains('idempotent retries leave one PAID history row')
 ) 'payment tests cover branch isolation, competition, and idempotent side effects'
+
+Assert-Condition (
+    [regex]::Matches(
+        $cashierWebSql,
+        '(?is)create or replace function public\.(get_cashier_sales|get_cashier_sale_detail|get_cashier_payment_result)\s*\('
+    ).Count -eq 3 -and
+    [regex]::Matches($cashierWebSql, "(?is)security\s+definer\s+set\s+search_path\s*=\s*''").Count -eq 3 -and
+    [regex]::Matches(
+        $cashierWebSql,
+        '(?is)alter function public\.(get_cashier_sales|get_cashier_sale_detail|get_cashier_payment_result)\s*\([^;]*?\) owner to postgres;'
+    ).Count -eq 3
+) 'cashier Web contract defines three postgres-owned secure presentation RPCs'
+Assert-Condition (
+    [regex]::Matches(
+        $cashierWebSql,
+        '(?is)alter function public\.(claim_sale_for_payment|release_sale_payment_claim|confirm_sale_payment)\s*\([^;]*?\) owner to postgres;'
+    ).Count -eq 3 -and
+    -not [regex]::IsMatch(
+        $cashierWebSql,
+        '(?is)create\s+(or\s+replace\s+)?function\s+public\.(claim_sale_for_payment|release_sale_payment_claim|confirm_sale_payment)'
+    )
+) 'cashier Web migration pins payment RPC owners without recreating their bodies'
+Assert-Condition (
+    [regex]::Matches(
+        $cashierWebSql,
+        '(?is)revoke all on function public\.(get_cashier_sales|get_cashier_sale_detail|get_cashier_payment_result)\s*\([^;]*?\)\s*from public, anon, authenticated, service_role;'
+    ).Count -eq 3 -and
+    [regex]::Matches(
+        $cashierWebSql,
+        '(?is)grant execute on function public\.(get_cashier_sales|get_cashier_sale_detail|get_cashier_payment_result)\s*\([^;]*?\)\s*to authenticated;'
+    ).Count -eq 3 -and
+    -not [regex]::IsMatch(
+        $cashierWebSql,
+        '(?is)grant execute on function public\.(get_cashier_sales|get_cashier_sale_detail|get_cashier_payment_result)\s*\([^;]*?\)\s*to (anon|service_role|public);'
+    )
+) 'cashier Web RPC execution is granted exclusively to authenticated'
+Assert-Condition (
+    $cashierWebSql.Contains("'schemaVersion', 1") -and
+    $cashierWebSql.Contains("message = 'CASHIER_UNAUTHORIZED'") -and
+    $cashierWebSql.Contains("message = 'SALE_UNAVAILABLE'") -and
+    $cashierWebSql.Contains("message = 'CASHIER_PAGE_LIMIT_INVALID'") -and
+    $cashierWebSql.Contains("message = 'CASHIER_CURSOR_INVALID'") -and
+    [regex]::Matches($cashierWebSql, "public\.has_permission\('OPERATE_CASHIER'\)").Count -eq 3
+) 'cashier Web RPCs are versioned and enforce stable authorization and input errors'
+Assert-Condition (
+    $cashierWebSql.Contains("s.status = 'SENT_TO_CASHIER'") -and
+    $cashierWebSql.Contains('order by s.created_at asc, s.id asc') -and
+    $cashierWebSql.Contains('p_limit pg_catalog.int4 default 25') -and
+    $cashierWebSql.Contains('p_limit < 1 or p_limit > 50') -and
+    $cashierWebSql.Contains("'AVAILABLE'") -and
+    $cashierWebSql.Contains("'CLAIMED_BY_ME'") -and
+    $cashierWebSql.Contains("'CLAIMED_BY_OTHER'") -and
+    -not $cashierWebSql.Contains("set status = 'PAYMENT_PENDING'")
+) 'cashier queue is FIFO, bounded, claim-aware, and read-only'
+Assert-Condition (
+    -not [regex]::IsMatch($cashierWebSql, '(?i)create\s+table|alter\s+table|create\s+policy|drop\s+') -and
+    -not [regex]::IsMatch(
+        $cashierWebSql,
+        '(?i)revoke\s+select|revoke\s+all\s+privileges\s+on\s+table'
+    ) -and
+    -not [regex]::IsMatch(
+        $cashierWebSql,
+        "(?i)'(customerId|createdById|cashierId|idempotencyKey|internalCode|barcode|wholesalePrice|claimToken|unit)'"
+    )
+) 'cashier Web migration changes no tables or RLS and exposes no forbidden JSON field names'
+Assert-Condition (
+    $cashierWebTestSql.Contains('select extensions.plan(60);') -and
+    [regex]::Matches(
+        $cashierWebTestSql,
+        '(?im)^select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
+    ).Count -eq 60
+) 'cashier Web pgTAP plan matches its sixty assertions'
+Assert-Condition (
+    $cashierWebTestSql.Contains('queue uses FIFO with UUID as stable tie breaker') -and
+    $cashierWebTestSql.Contains('other active claim hides cashier identity') -and
+    $cashierWebTestSql.Contains('detail omits PII, internal codes, history, references and claim token') -and
+    $cashierWebTestSql.Contains('changing current product unit does not alter historical detail contract') -and
+    $cashierWebTestSql.Contains('payment result lines omit unit and preserve captured values') -and
+    $cashierWebTestSql.Contains('attempt processed by another cashier remains hidden') -and
+    $cashierWebTestSql.Contains('existing payment RPCs have explicit postgres ownership')
+) 'cashier Web tests cover FIFO, claim privacy, detail privacy, recovery, and owners'
 
 Assert-Condition (
     $accessContextSql.Contains('create or replace function public.get_my_access_context()') -and
