@@ -24,6 +24,9 @@ import com.intutec.viveroapp.feature.cart.presentation.CartScreenRoute
 import com.intutec.viveroapp.core.security.AppPermission
 import com.intutec.viveroapp.feature.cashier.presentation.CashierDetailScreenRoute
 import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueScreenRoute
+import com.intutec.viveroapp.feature.inventory.presentation.InventoryScreenRoute
+import com.intutec.viveroapp.feature.reports.presentation.ReportsScreenRoute
+import com.intutec.viveroapp.feature.mysales.presentation.MySalesScreenRoute
 
 @Composable
 fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -73,6 +76,9 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onCatalogClick = { navController.navigate(CatalogRoute) },
                 onCartClick = { navController.navigate(CartRoute) },
                 onCashierClick = { navController.navigate(CashierQueueRoute()) },
+                onInventoryClick = { navController.navigate(InventoryRoute) },
+                onReportsClick = { navController.navigate(ReportsRoute) },
+                onMySalesClick = { navController.navigate(MySalesRoute) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
             )
         }
@@ -110,6 +116,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 CartScreenRoute(
                     onBack = navController::navigateUp,
                     onBrowseCatalog = { navController.navigate(CatalogRoute) },
+                    onMySales = { navController.navigate(MySalesRoute) },
                 )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
@@ -141,6 +148,27 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
+            }
+        }
+        composable<InventoryRoute> {
+            if (authState.session?.canOperateAtBranch(AppPermission.MANAGE_INVENTORY) == true) {
+                InventoryScreenRoute(onBack = navController::navigateUp)
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Inventario", navController::navigateUp)
+            }
+        }
+        composable<ReportsRoute> {
+            if (authState.session?.hasCapability(AppPermission.VIEW_REPORTS) == true) {
+                ReportsScreenRoute(onBack = navController::navigateUp)
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Reportes", navController::navigateUp)
+            }
+        }
+        composable<MySalesRoute> {
+            if (authState.session?.hasCapability(AppPermission.VIEW_OWN_SALES) == true) {
+                MySalesScreenRoute(onBack = navController::navigateUp)
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Ventas", navController::navigateUp)
             }
         }
         composable<ProfileRoute> {

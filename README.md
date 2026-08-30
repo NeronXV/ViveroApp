@@ -8,12 +8,13 @@ Aplicación Android para apoyar la operación de un vivero. El proyecto se desar
 |---|---|
 | Base MVVM, tema y navegación | Fase 1 implementada |
 | Autenticación y roles | Integración Supabase real con fallback demo explícito |
-| Catálogo | Integración Supabase real con búsqueda, filtros, detalle e imágenes; fallback demo explícito |
+| Catálogo | Integración Supabase real con búsqueda, filtros, detalle, imágenes y proyección de existencia por sucursal; fallback demo explícito |
 | Escáner inteligente | Fase 4 implementada con CameraX, ML Kit y entrada manual |
 | Carrito y envío a caja | Outbox Room y sincronización idempotente mediante `submit_sale_to_cashier` |
+| Mis comandas | Integración real local con historial propio, estado de cobro y paginación estable |
 | Caja y cobro | Integración real con claims, confirmación y recuperación; validación integral actual pendiente |
-| Administración esencial | Contrato backend de presentación implementado; cliente Web pendiente |
-| Inventario, clientes, promociones y reportes | Pendiente o parcial según capacidad |
+| Administración esencial | Contratos backend implementados; integración Web parcial |
+| Inventario, clientes, promociones y reportes | Piloto de inventario alineado en Android y Web para recepción, conteo e historial; validación integral pendiente |
 
 ## Requisitos
 
@@ -74,4 +75,8 @@ Reconoce QR, EAN-13, EAN-8 y Code 128 mediante CameraX y ML Kit. Solicita la cá
 
 Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en Room aunque cierres la app. En sesión remota, el envío genera un UUID idempotente, conserva un outbox local y llama a `submit_sale_to_cashier`; el backend recalcula precios y es la autoridad. El modo demo no representa persistencia ni cobro real.
 
-Las doce migraciones, 251 aserciones pgTAP declaradas y los recorridos integrales deben repetirse desde cero cuando vuelva a estar disponible la infraestructura local. Hasta entonces Caja y Administración no se consideran desplegables.
+## Inventario piloto
+
+Las cuentas con `MANAGE_INVENTORY` y sucursal activa disponen de un tablero operativo. La gerente puede registrar recepciones y conciliar un conteo físico con motivo; PostgreSQL genera movimientos auditables y mantiene el saldo. Los reintentos conservan una clave idempotente durante el intento abierto. No existe edición directa del saldo.
+
+Las veinticuatro migraciones, 329 aserciones pgTAP declaradas y los recorridos integrales deben ejecutarse desde cero cuando vuelva a estar disponible la infraestructura local. Hasta entonces Caja, Inventario, Mis comandas y los contratos administrativos nuevos no se consideran desplegables.

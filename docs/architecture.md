@@ -43,7 +43,13 @@ Los precios se guardan como centavos mediante `Long`. El ViewModel combina consu
 
 `RoomCartRepository` mantiene un único borrador activo y conserva instantáneas del nombre, código, precio y promoción del producto. Un `Mutex` serializa mutaciones y envío, por lo que dos pulsaciones no pueden crear dos tickets. Al enviar, Room persiste venta, partidas y dos eventos de estado de manera transaccional, y elimina el borrador únicamente después de completar la transacción.
 
-El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios desde PostgreSQL. Su respuesta es un registro compuesto escalar de `public.sales`; Android valida que UUID, folio, creador, sucursal y estado coincidan antes de marcar `SYNCED`. El envío inicial crea exactamente dos historiales remotos legítimos: `null → DRAFT` y `DRAFT → SENT_TO_CASHIER`. Una repetición con la misma clave devuelve la venta existente sin agregar partidas ni historiales. La existencia se validará contra `stock_balances` en la Fase 7 y el descuento promocional completo se conectará en la Fase 9; la aplicación no presenta el envío local como pago confirmado.
+El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios desde PostgreSQL. Su respuesta es un registro compuesto escalar de `public.sales`; Android valida que UUID, folio, creador, sucursal y estado coincidan antes de marcar `SYNCED`. Los resultados pendientes, rechazados o sin sesión no se reportan como envíos confirmados: el ticket local conserva el error y puede reintentar el mismo UUID sin crear otra venta. El envío inicial crea exactamente dos historiales remotos legítimos: `null → DRAFT` y `DRAFT → SENT_TO_CASHIER`. Una repetición con la misma clave devuelve la venta existente sin agregar partidas ni historiales. La existencia se validará contra `stock_balances` en la Fase 7 y el descuento promocional completo se conectará en la Fase 9; la aplicación no presenta el envío local como pago confirmado.
+
+## Inventario operativo
+
+`InventoryViewModel` presenta existencias de la sucursal de la sesión y delega toda mutación en `InventoryRepository`. Las recepciones y conciliaciones se envían mediante RPC protegidos; el cliente nunca calcula ni escribe el saldo final. Un conteo conserva cantidad anterior, cantidad física, diferencia, motivo y actor en el backend. Mientras una operación fallida siga abierta, el ViewModel reutiliza su UUID para que un reintento no duplique el movimiento.
+
+La pantalla exige `MANAGE_INVENTORY` y una sucursal activa. La etiqueta de quien registró un movimiento es metadato actual de presentación; no se trata como una copia histórica inmutable.
 
 ## Estado de pantalla
 

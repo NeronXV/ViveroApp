@@ -14,8 +14,20 @@ Las migraciones actuales son:
 - `202608270001_public_catalog_images.sql`: contrato seguro del bucket e imágenes públicas del catálogo.
 - `202608280001_cashier_web_contract.sql`: bandeja, detalle y recuperación de pagos para Caja Web.
 - `202608280002_admin_web_contract.sql`: proyecciones administrativas V1 de sucursales y personal.
+- `202608290001_admin_user_activation.sql`: activación protegida de usuarios y conservación del último `OWNER` activo.
+- `202608290002_inventory_management.sql`: ubicaciones, movimientos y saldos derivados de inventario.
+- `202608290003_inventory_projections.sql`: existencias administrativas y alertas de bajo inventario.
+- `202608290004_catalog_administration.sql`: mutaciones protegidas de categorías, productos e imágenes.
+- `202608290005_sales_inventory_trigger.sql`: salida auditable de inventario al confirmar una venta pagada.
+- `202608290006_customer_management.sql`: clientes y búsqueda protegida para su asociación operativa.
+- `202608290007_promotions_and_discounts.sql`: promociones y descuentos aplicados a ventas.
+- `202608290008_basic_reports.sql`: ventas diarias y productos más vendidos.
+- `202608290009_mvp_backend_hardening.sql`: aislamiento por sucursal, privacidad, stock no negativo, promociones autoritativas y reportes por fecha de pago.
+- `202608290010_my_branch_catalog_inventory.sql`: proyección autenticada de existencias del catálogo limitada a la sucursal activa del usuario.
+- `202608290011_inventory_pilot_contract.sql`: tablero de inventario por sucursal, recepciones idempotentes, conciliación de conteos e historial auditable.
+- `202608290012_my_sales_contract.sql`: historial de ventas propias con estados autoritativos y paginación keyset.
 
-El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución; no cambian tablas ni políticas.
+El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución. Los módulos posteriores añaden inventario, clientes, promociones y reportes, y la migración de endurecimiento corrige su alcance. Las expresiones SQL especiales de las migraciones MVP aún no ejecutadas se normalizaron antes de su validación desde cero.
 
 Las mutaciones de `branches` y `profiles.branch_id` no se conceden directamente a `authenticated`. Se realizan mediante `create_branch`, `update_branch`, `set_branch_active` y `assign_user_branch`. Reactivar conserva el identificador y los datos de la sucursal; repetir el mismo estado o la misma asignación no genera cambios adicionales. Una sucursal no puede eliminarse físicamente mediante estos RPC.
 
@@ -23,11 +35,11 @@ Supabase configura privilegios predeterminados amplios para tablas nuevas de `pu
 
 Toda función nueva debe crearse y endurecerse en la misma transacción: revocar explícitamente `EXECUTE` de `PUBLIC`, `anon` y cualquier rol cliente no requerido, y concederlo únicamente a la lista mínima necesaria. Las funciones de trigger no se exponen directamente a clientes; una función usada por RLS solo se concede a los roles que evalúan esa política.
 
-El cliente de Administración deberá consumir `get_admin_branches` y `get_admin_staff` para obtener JSON V1 paginado sin depender del esquema físico ni exponer correo o metadatos de `auth.users`. Las mutaciones continúan usando exclusivamente los RPC administrativos existentes.
+El cliente de Administración consume `get_admin_branches`, `get_admin_staff` y `get_admin_inventory_balances`. Android consulta `get_my_branch_catalog_inventory` para ventas y usa `get_my_inventory_dashboard`, `record_inventory_reception`, `reconcile_inventory_count` y `get_my_inventory_history` para el piloto operativo, siempre sin poder elegir otra sucursal. Ningún cliente escribe directamente saldos, conteos ni movimientos.
 
-## Modelo previsto
+## Modelo actual y previsto
 
-Entidades principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes y membresías; ventas, partidas, pagos e historial de estados; sesiones de caja; promociones; ledger de puntos; auditoría.
+Entidades actuales principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes; ventas, partidas, pagos e historial de estados; promociones y descuentos. Membresías, sesiones de caja, ledger de puntos y auditoría detallada permanecen previstas para fases posteriores.
 
 Reglas obligatorias para el diseño:
 

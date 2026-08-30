@@ -349,6 +349,7 @@ private fun FoundProduct(
                     product.promotion?.let { StatusPill("Oferta") }
                 }
                 Text(product.commonName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(product.internalCode, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(product.effectivePriceCents.asMxn(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Text(
                     when {

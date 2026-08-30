@@ -28,7 +28,7 @@ begin
             'SALE',
             -si.quantity, -- Negativo para representar salida
             new.id,
-            pg_catalog.coalesce(v_actor_id, new.created_by),
+            coalesce(v_actor_id, new.created_by),
             pg_catalog.concat('Venta confirmada: ', new.folio)
         from public.sale_items si
         where si.sale_id = new.id;

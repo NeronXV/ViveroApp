@@ -47,7 +47,6 @@ data class CartItem(
 data class CartCustomer(
     val id: String,
     val name: String,
-    val memberNumber: String,
 )
 
 private inline fun List<CartItem>.moneySum(value: (CartItem) -> Long): Long =

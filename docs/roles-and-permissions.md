@@ -87,21 +87,21 @@ RLS limita la bandeja de `CASHIER` a `SENT_TO_CASHIER` y `PAYMENT_PENDING` de su
 
 | Capacidad | Política RLS | RPC o trigger | Estado |
 |---|---|---|---|
-| `VIEW_CATALOG` | `categories_read`, `products_read`, `product_images_read` | — | Activa; el acceso público se diseñará con la web |
+| `VIEW_CATALOG` | `categories_read`, `products_read`, `product_images_read` | `get_public_catalog` | Activa en Android y Web |
 | `SCAN_PRODUCTS` | Reutiliza lectura de catálogo | — | Activa en Android |
 | `CREATE_SALES` | — | `submit_sale_to_cashier` | Activa |
 | `VIEW_OWN_SALES` | `sales_creator_read_own` | — | Activa |
 | `OPERATE_CASHIER` | `sales_cashier_read_pending` | RPC de claims, confirmación y presentación de Caja | Activa en Android y Web; validación integral pendiente |
 | `VIEW_BRANCH_SALES` | `sales_management_read_branch` | — | Activa |
 | `VIEW_ALL_SALES` | `sales_management_read_all` | — | Activa |
-| `MANAGE_PRODUCTS` | `categories_manage`, `products_manage`, `product_images_manage` | `enforce_product_price_permission` | Activa |
-| `MANAGE_PRICES` | `products_manage` | `enforce_product_price_permission` | Activa |
-| `MANAGE_DISCOUNTS` | — | — | Fase futura |
-| `MANAGE_INVENTORY` | — | — | Fase `stock_balances` |
-| `VIEW_INVENTORY_ALERTS` | — | — | Fase `stock_balances` |
-| `VIEW_REPORTS` | `branches_read_authenticated` | — | Parcial; reportes futuros |
-| `MANAGE_BRANCHES` | `branches_read_authenticated` para lectura | mutaciones de sucursal y `get_admin_branches` | Contrato local definido; ejecución e integración Web pendientes |
-| `MANAGE_USERS` | políticas de perfiles y roles | `assign_user_branch`, `get_admin_branches`, `get_admin_staff` | Contrato local definido; ejecución e integración Web pendientes |
+| `MANAGE_PRODUCTS` | `categories_manage`, `products_manage`, `product_images_manage` | `upsert_category`, `upsert_product`, `set_product_image_primary` | Contrato local activo; ejecución integral pendiente |
+| `MANAGE_PRICES` | `products_manage` | `enforce_product_price_permission`, `upsert_product` | Contrato local activo; ejecución integral pendiente |
+| `MANAGE_DISCOUNTS` | lectura de promociones | `apply_sale_discount` | Contrato local endurecido; ejecución integral pendiente |
+| `MANAGE_INVENTORY` | políticas de ubicaciones, movimientos, saldos y conteos sin escritura directa | `get_my_inventory_dashboard`, `record_inventory_reception`, `reconcile_inventory_count`, `get_my_inventory_history` | Piloto Android implementado para gerente/admin/owner; ejecución integral pendiente |
+| `VIEW_INVENTORY_ALERTS` | `inventory_balances_read` | `get_low_inventory_alerts`, `get_my_inventory_dashboard`, `get_my_inventory_history` | Contrato local endurecido por sucursal; ejecución integral pendiente |
+| `VIEW_REPORTS` | políticas operativas por sucursal | `get_report_daily_sales`, `get_report_top_products` | Integración Web parcial; ejecución integral pendiente |
+| `MANAGE_BRANCHES` | `branches_read_authenticated` para lectura | mutaciones de sucursal y `get_admin_branches` | Integración Web parcial; ejecución integral pendiente |
+| `MANAGE_USERS` | políticas de perfiles, roles y clientes | `set_user_active`, `assign_user_branch`, `get_admin_branches`, `get_admin_staff` | Integración Web parcial; ejecución integral pendiente |
 | `ASSIGN_ROLES` | — | `assign_user_role`, `bootstrap_first_owner` controlado | Activa |
 | `VIEW_AUDIT` | — | — | Fase futura |
 | `MANAGE_SETTINGS` | — | — | Fase futura |

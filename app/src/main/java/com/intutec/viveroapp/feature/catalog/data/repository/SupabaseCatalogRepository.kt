@@ -2,6 +2,7 @@ package com.intutec.viveroapp.feature.catalog.data.repository
 
 import com.intutec.viveroapp.feature.catalog.data.remote.CatalogRemoteDataSource
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCategoryDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductImageDto
 import com.intutec.viveroapp.feature.catalog.domain.model.CatalogSnapshot
@@ -49,8 +50,12 @@ class SupabaseCatalogRepository @Inject constructor(
         val categoriesById = categories.associateBy(Category::id)
         check(categoriesById.size == categories.size) { "El catálogo remoto contiene categorías duplicadas." }
 
-        val products = remote.loadActiveProducts()
-            .map { it.toDomain(categoriesById) }
+        val remoteProducts = remote.loadActiveProducts()
+        val inventoryByProductId = remote.loadMyBranchInventory().toInventoryByProductId(
+            activeProductIds = remoteProducts.map { it.id }.toSet(),
+        )
+        val products = remoteProducts
+            .map { it.toDomain(categoriesById, inventoryByProductId[it.id]) }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, Product::commonName).thenBy(Product::id))
         check(products.map(Product::id).distinct().size == products.size) {
             "El catálogo remoto contiene productos duplicados."
@@ -66,7 +71,10 @@ private fun RemoteCategoryDto.toDomain(): Category {
     return Category(id = id.requireUuid("category id"), name = normalizedName)
 }
 
-private fun RemoteProductDto.toDomain(categoriesById: Map<String, Category>): Product {
+private fun RemoteProductDto.toDomain(
+    categoriesById: Map<String, Category>,
+    stockAvailable: Int?,
+): Product {
     check(isActive) { "El catálogo remoto devolvió un producto inactivo." }
     val canonicalId = id.requireUuid("product id")
     val canonicalCategoryId = categoryId.requireUuid("product category id")
@@ -104,7 +112,7 @@ private fun RemoteProductDto.toDomain(categoriesById: Map<String, Category>): Pr
         priceCents = priceCents,
         wholesalePriceCents = wholesalePriceCents,
         unit = unit.trim(),
-        stockAvailable = 0,
+        stockAvailable = stockAvailable ?: 0,
         minimumStock = minimumStock.toInt(),
         imageKey = "",
         wateringAdvice = wateringAdvice,
@@ -114,9 +122,31 @@ private fun RemoteProductDto.toDomain(categoriesById: Map<String, Category>): Pr
         promotion = null,
         createdAt = createdAt.parseSupabaseTimestamp("product created_at"),
         updatedAt = updatedAt.parseSupabaseTimestamp("product updated_at"),
-        stockKnown = false,
+        stockKnown = stockAvailable != null,
         images = mappedImages,
     )
+}
+
+private fun RemoteBranchCatalogInventoryDto?.toInventoryByProductId(
+    activeProductIds: Set<String>,
+): Map<String, Int> {
+    if (this == null) return emptyMap()
+    check(schemaVersion == 1) { "El inventario remoto usa una versión incompatible." }
+    branchId.requireUuid("inventory branch id")
+
+    val balances = items.associate { item ->
+        val productId = item.productId.requireUuid("inventory product id")
+        check(productId in activeProductIds) { "El inventario remoto contiene un producto desconocido." }
+        check(item.totalQuantity.isFinite() && item.totalQuantity >= 0) {
+            "El inventario remoto contiene una existencia inválida."
+        }
+        check(item.totalQuantity <= Int.MAX_VALUE && item.totalQuantity % 1.0 == 0.0) {
+            "El inventario remoto no es compatible con cantidades enteras."
+        }
+        productId to item.totalQuantity.toInt()
+    }
+    check(balances.size == items.size) { "El inventario remoto contiene productos duplicados." }
+    return balances
 }
 
 private fun RemoteProductImageDto.toDomain(expectedProductId: String): ProductImage {

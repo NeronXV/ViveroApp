@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -65,12 +67,14 @@ import com.intutec.viveroapp.feature.cart.domain.model.Cart
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
 import com.intutec.viveroapp.feature.cart.domain.model.SaleSyncState
+import com.intutec.viveroapp.feature.customer.domain.model.Customer
 import com.intutec.viveroapp.feature.catalog.presentation.productImageResource
 
 @Composable
 fun CartScreenRoute(
     onBack: () -> Unit,
     onBrowseCatalog: () -> Unit,
+    onMySales: () -> Unit,
     viewModel: CartViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -78,16 +82,21 @@ fun CartScreenRoute(
         state = state,
         onBack = onBack,
         onBrowseCatalog = onBrowseCatalog,
+        onMySales = onMySales,
         onIncrement = viewModel::increment,
         onDecrement = viewModel::decrement,
         onRemove = viewModel::remove,
-        onAssociateCustomer = viewModel::associateDemoCustomer,
+        onAssociateCustomer = viewModel::openCustomerSearch,
         onRemoveCustomer = viewModel::removeCustomer,
         onSaveDraft = viewModel::saveDraft,
         onCancel = viewModel::cancelCart,
         onSend = viewModel::sendToCashier,
+        onRetrySaleSync = viewModel::retrySaleSync,
         onStartNew = viewModel::startNewCart,
         onNoticeShown = viewModel::clearNotice,
+        onCustomerQueryChanged = viewModel::updateCustomerQuery,
+        onCustomerSelected = viewModel::associateCustomer,
+        onCloseCustomerSearch = viewModel::closeCustomerSearch,
     )
 }
 
@@ -97,6 +106,7 @@ private fun CartScreen(
     state: CartUiState,
     onBack: () -> Unit,
     onBrowseCatalog: () -> Unit,
+    onMySales: () -> Unit,
     onIncrement: (String) -> Unit,
     onDecrement: (String) -> Unit,
     onRemove: (String) -> Unit,
@@ -105,8 +115,12 @@ private fun CartScreen(
     onSaveDraft: () -> Unit,
     onCancel: () -> Unit,
     onSend: () -> Unit,
+    onRetrySaleSync: () -> Unit,
     onStartNew: () -> Unit,
     onNoticeShown: () -> Unit,
+    onCustomerQueryChanged: (String) -> Unit,
+    onCustomerSelected: (Customer) -> Unit,
+    onCloseCustomerSearch: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     var confirmCancel by rememberSaveable { mutableStateOf(false) }
@@ -125,7 +139,14 @@ private fun CartScreen(
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             when {
                 state.loading -> CircularProgressIndicator()
-                state.sentTicket != null -> SentTicketContent(state.sentTicket, onStartNew, onBack)
+                state.sentTicket != null -> SentTicketContent(
+                    ticket = state.sentTicket,
+                    working = state.working,
+                    onRetry = onRetrySaleSync,
+                    onStartNew = onStartNew,
+                    onMySales = onMySales,
+                    onBack = onBack,
+                )
                 state.cart.items.isEmpty() -> EmptyCart(onBrowseCatalog)
                 else -> CartContent(
                     cart = state.cart,
@@ -149,6 +170,18 @@ private fun CartScreen(
             text = { Text("Se eliminará el borrador y todos sus productos. Esta acción no afecta tickets ya enviados.") },
             confirmButton = { Button(onClick = { confirmCancel = false; onCancel() }) { Text("Cancelar carrito") } },
             dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text("Conservar") } },
+        )
+    }
+
+    if (state.showCustomerSearch) {
+        CustomerSearchDialog(
+            query = state.customerQuery,
+            searching = state.searchingCustomers,
+            results = state.customerResults,
+            error = state.customerSearchError,
+            onQueryChange = onCustomerQueryChanged,
+            onSelected = onCustomerSelected,
+            onDismiss = onCloseCustomerSearch,
         )
     }
 }
@@ -248,9 +281,15 @@ private fun CustomerCard(cart: Cart, onAssociate: () -> Unit, onRemove: () -> Un
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(cart.customer?.name ?: "Cliente opcional", fontWeight = FontWeight.Bold)
-                Text(cart.customer?.let { "Miembro ${it.memberNumber}" } ?: "La búsqueda completa llegará en la Fase 8", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    cart.customer?.let { "Identificado para esta orden" } ?: "Identifica al cliente para asignar la venta",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            TextButton(onClick = if (cart.customer == null) onAssociate else onRemove, enabled = !working) { Text(if (cart.customer == null) "Asociar demo" else "Quitar") }
+            TextButton(onClick = if (cart.customer == null) onAssociate else onRemove, enabled = !working) {
+                Text(if (cart.customer == null) "Asociar" else "Quitar")
+            }
         }
     }
 }
@@ -288,7 +327,14 @@ private fun EmptyCart(onBrowseCatalog: () -> Unit) {
 }
 
 @Composable
-private fun SentTicketContent(ticket: SaleTicket, onStartNew: () -> Unit, onBack: () -> Unit) {
+private fun SentTicketContent(
+    ticket: SaleTicket,
+    working: Boolean,
+    onRetry: () -> Unit,
+    onStartNew: () -> Unit,
+    onMySales: () -> Unit,
+    onBack: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(Icons.Outlined.CheckCircle, null, Modifier.size(76.dp), tint = MaterialTheme.colorScheme.primary)
         StatusPill(if (ticket.syncState == SaleSyncState.SYNCED) "Enviado a caja" else "Guardado localmente")
@@ -301,7 +347,76 @@ private fun SentTicketContent(ticket: SaleTicket, onStartNew: () -> Unit, onBack
             else -> Unit
         }
         Spacer(Modifier.height(10.dp))
-        Button(onClick = onStartNew, modifier = Modifier.fillMaxWidth()) { Text("Preparar otra venta") }
+        if (ticket.offersMySalesNavigation()) {
+            Button(onClick = onMySales, modifier = Modifier.fillMaxWidth()) { Text("Ver mis comandas") }
+        } else if (ticket.syncState == SaleSyncState.PENDING || ticket.syncState == SaleSyncState.FAILED) {
+            Button(onClick = onRetry, enabled = !working, modifier = Modifier.fillMaxWidth()) {
+                Text(if (working) "Reintentando…" else "Reintentar envío a caja")
+            }
+        }
+        OutlinedButton(onClick = onStartNew, modifier = Modifier.fillMaxWidth()) { Text("Preparar otra venta") }
         FilledTonalButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Volver al inicio") }
     }
+}
+
+internal fun SaleTicket.offersMySalesNavigation(): Boolean = syncState == SaleSyncState.SYNCED
+
+@Composable
+private fun CustomerSearchDialog(
+    query: String,
+    searching: Boolean,
+    results: List<Customer>,
+    error: String?,
+    onQueryChange: (String) -> Unit,
+    onSelected: (Customer) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        title = { Text("Asociar cliente") },
+        text = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    label = { Text("Nombre, email o teléfono") },
+                    placeholder = { Text("Escribe al menos 2 letras…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("customer_search_input"),
+                )
+
+                Box(Modifier.fillMaxWidth().height(240.dp)) {
+                    when {
+                        searching -> CircularProgressIndicator(Modifier.align(Alignment.Center).testTag("customer_search_loading"))
+                        error != null -> Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.Center))
+                        query.trim().length < 2 -> Text("Escribe para buscar clientes registrados.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.Center))
+                        results.isEmpty() -> Text("No encontramos coincidencias.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.Center))
+                        else -> LazyColumn(Modifier.fillMaxSize().testTag("customer_search_results")) {
+                            items(results, key = Customer::id) { customer ->
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("customer_result_${customer.id}"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(customer.fullName, fontWeight = FontWeight.SemiBold)
+                                        if (customer.email != null || customer.phone != null) {
+                                            Text(
+                                                listOfNotNull(customer.email, customer.phone).joinToString(" · "),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    TextButton(onClick = { onSelected(customer) }) { Text("Seleccionar") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 }

@@ -7,6 +7,8 @@ import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -53,6 +55,7 @@ class PendingSaleSynchronizer @Inject constructor(
                     saleId = sale.id,
                     folio = sale.folio,
                     items = sale.items.map { SaleSyncItem(it.productId, it.quantity) },
+                    customerId = sale.customer?.id?.takeIf { it.isUuid() && !it.startsWith("demo-") },
                 ),
             )
             val responseError = validateResponse(response, sale)
@@ -74,7 +77,9 @@ class PendingSaleSynchronizer @Inject constructor(
                 SaleSyncOutcome.Failed(error.message.orEmpty())
             }
         } catch (error: CancellationException) {
-            store.markPending(saleId, "Sincronización interrumpida; lista para reintentar.")
+            withContext(NonCancellable) {
+                store.markPending(saleId, "Sincronización interrumpida; lista para reintentar.")
+            }
             throw error
         } catch (_: Throwable) {
             val message = "No se pudo confirmar la comanda por un problema temporal."

@@ -15,6 +15,7 @@ class SaleSyncRpcContractTest {
             saleId = "11111111-1111-4111-8111-111111111111",
             folio = "VD-260815-111111",
             items = listOf(SaleSyncItem("22222222-2222-4222-8222-222222222222", 2)),
+            customerId = null,
         ).toRpcParameters()
 
         assertEquals(setOf("p_sale_id", "p_folio", "p_items", "p_customer_id"), parameters.keys)
@@ -25,5 +26,18 @@ class SaleSyncRpcContractTest {
             """[{"product_id":"22222222-2222-4222-8222-222222222222","quantity":2}]""",
             parameters["p_items"].toString(),
         )
+    }
+
+    @Test
+    fun `rpc payload includes associated customer UUID`() {
+        val customerId = "33333333-3333-4333-8333-333333333333"
+        val parameters = SaleSyncRequest(
+            saleId = "11111111-1111-4111-8111-111111111111",
+            folio = "VD-260815-111111",
+            items = listOf(SaleSyncItem("22222222-2222-4222-8222-222222222222", 2)),
+            customerId = customerId,
+        ).toRpcParameters()
+
+        assertEquals(JsonPrimitive(customerId), parameters["p_customer_id"])
     }
 }

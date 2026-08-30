@@ -10,9 +10,15 @@ Ejecutar desde la raíz:
 
 ## Pruebas de seguridad de Supabase
 
-Las seis suites de base de datos declaran 251 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas y 36 del contrato Web de Administración.
+Las diez suites de base de datos declaran 329 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas, 36 del contrato Web de Administración, 23 del endurecimiento de inventario, clientes, promociones y reportes, 12 de la proyección de existencia del catálogo por sucursal, 20 del piloto de inventario y 23 del historial propio de comandas.
 
-Las pruebas están creadas, pero su repetición actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las doce migraciones desde cero y los recorridos integrales de navegador. Deben aprobarse antes de considerar Caja o Administración desplegables; el resultado histórico 215/215 no sustituye esta ejecución actual.
+Las pruebas están creadas, pero su ejecución actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las veinticuatro migraciones desde cero y los recorridos integrales de navegador y Android. Deben aprobarse antes de considerar Caja, Inventario, Administración, Mis comandas o los módulos MVP nuevos desplegables; el resultado histórico 215/215 no sustituye esta ejecución actual.
+
+El piloto Android de inventario tiene pruebas unitarias para carga y filtro, recepción, validación de conteo y reutilización de la clave idempotente al reintentar. El módulo de reportes Android cuenta con pruebas unitarias para el parsing de los contratos RPC, validación de rangos de fecha y acceso por permisos.
+
+Mis comandas cuenta con pruebas unitarias de estructura JSON estricta, importes, estados, fechas, orden, paginación, cursor, cancelación y parámetros enviados al RPC. La ejecución pgTAP real de `get_my_recent_sales` continúa pendiente junto con las demás pruebas de base.
+
+La prueba manual pendiente debe cubrir gerente con sucursal activa, recepción duplicada por reconexión, conteo al alza y a la baja, historial y rechazo por rol o sucursal. Para reportes, verificar la visibilidad según el permiso VIEW_REPORTS y la consistencia de los totales contra la operación real.
 
 La verificación estática complementaria puede ejecutarse sin base de datos:
 

@@ -60,7 +60,7 @@ interface CartDao {
         SET sync_state = 'SYNCING', sync_pending = 1,
             sync_attempt_count = sync_attempt_count + 1,
             sync_last_error = NULL, sync_last_attempt_at_epoch_ms = :attemptedAt
-        WHERE id = :saleId AND sync_state = 'PENDING'
+        WHERE id = :saleId AND sync_state IN ('PENDING', 'FAILED')
         """,
     )
     suspend fun claimPendingSale(saleId: String, attemptedAt: Long): Int

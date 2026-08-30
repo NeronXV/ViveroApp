@@ -7,6 +7,9 @@ import com.intutec.viveroapp.feature.scanner.domain.model.ScanFormat
 import com.intutec.viveroapp.feature.scanner.domain.usecase.FindProductByCodeUseCase
 import com.intutec.viveroapp.feature.cart.domain.usecase.AddProductToCartUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -37,12 +40,15 @@ class ScannerViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private val _notices = MutableSharedFlow<String>()
     val notices = _notices.asSharedFlow()
+    private var lookupJob: Job? = null
 
     fun onCodeDetected(code: String, format: ScanFormat) {
         if (_uiState.value.result != ScanResultState.Ready) return
         _uiState.update { it.copy(result = ScanResultState.Searching(code.trim(), format)) }
-        viewModelScope.launch {
-            findProductByCode(code).fold(
+        lookupJob = viewModelScope.launch {
+            val result = findProductByCode(code)
+            currentCoroutineContext().ensureActive()
+            result.fold(
                 onSuccess = { product ->
                     _uiState.update {
                         it.copy(
@@ -61,8 +67,12 @@ class ScannerViewModel @Inject constructor(
         }
     }
 
-    fun scanAgain() = _uiState.update {
-        it.copy(result = ScanResultState.Ready, resetKey = it.resetKey + 1)
+    fun scanAgain() {
+        lookupJob?.cancel()
+        lookupJob = null
+        _uiState.update {
+            it.copy(result = ScanResultState.Ready, resetKey = it.resetKey + 1)
+        }
     }
 
     fun onScannerFailure(message: String) {

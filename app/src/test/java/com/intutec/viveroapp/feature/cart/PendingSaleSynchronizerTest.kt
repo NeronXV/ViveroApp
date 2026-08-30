@@ -7,6 +7,7 @@ import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.core.session.UserBranch
 import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
+import com.intutec.viveroapp.feature.cart.domain.model.CartCustomer
 import com.intutec.viveroapp.feature.cart.domain.model.SaleStatus
 import com.intutec.viveroapp.feature.cart.domain.model.SaleSyncState
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
@@ -20,6 +21,7 @@ import com.intutec.viveroapp.feature.cart.sync.SaleSyncRemoteException
 import com.intutec.viveroapp.feature.cart.sync.SaleSyncRequest
 import com.intutec.viveroapp.feature.cart.sync.SaleSyncResponse
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -108,7 +110,7 @@ class PendingSaleSynchronizerTest {
             if (call == 1) throw SaleSyncRemoteException(SaleSyncFailureType.TEMPORARY, "Temporal")
             response()
         }
-        val fixture = fixture(remote = remote)
+        val fixture = fixture(ticket = ticket(customerId = CUSTOMER_ID), remote = remote)
 
         fixture.synchronizer.synchronize(SALE_ID)
         fixture.synchronizer.synchronize(SALE_ID)
@@ -117,7 +119,35 @@ class PendingSaleSynchronizerTest {
         assertEquals(remote.requests[0], remote.requests[1])
         assertEquals(SALE_ID, remote.requests[1].saleId)
         assertEquals(FOLIO, remote.requests[1].folio)
+        assertEquals(CUSTOMER_ID, remote.requests[1].customerId)
         assertEquals(SaleSyncState.SYNCED, fixture.store.ticket.syncState)
+    }
+
+    @Test
+    fun `sale without customer sends an explicit optional null customer id`() = runTest {
+        val fixture = fixture(ticket = ticket(customerId = null))
+
+        fixture.synchronizer.synchronize(SALE_ID)
+
+        assertEquals(null, fixture.remote.requests.single().customerId)
+    }
+
+    @Test
+    fun `coroutine cancellation restores pending state and is rethrown`() = runTest {
+        val fixture = fixture(
+            remote = RecordingRemote { throw CancellationException("cancelled") },
+        )
+        var caught: CancellationException? = null
+
+        try {
+            fixture.synchronizer.synchronize(SALE_ID)
+        } catch (error: CancellationException) {
+            caught = error
+        }
+
+        assertEquals("cancelled", caught?.message)
+        assertEquals(SaleSyncState.PENDING, fixture.store.ticket.syncState)
+        assertEquals("Sincronización interrumpida; lista para reintentar.", fixture.store.ticket.syncLastError)
     }
 
     @Test
@@ -228,6 +258,7 @@ class PendingSaleSynchronizerTest {
         private const val BRANCH_ID = "33333333-3333-4333-8333-333333333333"
         private const val PRODUCT_ID = "44444444-4444-4444-8444-444444444444"
         private const val OTHER_ID = "55555555-5555-4555-8555-555555555555"
+        private const val CUSTOMER_ID = "66666666-6666-4666-8666-666666666666"
         private const val FOLIO = "VD-260815-111111"
 
         private fun response() = SaleSyncResponse(SALE_ID, FOLIO, USER_ID, BRANCH_ID, "SENT_TO_CASHIER")
@@ -242,13 +273,13 @@ class PendingSaleSynchronizerTest {
             mode = SessionMode.REMOTE,
         )
 
-        private fun ticket(productId: String = PRODUCT_ID) = SaleTicket(
+        private fun ticket(productId: String = PRODUCT_ID, customerId: String? = null) = SaleTicket(
             id = SALE_ID,
             folio = FOLIO,
             items = listOf(
                 CartItem(productId, "P-1", "Producto", "", "pieza", 100, 100, 2, 0, false),
             ),
-            customer = null,
+            customer = customerId?.let { CartCustomer(it, "Cliente piloto") },
             subtotalCents = 200,
             discountCents = 0,
             totalCents = 200,

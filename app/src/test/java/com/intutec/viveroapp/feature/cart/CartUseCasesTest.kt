@@ -44,6 +44,24 @@ class CartUseCasesTest {
     }
 
     @Test
+    fun `inactive product is rejected without changing cart`() = runTest {
+        val repository = RecordingCartRepository()
+        val result = AddProductToCartUseCase(repository)(product().copy(isActive = false))
+
+        assertTrue(result.isFailure)
+        assertFalse(repository.addCalled)
+    }
+
+    @Test
+    fun `product with known insufficient stock is rejected`() = runTest {
+        val repository = RecordingCartRepository()
+        val result = AddProductToCartUseCase(repository)(product().copy(stockAvailable = 0))
+
+        assertTrue(result.isFailure)
+        assertFalse(repository.addCalled)
+    }
+
+    @Test
     fun `send requires authenticated user id`() = runTest {
         val repository = RecordingCartRepository()
         val store = SessionStore()

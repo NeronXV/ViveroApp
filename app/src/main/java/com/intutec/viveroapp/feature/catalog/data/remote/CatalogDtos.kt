@@ -41,3 +41,17 @@ data class RemoteProductDto(
     @SerialName("updated_at") val updatedAt: String,
     val images: List<RemoteProductImageDto> = emptyList(),
 )
+
+@Serializable
+data class RemoteBranchCatalogInventoryItemDto(
+    val productId: String,
+    val totalQuantity: Double,
+    val updatedAt: String? = null,
+)
+
+@Serializable
+data class RemoteBranchCatalogInventoryDto(
+    val schemaVersion: Int,
+    val branchId: String,
+    val items: List<RemoteBranchCatalogInventoryItemDto>,
+)

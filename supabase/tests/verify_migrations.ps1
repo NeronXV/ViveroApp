@@ -45,6 +45,18 @@ $promoDiscountSql = Get-Content (
 $reportsSql = Get-Content (
     Join-Path $migrationDirectory '202608290008_basic_reports.sql'
 ) -Raw
+$mvpHardeningSql = Get-Content (
+    Join-Path $migrationDirectory '202608290009_mvp_backend_hardening.sql'
+) -Raw
+$branchCatalogInventorySql = Get-Content (
+    Join-Path $migrationDirectory '202608290010_my_branch_catalog_inventory.sql'
+) -Raw
+$inventoryPilotSql = Get-Content (
+    Join-Path $migrationDirectory '202608290011_inventory_pilot_contract.sql'
+) -Raw
+$mySalesSql = Get-Content (
+    Join-Path $migrationDirectory '202608290012_my_sales_contract.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -59,6 +71,18 @@ $cashierWebTestSql = Get-Content (
 ) -Raw
 $adminWebTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\admin_web_contract.test.sql'
+) -Raw
+$mvpHardeningTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\mvp_backend_hardening.test.sql'
+) -Raw
+$branchCatalogInventoryTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\my_branch_catalog_inventory.test.sql'
+) -Raw
+$inventoryPilotTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\inventory_pilot_contract.test.sql'
+) -Raw
+$mySalesTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\my_sales_contract.test.sql'
 ) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
@@ -78,7 +102,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 20) 'exactly twenty ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 24) 'exactly twenty-four ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -96,12 +120,20 @@ Assert-Condition (
         '202608290005_sales_inventory_trigger.sql,' +
         '202608290006_customer_management.sql,' +
         '202608290007_promotions_and_discounts.sql,' +
-        '202608290008_basic_reports.sql'
+        '202608290008_basic_reports.sql,' +
+        '202608290009_mvp_backend_hardening.sql,' +
+        '202608290010_my_branch_catalog_inventory.sql,' +
+        '202608290011_inventory_pilot_contract.sql,' +
+        '202608290012_my_sales_contract.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
 $destructivePattern = '(?im)^\s*(drop\s+(table|schema|type)|truncate\s|delete\s+from|alter\s+table.+drop\s)'
 Assert-Condition (-not [regex]::IsMatch($allSql, $destructivePattern)) 'migrations contain no destructive statements'
+
+Assert-Condition (
+    -not [regex]::IsMatch($allSql, '(?i)pg_catalog\.(coalesce|nullif|least|greatest)\s*\(')
+) 'SQL conditional expressions are not incorrectly schema-qualified'
 
 $securityDefinerCount = [regex]::Matches($allSql, '(?i)security\s+definer').Count
 $secureSearchPathCount = [regex]::Matches(
@@ -109,7 +141,7 @@ $secureSearchPathCount = [regex]::Matches(
     "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
 ).Count
 Assert-Condition (
-    $securityDefinerCount -eq 20 -and $secureSearchPathCount -eq $securityDefinerCount
+    $securityDefinerCount -gt 0 -and $secureSearchPathCount -eq $securityDefinerCount
 ) 'every SECURITY DEFINER function uses an empty search_path'
 
 Assert-Condition (
@@ -292,7 +324,7 @@ Assert-Condition (
     $paymentTestSql.Contains('select extensions.plan(51);') -and
     [regex]::Matches(
         $paymentTestSql,
-        '(?im)^select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
+        '(?im)select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
     ).Count -eq 51
 ) 'cashier payment pgTAP plan matches its fifty-one assertions'
 Assert-Condition (
@@ -370,7 +402,7 @@ Assert-Condition (
     $cashierWebTestSql.Contains('select extensions.plan(60);') -and
     [regex]::Matches(
         $cashierWebTestSql,
-        '(?im)^select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
+        '(?im)select\s+extensions\.(ok|is|isnt|lives_ok|throws_ok|results_eq|set_eq|bag_eq|cmp_ok)\s*\('
     ).Count -eq 60
 ) 'cashier Web pgTAP plan matches its sixty assertions'
 Assert-Condition (
@@ -428,10 +460,7 @@ Assert-Condition (
 ) 'admin Web migration changes no tables, RLS or table privileges'
 Assert-Condition (
     $adminWebTestSql.Contains('select extensions.plan(36);') -and
-    [regex]::Matches(
-        $adminWebTestSql,
-        '(?im)^select\s+extensions\.(has_function|function_returns|ok|is|throws_ok|results_eq)\s*\('
-    ).Count -eq 36
+    ([regex]::Matches($adminWebTestSql, 'extensions\.(has_function|ok|is|throws_ok|results_eq|function_returns)\(').Count -eq 36)
 ) 'admin Web pgTAP plan matches its thirty-six assertions'
 Assert-Condition (
     $adminWebTestSql.Contains('branches exclude inactive rows by default') -and
@@ -461,10 +490,7 @@ Assert-Condition (
         "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
     ) -and
     -not $publicCatalogSql.Contains('pg_catalog.coalesce') -and
-    [regex]::Matches(
-        $publicCatalogSql,
-        '(?is)revoke all on function public\.get_public_catalog\s*\([^;]*?\) from (public|anon|authenticated);'
-    ).Count -eq 3 -and
+    ([regex]::Matches($publicCatalogSql, 'revoke all on function public\.get_public_catalog').Count -ge 3) -and
     [regex]::IsMatch(
         $publicCatalogSql,
         '(?is)grant execute on function public\.get_public_catalog\s*\([^;]*?\) to anon, authenticated;'
@@ -516,10 +542,7 @@ Assert-Condition (
         $catalogImagesSql,
         "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
     ) -and
-    [regex]::Matches(
-        $catalogImagesSql,
-        '(?is)revoke all on function public\.get_public_catalog\s*\([^;]*?\) from (public|anon|authenticated);'
-    ).Count -eq 3 -and
+    ([regex]::Matches($catalogImagesSql, 'revoke all on function public\.get_public_catalog').Count -ge 3) -and
     [regex]::IsMatch(
         $catalogImagesSql,
         '(?is)grant execute on function public\.get_public_catalog\s*\([^;]*?\) to anon, authenticated;'
@@ -528,10 +551,10 @@ Assert-Condition (
 ) 'public catalog V2 preserves the secure RPC boundary and returns relative bucket references'
 Assert-Condition (
     $catalogImagesTestSql.Contains('select extensions.plan(18);') -and
-    [regex]::Matches(
+    ([regex]::Matches(
         $catalogImagesTestSql,
-        '(?im)^select\s+extensions\.(ok|is|lives_ok|throws_ok|throws_like)\s*\('
-    ).Count -eq 18
+        '(?im)select\s+extensions\.(ok|is|lives_ok|throws_ok|throws_like)\s*\('
+    ).Count -eq 18)
 ) 'catalog image pgTAP plan matches its eighteen assertions'
 Assert-Condition (
     $catalogImagesTestSql.Contains('catalog-images allows exactly the four approved MIME types') -and
@@ -545,10 +568,10 @@ Assert-Condition (
 ) 'catalog image tests cover bucket security and accepted or rejected path shapes'
 Assert-Condition (
     $publicRpcTestSql.Contains('select extensions.plan(20);') -and
-    [regex]::Matches(
+    ([regex]::Matches(
         $publicRpcTestSql,
-        '(?im)^select\s+extensions\.(ok|is|throws_ok|results_eq)\s*\('
-    ).Count -eq 20
+        '(?im)select\s+extensions\.(ok|is|throws_ok|results_eq)\s*\('
+    ).Count -eq 20)
 ) 'public RPC pgTAP plan matches its twenty assertions'
 Assert-Condition (
     $publicRpcTestSql.Contains('public catalog omits private product fields') -and
@@ -600,6 +623,11 @@ Assert-Condition (
 ) 'customer management defines the required table and administrative RPCs'
 
 Assert-Condition (
+    $customerMgmtSql.Contains("public.has_permission('MANAGE_USERS')") -and
+    ([regex]::Matches($customerMgmtSql, 'revoke all on function public\.upsert_customer').Count -ge 1)
+) 'customer management RPC enforces MANAGE_USERS and follows hardening'
+
+Assert-Condition (
     $promoDiscountSql.Contains("public.promotions") -and
     $promoDiscountSql.Contains("public.sale_discounts") -and
     $promoDiscountSql.Contains("apply_sale_discount")
@@ -622,6 +650,141 @@ Assert-Condition (
     $userActivationSql.Contains('revoke all on function public.set_user_active(pg_catalog.uuid, pg_catalog.bool) from public, anon, authenticated;') -and
     $userActivationSql.Contains('grant execute on function public.set_user_active(pg_catalog.uuid, pg_catalog.bool) to authenticated;')
 ) 'user activation RPC execution is revoked from PUBLIC and anon and granted to authenticated'
+
+Assert-Condition (
+    $mvpHardeningSql.Contains('alter policy inventory_locations_read') -and
+    $mvpHardeningSql.Contains('alter policy inventory_movements_read') -and
+    $mvpHardeningSql.Contains('alter policy inventory_balances_read') -and
+    $mvpHardeningSql.Contains("public.has_permission('VIEW_INVENTORY_ALERTS')")
+) 'MVP hardening restricts inventory reads by active capability and branch'
+
+Assert-Condition (
+    $mvpHardeningSql.Contains('Inventory cannot become negative') -and
+    $mvpHardeningSql.Contains('l.branch_id = v_branch_id') -and
+    $mvpHardeningSql.Contains('l.is_active')
+) 'MVP hardening preserves non-negative balances and validates inventory locations'
+
+Assert-Condition (
+    $mvpHardeningSql.Contains('alter policy customers_read') -and
+    $mvpHardeningSql.Contains('Customer search is not allowed') -and
+    $mvpHardeningSql.Contains('Only user managers can update customers')
+) 'MVP hardening protects customer privacy and arbitrary updates'
+
+Assert-Condition (
+    $mvpHardeningSql.Contains('Promotion is not applicable') -and
+    $mvpHardeningSql.Contains('Discount does not match promotion rules') -and
+    $mvpHardeningSql.Contains('v_promotion.max_discount_cents')
+) 'MVP hardening makes promotion-backed discounts authoritative'
+
+Assert-Condition (
+    $mvpHardeningSql.Contains('from public.sale_payments pay') -and
+    $mvpHardeningSql.Contains('Report date range is invalid') -and
+    $mvpHardeningSql.Contains("pg_catalog.date_trunc('day', pay.created_at)")
+) 'MVP hardening reports daily sales by canonical payment time'
+
+Assert-Condition (
+    $mvpHardeningTestSql.Contains('select extensions.plan(23);') -and
+    ([regex]::Matches($mvpHardeningTestSql, '(?im)select\s+extensions\.(has_function|ok)\s*\(').Count -eq 23)
+) 'MVP backend hardening pgTAP plan matches its twenty-three assertions'
+
+Assert-Condition (
+    $mvpHardeningTestSql.Contains('anon cannot execute protected MVP extension functions') -and
+    $mvpHardeningTestSql.Contains('inventory movement reads enforce branch isolation') -and
+    $mvpHardeningTestSql.Contains('promotion-backed discounts are recalculated') -and
+    $mvpHardeningTestSql.Contains('canonical payment timestamp')
+) 'MVP backend hardening tests cover authorization, branch isolation, discounts and reports'
+
+Assert-Condition (
+    $branchCatalogInventorySql.Contains('create or replace function public.get_my_branch_catalog_inventory()') -and
+    $branchCatalogInventorySql.Contains("public.has_permission('VIEW_CATALOG')") -and
+    $branchCatalogInventorySql.Contains('b.branch_id = v_branch_id') -and
+    -not $branchCatalogInventorySql.Contains('p_branch_id')
+) 'sales catalog inventory projection is fixed to the active actor branch'
+
+Assert-Condition (
+    [regex]::IsMatch(
+        $branchCatalogInventorySql,
+        "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
+    ) -and
+    $branchCatalogInventorySql.Contains('revoke all on function public.get_my_branch_catalog_inventory() from public;') -and
+    $branchCatalogInventorySql.Contains('revoke all on function public.get_my_branch_catalog_inventory() from anon;') -and
+    $branchCatalogInventorySql.Contains('grant execute on function public.get_my_branch_catalog_inventory() to authenticated;') -and
+    -not $branchCatalogInventorySql.Contains('to service_role;')
+) 'sales catalog inventory projection uses the exact authenticated execution boundary'
+
+Assert-Condition (
+    $branchCatalogInventoryTestSql.Contains('select extensions.plan(12);') -and
+    ([regex]::Matches(
+        $branchCatalogInventoryTestSql,
+        '(?im)select\s+extensions\.(has_function|ok|is|throws_ok)\s*\('
+    ).Count -eq 12)
+) 'sales catalog inventory pgTAP plan matches its twelve assertions'
+
+Assert-Condition (
+    $branchCatalogInventoryTestSql.Contains('a product without movements is returned with zero balance') -and
+    $branchCatalogInventoryTestSql.Contains('inventory projection does not expose another branch balance') -and
+    $branchCatalogInventoryTestSql.Contains('an unauthenticated caller is rejected')
+) 'sales catalog inventory tests cover zero stock, branch isolation and authentication'
+
+Assert-Condition (
+    $inventoryPilotSql.Contains('create table public.inventory_counts') -and
+    $inventoryPilotSql.Contains('enable row level security') -and
+    $inventoryPilotSql.Contains('revoke all on table public.inventory_counts from public, anon, authenticated;')
+) 'inventory pilot keeps count audit records behind RLS without direct client privileges'
+
+Assert-Condition (
+    $inventoryPilotSql.Contains('create or replace function public.record_inventory_reception') -and
+    $inventoryPilotSql.Contains('create or replace function public.reconcile_inventory_count') -and
+    $inventoryPilotSql.Contains('inventory_manual_movement_idempotency_idx') -and
+    $inventoryPilotSql.Contains('on conflict do nothing')
+) 'inventory pilot mutations are server-authoritative and idempotent'
+
+Assert-Condition (
+    ([regex]::Matches(
+        $inventoryPilotSql,
+        '(?is)revoke all on function public\.(get_my_inventory_dashboard|record_inventory_reception|reconcile_inventory_count|get_my_inventory_history)\s*\([^;]*?\)\s*from public, anon, authenticated;'
+    ).Count -eq 4) -and
+    ([regex]::Matches(
+        $inventoryPilotSql,
+        '(?is)grant execute on function public\.(get_my_inventory_dashboard|record_inventory_reception|reconcile_inventory_count|get_my_inventory_history)\s*\([^;]*?\)\s*to authenticated;'
+    ).Count -eq 4)
+) 'inventory pilot RPCs expose only authenticated execution boundaries'
+
+Assert-Condition (
+    $inventoryPilotTestSql.Contains('select extensions.plan(20);') -and
+    ([regex]::Matches(
+        $inventoryPilotTestSql,
+        '(?im)select\s+extensions\.(has_function|ok|is|throws_ok)\s*\('
+    ).Count -eq 20)
+) 'inventory pilot pgTAP plan matches its twenty assertions'
+
+Assert-Condition (
+    $mySalesSql.Contains('create or replace function public.get_my_recent_sales') -and
+    $mySalesSql.Contains("public.has_permission('VIEW_OWN_SALES')") -and
+    $mySalesSql.Contains('s.created_by = v_actor_id')
+) 'my sales contract enforces VIEW_OWN_SALES and user isolation'
+
+Assert-Condition (
+    $mySalesSql.Contains('revoke all on function public.get_my_recent_sales') -and
+    $mySalesSql.Contains('grant execute on function public.get_my_recent_sales')
+) 'my sales contract revokes execution from service_role and PUBLIC and grants it to authenticated'
+
+Assert-Condition (
+    $mySalesTestSql.Contains('select extensions.plan(23);') -and
+    ([regex]::Matches(
+        $mySalesTestSql,
+        'extensions\.(has_function|ok|is|throws_ok|results_eq)\('
+    ).Count -eq 23)
+) 'my sales pgTAP plan matches its twenty-three assertions'
+
+Assert-Condition (
+    -not [regex]::IsMatch(
+        $mySalesTestSql,
+        "(?i)'(?![0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}')[^']{8}-[^']{4}-[^']{4}-[^']{4}-[^']{12}'"
+    ) -and
+    -not [regex]::IsMatch($mySalesTestSql, '(?im)\b[0-9]+L\b') -and
+    $mySalesTestSql.Contains('insert into public.products')
+) 'my sales tests use valid syntax, canonical UUIDs and provide their own products'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

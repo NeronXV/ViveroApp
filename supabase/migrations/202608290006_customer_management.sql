@@ -56,11 +56,11 @@ begin
 
     insert into public.customers (id, full_name, email, phone, is_active)
     values (
-        pg_catalog.coalesce(p_id, pg_catalog.gen_random_uuid()),
+        coalesce(p_id, pg_catalog.gen_random_uuid()),
         v_full_name,
-        pg_catalog.nullif(v_email, ''),
-        pg_catalog.nullif(pg_catalog.btrim(p_phone), ''),
-        pg_catalog.coalesce(p_is_active, true)
+        nullif(v_email, ''),
+        nullif(pg_catalog.btrim(p_phone), ''),
+        coalesce(p_is_active, true)
     )
     on conflict (id) do update
     set full_name = excluded.full_name,

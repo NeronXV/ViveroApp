@@ -29,6 +29,15 @@ class SessionDashboardRepository @Inject constructor(
                 if (session.canOperateAtBranch(AppPermission.OPERATE_CASHIER)) {
                     add(DashboardModule("cashier", "Caja", "Atiende comandas de esta sucursal", true))
                 }
+                if (session.canOperateAtBranch(AppPermission.MANAGE_INVENTORY)) {
+                    add(DashboardModule("inventory", "Inventario", "Recibe mercancía y concilia conteos", true))
+                }
+                if (session.hasCapability(AppPermission.VIEW_REPORTS)) {
+                    add(DashboardModule("reports", "Reportes", "Analiza ventas y productos", true))
+                }
+                if (session.hasCapability(AppPermission.VIEW_OWN_SALES)) {
+                    add(DashboardModule("mysales", "Mis comandas", "Consulta tus ventas recientes", true))
+                }
             },
         )
     }

@@ -42,26 +42,8 @@ class RoomCartRepository @Inject constructor(
             require(!product.stockKnown || product.isAvailable) { "Este producto no tiene existencia disponible." }
             val current = dao.getCart(Cart.ACTIVE_CART_ID)?.toDomain() ?: Cart()
             val existing = current.items.firstOrNull { it.productId == product.id }
-            val quantity = (existing?.quantity ?: 0) + 1
-            if (product.stockKnown) {
-                require(quantity <= product.stockAvailable) { "Solo hay ${product.stockAvailable} ${product.unit}(s) disponibles." }
-            }
             dao.upsertCart(current.copy(updatedAt = Instant.now()).toHeaderEntity())
-            dao.upsertItem(
-                CartItem(
-                    productId = product.id,
-                    internalCode = product.internalCode,
-                    name = product.commonName,
-                    imageKey = product.imageKey,
-                    unit = product.unit,
-                    listPriceCents = product.priceCents,
-                    unitPriceCents = product.effectivePriceCents,
-                    quantity = quantity,
-                    stockAvailable = product.stockAvailable,
-                    stockKnown = product.stockKnown,
-                    promotionName = product.promotion?.name,
-                ).toEntity(current.id),
-            )
+            dao.upsertItem(nextCartItem(existing, product).toEntity(current.id))
         }
     }
 
@@ -156,6 +138,27 @@ class RoomCartRepository @Inject constructor(
     }
 }
 
+internal fun nextCartItem(existing: CartItem?, product: Product): CartItem {
+    require(existing == null || existing.productId == product.id) { "El producto no coincide con la fila del carrito." }
+    val quantity = (existing?.quantity ?: 0) + 1
+    if (product.stockKnown) {
+        require(quantity <= product.stockAvailable) { "Solo hay ${product.stockAvailable} ${product.unit}(s) disponibles." }
+    }
+    return CartItem(
+        productId = product.id,
+        internalCode = product.internalCode,
+        name = product.commonName,
+        imageKey = product.imageKey,
+        unit = product.unit,
+        listPriceCents = product.priceCents,
+        unitPriceCents = product.effectivePriceCents,
+        quantity = quantity,
+        stockAvailable = product.stockAvailable,
+        stockKnown = product.stockKnown,
+        promotionName = product.promotion?.name,
+    )
+}
+
 private fun requireCanonicalUuid(value: String, message: String) {
     val parsed = runCatching { UUID.fromString(value) }.getOrNull()
     require(parsed != null && parsed.toString().equals(value, ignoreCase = true)) { message }
@@ -165,7 +168,7 @@ private fun CartWithItems.toDomain(): Cart = Cart(
     id = header.id,
     items = items.map(CartItemEntity::toDomain).sortedBy(CartItem::name),
     customer = header.customerId?.let { id ->
-        CartCustomer(id, header.customerName.orEmpty(), header.memberNumber.orEmpty())
+        CartCustomer(id, header.customerName.orEmpty())
     },
     updatedAt = Instant.ofEpochMilli(header.updatedAtEpochMs),
 )
@@ -176,7 +179,7 @@ private fun CartItemEntity.toDomain() = CartItem(
 )
 
 private fun Cart.toHeaderEntity() = CartHeaderEntity(
-    id, customer?.id, customer?.name, customer?.memberNumber, updatedAt.toEpochMilli(),
+    id, customer?.id, customer?.name, null, updatedAt.toEpochMilli(),
 )
 
 private fun CartItem.toEntity(cartId: String) = CartItemEntity(
@@ -185,7 +188,7 @@ private fun CartItem.toEntity(cartId: String) = CartItemEntity(
 )
 
 private fun SaleTicket.toEntity() = SaleEntity(
-    id, folio, customer?.id, customer?.name, customer?.memberNumber, subtotalCents,
+    id, folio, customer?.id, customer?.name, null, subtotalCents,
     discountCents, totalCents, status.name, createdBy, branchId, createdAt.toEpochMilli(), syncPending,
     syncState.name, syncAttemptCount, syncLastError, syncLastAttemptAt?.toEpochMilli(),
 )

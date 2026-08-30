@@ -22,7 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LocalFlorist
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PointOfSale
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.VerifiedUser
@@ -80,6 +83,9 @@ fun HomeScreenRoute(
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
+    onInventoryClick: () -> Unit,
+    onReportsClick: () -> Unit,
+    onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -90,6 +96,9 @@ fun HomeScreenRoute(
         onCatalogClick = onCatalogClick,
         onCartClick = onCartClick,
         onCashierClick = onCashierClick,
+        onInventoryClick = onInventoryClick,
+        onReportsClick = onReportsClick,
+        onMySalesClick = onMySalesClick,
         onProfileClick = onProfileClick,
     )
 }
@@ -99,11 +108,17 @@ internal fun onHomeModuleClick(
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
+    onInventoryClick: () -> Unit,
+    onReportsClick: () -> Unit,
+    onMySalesClick: () -> Unit,
 ) {
     when (module.id) {
         "catalog" -> onCatalogClick()
         "cart" -> onCartClick()
         "cashier" -> onCashierClick()
+        "inventory" -> onInventoryClick()
+        "reports" -> onReportsClick()
+        "mysales" -> onMySalesClick()
     }
 }
 
@@ -114,6 +129,9 @@ fun HomeScreen(
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
+    onInventoryClick: () -> Unit,
+    onReportsClick: () -> Unit,
+    onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
     Scaffold(containerColor = Cream) { padding ->
@@ -130,6 +148,9 @@ fun HomeScreen(
                     onCatalogClick = onCatalogClick,
                     onCartClick = onCartClick,
                     onCashierClick = onCashierClick,
+                    onInventoryClick = onInventoryClick,
+                    onReportsClick = onReportsClick,
+                    onMySalesClick = onMySalesClick,
                     onProfileClick = onProfileClick,
                 )
             }
@@ -143,6 +164,9 @@ private fun DashboardContent(
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
+    onInventoryClick: () -> Unit,
+    onReportsClick: () -> Unit,
+    onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -179,7 +203,11 @@ private fun DashboardContent(
                             cart = content.cart,
                             expanded = expanded,
                             onModuleClick = { module ->
-                                onHomeModuleClick(module, onCatalogClick, onCartClick, onCashierClick)
+                                onHomeModuleClick(
+                                    module, onCatalogClick, onCartClick,
+                                    onCashierClick, onInventoryClick, onReportsClick,
+                                    onMySalesClick
+                                )
                             },
                         )
                     }
@@ -437,6 +465,9 @@ private fun DashboardModule.icon(): ImageVector = when (id) {
     "catalog" -> Icons.Outlined.LocalFlorist
     "cart" -> Icons.Outlined.ShoppingCart
     "cashier" -> Icons.Outlined.PointOfSale
+    "inventory" -> Icons.Outlined.Inventory2
+    "reports" -> Icons.Outlined.Assessment
+    "mysales" -> Icons.Outlined.History
     else -> Icons.Outlined.LocalFlorist
 }
 
@@ -519,6 +550,9 @@ private fun HomePreview(dashboard: Dashboard, cart: Cart) {
             onCatalogClick = {},
             onCartClick = {},
             onCashierClick = {},
+            onInventoryClick = {},
+            onReportsClick = {},
+            onMySalesClick = {},
             onProfileClick = {},
         )
     }

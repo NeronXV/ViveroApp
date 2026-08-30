@@ -48,6 +48,9 @@ class DashboardCartCapabilityTest {
             onCatalogClick = { catalogOpens += 1 },
             onCartClick = { cartOpens += 1 },
             onCashierClick = {},
+            onInventoryClick = {},
+            onReportsClick = {},
+            onMySalesClick = {},
         )
 
         assertEquals(0, catalogOpens)
@@ -71,9 +74,32 @@ class DashboardCartCapabilityTest {
             onCatalogClick = {},
             onCartClick = {},
             onCashierClick = { cashierOpens += 1 },
+            onInventoryClick = {},
+            onReportsClick = {},
+            onMySalesClick = {},
         )
 
         assertEquals(1, cashierOpens)
+    }
+
+    @Test
+    fun `inventory module depends on MANAGE_INVENTORY and invokes its callback`() = runTest {
+        val allowed = dashboardFor(UserRole.MANAGER, setOf(AppPermission.MANAGE_INVENTORY))
+        val denied = dashboardFor(UserRole.MANAGER, setOf(AppPermission.VIEW_CATALOG))
+        var inventoryOpens = 0
+
+        assertTrue(allowed.modules.any { it.id == "inventory" })
+        assertFalse(denied.modules.any { it.id == "inventory" })
+        onHomeModuleClick(
+            allowed.modules.single { it.id == "inventory" },
+            onCatalogClick = {},
+            onCartClick = {},
+            onCashierClick = {},
+            onInventoryClick = { inventoryOpens += 1 },
+            onReportsClick = {},
+            onMySalesClick = {},
+        )
+        assertEquals(1, inventoryOpens)
     }
 
     private suspend fun dashboardFor(role: UserRole, capabilities: Set<AppPermission>) =

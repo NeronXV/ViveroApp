@@ -8,12 +8,17 @@ import io.github.jan.supabase.postgrest.Postgrest
 import javax.inject.Inject
 import javax.inject.Singleton
 
+interface ISupabaseProvider {
+    val isConfigured: Boolean
+    val client: SupabaseClient?
+}
+
 @Singleton
-class SupabaseProvider @Inject constructor() {
-    val isConfigured: Boolean = BuildConfig.SUPABASE_URL.isNotBlank() &&
+class SupabaseProvider @Inject constructor() : ISupabaseProvider {
+    override val isConfigured: Boolean = BuildConfig.SUPABASE_URL.isNotBlank() &&
         BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()
 
-    val client: SupabaseClient? by lazy {
+    override val client: SupabaseClient? by lazy {
         if (!isConfigured) return@lazy null
         createSupabaseClient(
             supabaseUrl = BuildConfig.SUPABASE_URL,

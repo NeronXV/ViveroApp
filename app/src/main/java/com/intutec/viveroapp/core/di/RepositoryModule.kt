@@ -26,6 +26,20 @@ import com.intutec.viveroapp.feature.cashier.data.remote.CashierPaymentRemoteDat
 import com.intutec.viveroapp.feature.cashier.data.remote.SupabaseCashierPaymentRemoteDataSource
 import com.intutec.viveroapp.feature.cashier.data.repository.SupabaseCashierPaymentRepository
 import com.intutec.viveroapp.feature.cashier.domain.repository.CashierPaymentRepository
+import com.intutec.viveroapp.feature.inventory.data.repository.SupabaseInventoryRepository
+import com.intutec.viveroapp.feature.inventory.domain.repository.InventoryRepository
+import com.intutec.viveroapp.feature.customer.data.repository.SupabaseCustomerRepository
+import com.intutec.viveroapp.feature.customer.domain.repository.CustomerRepository
+import com.intutec.viveroapp.feature.customer.data.remote.CustomerRemoteDataSource
+import com.intutec.viveroapp.feature.customer.data.remote.SupabaseCustomerRemoteDataSource
+import com.intutec.viveroapp.feature.reports.data.repository.SupabaseReportsRepository
+import com.intutec.viveroapp.feature.reports.domain.repository.ReportsRepository
+import com.intutec.viveroapp.feature.reports.data.remote.ReportsRemoteDataSource
+import com.intutec.viveroapp.feature.reports.data.remote.SupabaseReportsRemoteDataSource
+import com.intutec.viveroapp.feature.mysales.data.remote.MySalesRemoteDataSource
+import com.intutec.viveroapp.feature.mysales.data.remote.SupabaseMySalesRemoteDataSource
+import com.intutec.viveroapp.feature.mysales.data.repository.SupabaseMySalesRepository
+import com.intutec.viveroapp.feature.mysales.domain.repository.MySalesRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -104,4 +118,46 @@ abstract class RepositoryModule {
     abstract fun bindCashierPaymentRepository(
         implementation: SupabaseCashierPaymentRepository,
     ): CashierPaymentRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindInventoryRepository(
+        implementation: SupabaseInventoryRepository,
+    ): InventoryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindReportsRemoteDataSource(
+        implementation: SupabaseReportsRemoteDataSource,
+    ): ReportsRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCustomerRemoteDataSource(
+        implementation: SupabaseCustomerRemoteDataSource,
+    ): CustomerRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCustomerRepository(
+        implementation: SupabaseCustomerRepository,
+    ): CustomerRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindReportsRepository(
+        implementation: SupabaseReportsRepository,
+    ): ReportsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMySalesRemoteDataSource(
+        implementation: SupabaseMySalesRemoteDataSource,
+    ): MySalesRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindMySalesRepository(
+        implementation: SupabaseMySalesRepository,
+    ): MySalesRepository
 }

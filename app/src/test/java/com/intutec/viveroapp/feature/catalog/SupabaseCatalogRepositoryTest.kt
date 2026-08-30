@@ -6,6 +6,8 @@ import com.intutec.viveroapp.core.session.SessionMode
 import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.catalog.data.remote.CatalogRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryItemDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCategoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductImageDto
@@ -99,7 +101,7 @@ class SupabaseCatalogRepositoryTest {
 
         assertTrue(snapshot.categories.isEmpty())
         assertTrue(snapshot.products.isEmpty())
-        assertEquals(2, remote.readCalls)
+        assertEquals(3, remote.readCalls)
     }
 
     @Test
@@ -136,7 +138,7 @@ class SupabaseCatalogRepositoryTest {
         val snapshot = repository.observeCatalog().first()
 
         assertTrue(snapshot.products.isEmpty())
-        assertEquals(2, remoteData.readCalls)
+        assertEquals(3, remoteData.readCalls)
     }
 
     @Test
@@ -162,17 +164,66 @@ class SupabaseCatalogRepositoryTest {
             .map { it.name.substringBefore('-') }
             .toSet()
 
-        assertEquals(setOf("loadVisibleCategories", "loadActiveProducts"), operations)
+        assertEquals(
+            setOf("loadVisibleCategories", "loadActiveProducts", "loadMyBranchInventory"),
+            operations,
+        )
+    }
+
+    @Test
+    fun `branch inventory makes stock authoritative for matching products`() = runTest {
+        val remote = remote(
+            inventory = RemoteBranchCatalogInventoryDto(
+                schemaVersion = 1,
+                branchId = BRANCH_ID,
+                items = listOf(
+                    RemoteBranchCatalogInventoryItemDto(PRODUCT_ID, 7.0),
+                ),
+            ),
+        )
+
+        val mapped = SupabaseCatalogRepository(remote).observeCatalog().first().products.single()
+
+        assertTrue(mapped.stockKnown)
+        assertEquals(7, mapped.stockAvailable)
+        assertTrue(mapped.isAvailable)
+    }
+
+    @Test
+    fun `missing inventory RPC preserves catalog with explicitly unknown stock`() = runTest {
+        val mapped = SupabaseCatalogRepository(remote(inventory = null))
+            .observeCatalog().first().products.single()
+
+        assertFalse(mapped.stockKnown)
+        assertEquals(0, mapped.stockAvailable)
+    }
+
+    @Test
+    fun `fractional inventory is rejected while Android cart supports whole quantities only`() = runTest {
+        val remote = remote(
+            inventory = RemoteBranchCatalogInventoryDto(
+                schemaVersion = 1,
+                branchId = BRANCH_ID,
+                items = listOf(RemoteBranchCatalogInventoryItemDto(PRODUCT_ID, 1.5)),
+            ),
+        )
+
+        val result = runCatching { SupabaseCatalogRepository(remote).observeCatalog().first() }
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("cantidades enteras") == true)
     }
 
     private fun remote(
         categories: List<RemoteCategoryDto> = listOf(category()),
         products: List<RemoteProductDto> = listOf(product()),
-    ) = RecordingRemoteDataSource(categories, products)
+        inventory: RemoteBranchCatalogInventoryDto? = null,
+    ) = RecordingRemoteDataSource(categories, products, inventory)
 
     private class RecordingRemoteDataSource(
         private val categories: List<RemoteCategoryDto>,
         private val products: List<RemoteProductDto>,
+        private val inventory: RemoteBranchCatalogInventoryDto?,
     ) : CatalogRemoteDataSource {
         var readCalls = 0
         var failure: Throwable? = null
@@ -188,11 +239,18 @@ class SupabaseCatalogRepositoryTest {
             failure?.let { throw it }
             return products
         }
+
+        override suspend fun loadMyBranchInventory(): RemoteBranchCatalogInventoryDto? {
+            readCalls += 1
+            failure?.let { throw it }
+            return inventory
+        }
     }
 
     companion object {
         private const val CATEGORY_ID = "11111111-1111-4111-8111-111111111111"
         private const val PRODUCT_ID = "22222222-2222-4222-8222-222222222222"
+        private const val BRANCH_ID = "55555555-5555-4555-8555-555555555555"
         private const val IMAGE_ID_1 = "33333333-3333-4333-8333-333333333331"
         private const val IMAGE_ID_2 = "33333333-3333-4333-8333-333333333332"
         private const val IMAGE_ID_3 = "33333333-3333-4333-8333-333333333333"

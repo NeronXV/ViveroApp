@@ -128,6 +128,7 @@ class HomeScreenTest {
                         onCatalogClick = onCatalog,
                         onCartClick = onCart,
                         onCashierClick = {},
+                        onInventoryClick = {},
                         onProfileClick = {},
                     )
                 }

@@ -2,6 +2,7 @@ package com.intutec.viveroapp.feature.cart.sync
 
 import com.intutec.viveroapp.feature.cart.data.local.CartDao
 import com.intutec.viveroapp.feature.cart.data.local.SaleWithItems
+import com.intutec.viveroapp.feature.cart.domain.model.CartCustomer
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
 import com.intutec.viveroapp.feature.cart.domain.model.SaleStatus
 import com.intutec.viveroapp.feature.cart.domain.model.SaleSyncState
@@ -58,7 +59,9 @@ private fun SaleWithItems.toDomain(): SaleTicket {
                 promotionName = item.promotionName,
             )
         },
-        customer = null,
+        customer = sale.customerId?.let { id ->
+            CartCustomer(id, sale.customerName.orEmpty())
+        },
         subtotalCents = sale.subtotalCents,
         discountCents = sale.discountCents,
         totalCents = sale.totalCents,

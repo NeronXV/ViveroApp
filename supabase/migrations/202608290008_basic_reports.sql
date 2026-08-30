@@ -14,8 +14,8 @@ as $$
 declare
     v_actor_id pg_catalog.uuid := auth.uid();
     v_actor_branch_id pg_catalog.uuid;
-    v_start pg_catalog.timestamptz := pg_catalog.coalesce(p_start_date::pg_catalog.timestamptz, pg_catalog.now() - interval '30 days');
-    v_end pg_catalog.timestamptz := pg_catalog.coalesce((p_end_date + 1)::pg_catalog.timestamptz, pg_catalog.now());
+    v_start pg_catalog.timestamptz := coalesce(p_start_date::pg_catalog.timestamptz, pg_catalog.now() - interval '30 days');
+    v_end pg_catalog.timestamptz := coalesce((p_end_date + 1)::pg_catalog.timestamptz, pg_catalog.now());
 begin
     if v_actor_id is null or not public.has_permission('VIEW_REPORTS') then
         raise exception using errcode = '42501', message = 'Unauthorized to view reports';

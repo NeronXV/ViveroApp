@@ -13,6 +13,7 @@ data class SaleSyncRequest(
     val saleId: String,
     val folio: String,
     val items: List<SaleSyncItem>,
+    val customerId: String?,
 )
 
 data class SaleSyncItem(val productId: String, val quantity: Int)
@@ -67,6 +68,6 @@ internal fun SaleSyncRequest.toRpcParameters(): JsonObject = JsonObject(
                 )
             },
         ),
-        "p_customer_id" to JsonNull,
+        "p_customer_id" to if (customerId != null) JsonPrimitive(customerId) else JsonNull,
     ),
 )

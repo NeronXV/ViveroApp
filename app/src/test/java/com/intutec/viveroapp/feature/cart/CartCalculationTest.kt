@@ -8,7 +8,7 @@ import org.junit.Test
 
 class CartCalculationTest {
     @Test
-    fun `calculates subtotal discount and total using cents`() {
+    fun `keeps several products and calculates totals using cents`() {
         val cart = Cart(
             items = listOf(
                 item("monstera", listPrice = 58_900, unitPrice = 52_900, quantity = 2, stock = 5),
@@ -20,6 +20,7 @@ class CartCalculationTest {
         assertEquals(12_000, cart.discountCents)
         assertEquals(124_700, cart.totalCents)
         assertEquals(3, cart.itemCount)
+        assertEquals(listOf("monstera", "lavanda"), cart.items.map(CartItem::productId))
     }
 
     @Test

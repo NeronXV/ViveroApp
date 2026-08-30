@@ -15,7 +15,7 @@ set search_path = ''
 as $$
 declare
     v_actor_id pg_catalog.uuid := auth.uid();
-    v_name pg_catalog.text := pg_catalog.nullif(pg_catalog.btrim(p_name), '');
+    v_name pg_catalog.text := nullif(pg_catalog.btrim(p_name), '');
     v_category public.categories%rowtype;
 begin
     if v_actor_id is null or not public.has_permission('MANAGE_PRODUCTS') then
@@ -28,10 +28,10 @@ begin
 
     insert into public.categories (id, name, description, is_active)
     values (
-        pg_catalog.coalesce(p_id, pg_catalog.gen_random_uuid()),
+        coalesce(p_id, pg_catalog.gen_random_uuid()),
         v_name,
         p_description,
-        pg_catalog.coalesce(p_is_active, true)
+        coalesce(p_is_active, true)
     )
     on conflict (id) do update
     set name = excluded.name,
@@ -121,21 +121,21 @@ begin
         recommended_climate, is_active
     )
     values (
-        pg_catalog.coalesce(p_id, pg_catalog.gen_random_uuid()),
+        coalesce(p_id, pg_catalog.gen_random_uuid()),
         v_internal_code,
-        pg_catalog.nullif(pg_catalog.btrim(p_barcode), ''),
+        nullif(pg_catalog.btrim(p_barcode), ''),
         v_common_name,
         p_scientific_name,
-        pg_catalog.coalesce(p_description, ''),
+        coalesce(p_description, ''),
         p_category_id,
         p_price_cents,
         p_wholesale_price_cents,
         p_unit,
-        pg_catalog.coalesce(p_minimum_stock, 0),
-        pg_catalog.coalesce(p_watering_advice, ''),
-        pg_catalog.coalesce(p_light_type, ''),
-        pg_catalog.coalesce(p_recommended_climate, ''),
-        pg_catalog.coalesce(p_is_active, true)
+        coalesce(p_minimum_stock, 0),
+        coalesce(p_watering_advice, ''),
+        coalesce(p_light_type, ''),
+        coalesce(p_recommended_climate, ''),
+        coalesce(p_is_active, true)
     )
     on conflict (id) do update
     set internal_code = excluded.internal_code,
