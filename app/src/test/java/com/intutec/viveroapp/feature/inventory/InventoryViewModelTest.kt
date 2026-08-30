@@ -1,6 +1,12 @@
 package com.intutec.viveroapp.feature.inventory
 
 import com.intutec.viveroapp.MainDispatcherRule
+import com.intutec.viveroapp.core.model.UserRole
+import com.intutec.viveroapp.core.security.AppPermission
+import com.intutec.viveroapp.core.security.RolePermissions
+import com.intutec.viveroapp.core.session.SessionStore
+import com.intutec.viveroapp.core.session.UserBranch
+import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryItem
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryMovement
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryOperationResult
@@ -17,6 +23,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+private fun sessionStoreWithBranch(): SessionStore = SessionStore().apply {
+    update(
+        UserSession(
+            userId = "u1",
+            email = "test@vivero.test",
+            fullName = "Test User",
+            role = UserRole.MANAGER,
+            capabilities = RolePermissions.permissionsFor(UserRole.MANAGER),
+            branch = UserBranch("b1", "CENTRO", "Vivero Centro", true),
+            mode = com.intutec.viveroapp.core.session.SessionMode.REMOTE,
+        ),
+    )
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class InventoryViewModelTest {
     @get:Rule val dispatcherRule = MainDispatcherRule()
@@ -24,7 +44,7 @@ class InventoryViewModelTest {
     @Test
     fun `loads and filters branch inventory`() = runTest(dispatcherRule.testDispatcher) {
         val repository = FakeInventoryRepository()
-        val viewModel = InventoryViewModel(repository)
+        val viewModel = InventoryViewModel(repository, sessionStoreWithBranch())
         advanceUntilIdle()
 
         assertEquals(2, viewModel.uiState.value.items.size)
@@ -35,7 +55,7 @@ class InventoryViewModelTest {
     @Test
     fun `reception reloads authoritative total`() = runTest(dispatcherRule.testDispatcher) {
         val repository = FakeInventoryRepository()
-        val viewModel = InventoryViewModel(repository)
+        val viewModel = InventoryViewModel(repository, sessionStoreWithBranch())
         advanceUntilIdle()
 
         viewModel.openAction(repository.items.first(), InventoryAction.RECEPTION)
@@ -52,7 +72,7 @@ class InventoryViewModelTest {
     @Test
     fun `failed retry reuses the idempotency key`() = runTest(dispatcherRule.testDispatcher) {
         val repository = FakeInventoryRepository(failFirstReception = true)
-        val viewModel = InventoryViewModel(repository)
+        val viewModel = InventoryViewModel(repository, sessionStoreWithBranch())
         advanceUntilIdle()
         viewModel.openAction(repository.items.first(), InventoryAction.RECEPTION)
         viewModel.updateQuantity("3")
@@ -70,7 +90,7 @@ class InventoryViewModelTest {
     @Test
     fun `count requires a reason before calling backend`() = runTest(dispatcherRule.testDispatcher) {
         val repository = FakeInventoryRepository()
-        val viewModel = InventoryViewModel(repository)
+        val viewModel = InventoryViewModel(repository, sessionStoreWithBranch())
         advanceUntilIdle()
         viewModel.openAction(repository.items.first(), InventoryAction.COUNT)
         viewModel.updateQuantity("8")

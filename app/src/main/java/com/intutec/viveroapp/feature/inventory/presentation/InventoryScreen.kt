@@ -60,6 +60,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun InventoryScreenRoute(
     onBack: () -> Unit,
+    onCreateProduct: () -> Unit,
     viewModel: InventoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -76,6 +77,7 @@ fun InventoryScreenRoute(
         onCloseDialog = viewModel::closeDialog,
         onCloseHistory = viewModel::closeHistory,
         onDismissMessage = viewModel::dismissMessage,
+        onCreateProduct = onCreateProduct,
     )
 }
 
@@ -93,6 +95,7 @@ fun InventoryScreen(
     onCloseDialog: () -> Unit,
     onCloseHistory: () -> Unit,
     onDismissMessage: () -> Unit,
+    onCreateProduct: () -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.error, state.notice) {
@@ -111,13 +114,16 @@ fun InventoryScreen(
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") }
                 Column(Modifier.weight(1f)) {
                     Text("Inventario", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text("Existencias de tu sucursal", style = MaterialTheme.typography.bodySmall)
+                    Text(if (state.branchName.isNotBlank()) "Sucursal: ${state.branchName}" else "Existencias de tu sucursal", style = MaterialTheme.typography.bodySmall)
                 }
                 Icon(Icons.Outlined.Inventory2, null, Modifier.padding(end = 12.dp).size(28.dp).alpha(.4f))
             }
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            if (state.branchName.isNotBlank()) {
+                Text("Sucursal: ${state.branchName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("inventory_branch_label"))
+            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = onQueryChanged,
@@ -126,8 +132,10 @@ fun InventoryScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("inventory_search"),
             )
             when {
-                state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                state.isLoading -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     CircularProgressIndicator(Modifier.testTag("inventory_loading"))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Cargando existencias de ${state.branchName.ifBlank { "tu sucursal" }}…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 state.error != null && state.items.isEmpty() -> Column(
                     Modifier.fillMaxSize().padding(24.dp).testTag("inventory_error"),
@@ -138,8 +146,13 @@ fun InventoryScreen(
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = onRetry, modifier = Modifier.testTag("inventory_retry")) { Text("Reintentar") }
                 }
-                state.visibleItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No hay productos para mostrar.", Modifier.padding(24.dp))
+                state.visibleItems.isEmpty() -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text("No hay productos para mostrar.", Modifier.padding(bottom = 8.dp))
+                    if (state.items.isEmpty() && state.canManageProducts) {
+                        Text("Primero da de alta un producto", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = onCreateProduct, modifier = Modifier.testTag("inventory_create_product")) { Text("Dar de alta producto") }
+                    }
                 }
                 else -> {
                     LazyVerticalGrid(

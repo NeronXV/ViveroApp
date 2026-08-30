@@ -57,6 +57,12 @@ $inventoryPilotSql = Get-Content (
 $mySalesSql = Get-Content (
     Join-Path $migrationDirectory '202608290012_my_sales_contract.sql'
 ) -Raw
+$catalogImagesStorageSql = Get-Content (
+    Join-Path $migrationDirectory '202608290013_catalog_images_storage.sql'
+) -Raw
+$gradualInventorySql = Get-Content (
+    Join-Path $migrationDirectory '202608290014_gradual_inventory_trigger.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -84,6 +90,9 @@ $inventoryPilotTestSql = Get-Content (
 $mySalesTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\my_sales_contract.test.sql'
 ) -Raw
+$gradualInventoryTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\gradual_inventory_trigger.test.sql'
+) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -102,7 +111,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 24) 'exactly twenty-four ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 26) 'exactly twenty-six ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -124,7 +133,9 @@ Assert-Condition (
         '202608290009_mvp_backend_hardening.sql,' +
         '202608290010_my_branch_catalog_inventory.sql,' +
         '202608290011_inventory_pilot_contract.sql,' +
-        '202608290012_my_sales_contract.sql'
+        '202608290012_my_sales_contract.sql,' +
+        '202608290013_catalog_images_storage.sql,' +
+        '202608290014_gradual_inventory_trigger.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -785,6 +796,32 @@ Assert-Condition (
     -not [regex]::IsMatch($mySalesTestSql, '(?im)\b[0-9]+L\b') -and
     $mySalesTestSql.Contains('insert into public.products')
 ) 'my sales tests use valid syntax, canonical UUIDs and provide their own products'
+
+Assert-Condition (
+    $catalogImagesStorageSql -ne $null -and
+    $catalogImagesStorageSql.Contains('catalog-images public read') -and
+    $catalogImagesStorageSql.Contains('catalog-images insert') -and
+    $catalogImagesStorageSql.Contains("bucket_id = 'catalog-images'") -and
+    $catalogImagesStorageSql.Contains("public.has_permission('MANAGE_PRODUCTS')") -and
+    -not [regex]::IsMatch($catalogImagesStorageSql, '(?i)to\s+service_role')
+) 'catalog images storage policies enforce MANAGE_PRODUCTS and keep anon write denied'
+
+Assert-Condition (
+    -not [regex]::IsMatch($allSql, '(?im)^\s*(do|as)\s+\$(?!\$|[a-z0-9_]+\$)') -and
+    -not [regex]::IsMatch($allSql, '(?im)^\$;\s*$')
+) 'all PL/pgSQL blocks in migrations use complete dollar quote delimiters'
+
+Assert-Condition (
+    $gradualInventorySql.Contains('alter table public.sales disable trigger on_sale_paid_record_inventory;') -and
+    $gradualInventorySql.Contains('inventory_sale_movement_idempotency_idx') -and
+    $gradualInventorySql.Contains('-sum(si.quantity)') -and
+    $gradualInventorySql.Contains('revoke all on function public.record_sale_inventory_movements() from public, anon, authenticated;')
+) 'gradual inventory rollout disables sales inventory trigger and aggregates items by product'
+
+Assert-Condition (
+    $gradualInventoryTestSql.Contains('select extensions.plan(14);') -and
+    ([regex]::Matches($gradualInventoryTestSql, '(?im)select\s+extensions\.(has_function|ok|is|throws_ok)\s*\(').Count -eq 14)
+) 'gradual inventory trigger pgTAP plan matches its fourteen assertions'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

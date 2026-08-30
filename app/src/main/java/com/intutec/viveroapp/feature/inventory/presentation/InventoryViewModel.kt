@@ -2,6 +2,8 @@ package com.intutec.viveroapp.feature.inventory.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.intutec.viveroapp.core.security.AppPermission
+import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryItem
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryMovement
 import com.intutec.viveroapp.feature.inventory.domain.repository.InventoryRepository
@@ -29,6 +31,8 @@ data class InventoryUiState(
     val isSubmitting: Boolean = false,
     val history: List<InventoryMovement>? = null,
     val isHistoryLoading: Boolean = false,
+    val branchName: String = "",
+    val canManageProducts: Boolean = false,
 ) {
     val visibleItems: List<InventoryItem>
         get() = query.trim().lowercase().let { term ->
@@ -41,18 +45,38 @@ data class InventoryUiState(
 @HiltViewModel
 class InventoryViewModel @Inject constructor(
     private val repository: InventoryRepository,
+    private val sessionStore: SessionStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(InventoryUiState())
     val uiState: StateFlow<InventoryUiState> = _uiState.asStateFlow()
     private var pending: PendingOperation? = null
 
-    init { load() }
+    init {
+        refreshBranch()
+        load()
+    }
+
+    private fun refreshBranch() {
+        val session = sessionStore.session.value
+        _uiState.update {
+            it.copy(
+                branchName = session?.branch?.name ?: session?.branchName ?: "",
+                canManageProducts = session?.hasCapability(AppPermission.MANAGE_PRODUCTS) == true,
+            )
+        }
+    }
 
     fun load() = viewModelScope.launch {
+        refreshBranch()
         _uiState.update { it.copy(isLoading = true, error = null) }
         repository.getDashboard().fold(
             onSuccess = { items -> _uiState.update { it.copy(isLoading = false, items = items) } },
-            onFailure = { error -> _uiState.update { it.copy(isLoading = false, error = error.userMessage()) } },
+            onFailure = { error ->
+                val msg = error.userMessage()
+                val needsMigration = msg.contains("INVENTORY", ignoreCase = true) || msg.contains("supabase", ignoreCase = true)
+                val friendly = if (needsMigration) "$msg Entorno necesita migración de inventario." else msg
+                _uiState.update { it.copy(isLoading = false, error = friendly) }
+            },
         )
     }
 

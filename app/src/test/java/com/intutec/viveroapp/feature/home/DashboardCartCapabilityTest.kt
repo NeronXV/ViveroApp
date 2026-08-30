@@ -51,6 +51,7 @@ class DashboardCartCapabilityTest {
             onInventoryClick = {},
             onReportsClick = {},
             onMySalesClick = {},
+            onProductsClick = {},
         )
 
         assertEquals(0, catalogOpens)
@@ -77,6 +78,7 @@ class DashboardCartCapabilityTest {
             onInventoryClick = {},
             onReportsClick = {},
             onMySalesClick = {},
+            onProductsClick = {},
         )
 
         assertEquals(1, cashierOpens)
@@ -98,6 +100,7 @@ class DashboardCartCapabilityTest {
             onInventoryClick = { inventoryOpens += 1 },
             onReportsClick = {},
             onMySalesClick = {},
+            onProductsClick = {},
         )
         assertEquals(1, inventoryOpens)
     }

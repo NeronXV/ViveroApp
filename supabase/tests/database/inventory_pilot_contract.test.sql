@@ -99,7 +99,7 @@ select extensions.is(
 );
 select extensions.is(
     (select pg_catalog.count(*) from public.inventory_movements where reference_id = '94000000-0000-4000-8000-000000000041'),
-    1::pg_catalog.bigint,
+    1::pg_catalog.int8,
     'repeated reception creates one movement'
 );
 
@@ -128,7 +128,7 @@ select extensions.is(
 );
 select extensions.is(
     (select pg_catalog.count(*) from public.inventory_counts where id = '94000000-0000-4000-8000-000000000042'),
-    1::pg_catalog.bigint,
+    1::pg_catalog.int8,
     'repeated physical count creates one count audit row'
 );
 

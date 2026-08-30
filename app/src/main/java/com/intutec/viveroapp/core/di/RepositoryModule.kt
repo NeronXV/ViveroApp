@@ -40,6 +40,12 @@ import com.intutec.viveroapp.feature.mysales.data.remote.MySalesRemoteDataSource
 import com.intutec.viveroapp.feature.mysales.data.remote.SupabaseMySalesRemoteDataSource
 import com.intutec.viveroapp.feature.mysales.data.repository.SupabaseMySalesRepository
 import com.intutec.viveroapp.feature.mysales.domain.repository.MySalesRepository
+import com.intutec.viveroapp.feature.catalog.data.remote.CatalogAdminRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.remote.CatalogImageRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogAdminRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogImageRemoteDataSource
+import com.intutec.viveroapp.feature.catalog.data.repository.SupabaseCatalogAdminRepository
+import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogAdminRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -160,4 +166,22 @@ abstract class RepositoryModule {
     abstract fun bindMySalesRepository(
         implementation: SupabaseMySalesRepository,
     ): MySalesRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCatalogAdminRemoteDataSource(
+        implementation: SupabaseCatalogAdminRemoteDataSource,
+    ): CatalogAdminRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCatalogImageRemoteDataSource(
+        implementation: SupabaseCatalogImageRemoteDataSource,
+    ): CatalogImageRemoteDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindCatalogAdminRepository(
+        implementation: SupabaseCatalogAdminRepository,
+    ): CatalogAdminRepository
 }

@@ -52,7 +52,7 @@ for each row execute function public.set_updated_at();
 -- El descuento se aplica sobre el total actual de la venta (subtotal)
 create or replace function public.apply_sale_discount(
     p_sale_id pg_catalog.uuid,
-    p_discount_cents pg_catalog.bigint,
+    p_discount_cents pg_catalog.int8,
     p_reason pg_catalog.text,
     p_promotion_id pg_catalog.uuid default null
 )

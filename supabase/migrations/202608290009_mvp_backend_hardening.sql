@@ -435,7 +435,7 @@ $$;
 
 create or replace function public.apply_sale_discount(
     p_sale_id pg_catalog.uuid,
-    p_discount_cents pg_catalog.bigint,
+    p_discount_cents pg_catalog.int8,
     p_reason pg_catalog.text,
     p_promotion_id pg_catalog.uuid default null
 )
@@ -449,7 +449,7 @@ declare
     v_sale public.sales%rowtype;
     v_promotion public.promotions%rowtype;
     v_reason pg_catalog.text := pg_catalog.btrim(p_reason);
-    v_expected_discount pg_catalog.bigint;
+    v_expected_discount pg_catalog.int8;
 begin
     if v_actor_id is null or not public.has_permission('MANAGE_DISCOUNTS') then
         raise exception using errcode = '42501', message = 'Discount management is not allowed';
@@ -484,10 +484,10 @@ begin
             end if;
             v_expected_discount := pg_catalog.round(
                 v_sale.subtotal_cents * v_promotion.value / 100
-            )::pg_catalog.bigint;
+            )::pg_catalog.int8;
         else
             -- FIXED_AMOUNT values are stored as integer cents in the generic value column.
-            v_expected_discount := pg_catalog.round(v_promotion.value)::pg_catalog.bigint;
+            v_expected_discount := pg_catalog.round(v_promotion.value)::pg_catalog.int8;
         end if;
 
         if v_promotion.max_discount_cents is not null then

@@ -32,6 +32,9 @@ class SessionDashboardRepository @Inject constructor(
                 if (session.canOperateAtBranch(AppPermission.MANAGE_INVENTORY)) {
                     add(DashboardModule("inventory", "Inventario", "Recibe mercancía y concilia conteos", true))
                 }
+                if (session.hasCapability(AppPermission.MANAGE_PRODUCTS)) {
+                    add(DashboardModule("products", "Productos", "Da de alta categorías y plantas", true))
+                }
                 if (session.hasCapability(AppPermission.VIEW_REPORTS)) {
                     add(DashboardModule("reports", "Reportes", "Analiza ventas y productos", true))
                 }

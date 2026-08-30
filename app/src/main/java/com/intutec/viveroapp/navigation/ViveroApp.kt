@@ -27,6 +27,7 @@ import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueScreenRout
 import com.intutec.viveroapp.feature.inventory.presentation.InventoryScreenRoute
 import com.intutec.viveroapp.feature.reports.presentation.ReportsScreenRoute
 import com.intutec.viveroapp.feature.mysales.presentation.MySalesScreenRoute
+import com.intutec.viveroapp.feature.catalog.admin.presentation.ProductAdminScreenRoute
 
 @Composable
 fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -80,6 +81,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onReportsClick = { navController.navigate(ReportsRoute) },
                 onMySalesClick = { navController.navigate(MySalesRoute) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
+                onProductsClick = { navController.navigate(ProductAdminRoute) },
             )
         }
         composable<CatalogRoute> {
@@ -152,9 +154,27 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
         }
         composable<InventoryRoute> {
             if (authState.session?.canOperateAtBranch(AppPermission.MANAGE_INVENTORY) == true) {
-                InventoryScreenRoute(onBack = navController::navigateUp)
+                InventoryScreenRoute(
+                    onBack = navController::navigateUp,
+                    onCreateProduct = { navController.navigate(ProductAdminRoute) },
+                )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso de Inventario", navController::navigateUp)
+            }
+        }
+        composable<ProductAdminRoute> {
+            if (authState.session?.hasCapability(AppPermission.MANAGE_PRODUCTS) == true) {
+                ProductAdminScreenRoute(
+                    onBack = navController::navigateUp,
+                    onRegisterStock = { productId ->
+                        // After product creation, go to inventory to register reception
+                        navController.navigate(InventoryRoute) {
+                            popUpTo<ProductAdminRoute> { inclusive = false }
+                        }
+                    },
+                )
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Productos (MANAGE_PRODUCTS)", navController::navigateUp)
             }
         }
         composable<ReportsRoute> {

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Assessment
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LocalFlorist
 import androidx.compose.material.icons.outlined.Inventory2
@@ -87,6 +88,7 @@ fun HomeScreenRoute(
     onReportsClick: () -> Unit,
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onProductsClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -100,6 +102,7 @@ fun HomeScreenRoute(
         onReportsClick = onReportsClick,
         onMySalesClick = onMySalesClick,
         onProfileClick = onProfileClick,
+        onProductsClick = onProductsClick,
     )
 }
 
@@ -111,6 +114,7 @@ internal fun onHomeModuleClick(
     onInventoryClick: () -> Unit,
     onReportsClick: () -> Unit,
     onMySalesClick: () -> Unit,
+    onProductsClick: () -> Unit,
 ) {
     when (module.id) {
         "catalog" -> onCatalogClick()
@@ -119,6 +123,7 @@ internal fun onHomeModuleClick(
         "inventory" -> onInventoryClick()
         "reports" -> onReportsClick()
         "mysales" -> onMySalesClick()
+        "products" -> onProductsClick()
     }
 }
 
@@ -133,6 +138,7 @@ fun HomeScreen(
     onReportsClick: () -> Unit,
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onProductsClick: () -> Unit,
 ) {
     Scaffold(containerColor = Cream) { padding ->
         Box(
@@ -152,6 +158,7 @@ fun HomeScreen(
                     onReportsClick = onReportsClick,
                     onMySalesClick = onMySalesClick,
                     onProfileClick = onProfileClick,
+                    onProductsClick = onProductsClick,
                 )
             }
         }
@@ -168,6 +175,7 @@ private fun DashboardContent(
     onReportsClick: () -> Unit,
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onProductsClick: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val expanded = maxWidth >= 720.dp
@@ -206,7 +214,7 @@ private fun DashboardContent(
                                 onHomeModuleClick(
                                     module, onCatalogClick, onCartClick,
                                     onCashierClick, onInventoryClick, onReportsClick,
-                                    onMySalesClick
+                                    onMySalesClick, onProductsClick
                                 )
                             },
                         )
@@ -468,6 +476,7 @@ private fun DashboardModule.icon(): ImageVector = when (id) {
     "inventory" -> Icons.Outlined.Inventory2
     "reports" -> Icons.Outlined.Assessment
     "mysales" -> Icons.Outlined.History
+    "products" -> Icons.Outlined.Category
     else -> Icons.Outlined.LocalFlorist
 }
 
@@ -554,6 +563,7 @@ private fun HomePreview(dashboard: Dashboard, cart: Cart) {
             onReportsClick = {},
             onMySalesClick = {},
             onProfileClick = {},
+            onProductsClick = {},
         )
     }
 }
