@@ -30,4 +30,5 @@ data class RemoteCashierOrderItemDto(
     @SerialName("unit_price_cents") val unitPriceCents: Long,
     @SerialName("discount_cents") val discountCents: Long,
     @SerialName("line_total_cents") val lineTotalCents: Long,
+    @SerialName("promotion_name") val promotionName: String? = null,
 )

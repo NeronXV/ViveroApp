@@ -25,11 +25,9 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,7 +52,6 @@ fun LoginScreen(
     onPasswordChanged: (String) -> Unit,
     onTogglePassword: () -> Unit,
     onSignIn: () -> Unit,
-    onDemoLogin: () -> Unit,
     onForgotPassword: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -66,7 +63,7 @@ fun LoginScreen(
                     modifier = Modifier.weight(1.08f).fillMaxHeight().padding(WindowInsets.safeDrawing.asPaddingValues()),
                     contentAlignment = Alignment.Center,
                 ) {
-                    LoginForm(state, onEmailChanged, onPasswordChanged, onTogglePassword, onSignIn, onDemoLogin, onForgotPassword)
+                    LoginForm(state, onEmailChanged, onPasswordChanged, onTogglePassword, onSignIn, onForgotPassword)
                 }
             }
         } else {
@@ -81,7 +78,7 @@ fun LoginScreen(
                     Spacer(Modifier.height(18.dp))
                     Text("Cultivamos mejores operaciones", color = Color.White.copy(alpha = .76f))
                     Spacer(Modifier.height(28.dp))
-                    LoginForm(state, onEmailChanged, onPasswordChanged, onTogglePassword, onSignIn, onDemoLogin, onForgotPassword)
+                    LoginForm(state, onEmailChanged, onPasswordChanged, onTogglePassword, onSignIn, onForgotPassword)
                     Spacer(Modifier.height(20.dp))
                 }
             }
@@ -136,7 +133,6 @@ private fun LoginForm(
     onPasswordChanged: (String) -> Unit,
     onTogglePassword: () -> Unit,
     onSignIn: () -> Unit,
-    onDemoLogin: () -> Unit,
     onForgotPassword: () -> Unit,
 ) {
     val working = state.status == AuthStatus.WORKING
@@ -196,21 +192,6 @@ private fun LoginForm(
             ) {
                 if (working) CircularProgressIndicator(modifier = Modifier.width(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Iniciar sesión", fontWeight = FontWeight.Bold)
-            }
-            if (state.demoAvailable) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 18.dp)) {
-                    HorizontalDivider(Modifier.weight(1f))
-                    Text("  o  ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
-                    HorizontalDivider(Modifier.weight(1f))
-                }
-                OutlinedButton(
-                    onClick = onDemoLogin,
-                    enabled = !working,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Text("Explorar demostración", fontWeight = FontWeight.SemiBold)
-                }
             }
             if (!state.remoteConfigured) {
                 Spacer(Modifier.height(12.dp))

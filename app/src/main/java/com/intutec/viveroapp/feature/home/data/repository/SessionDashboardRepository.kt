@@ -38,6 +38,9 @@ class SessionDashboardRepository @Inject constructor(
                 if (session.hasCapability(AppPermission.VIEW_REPORTS)) {
                     add(DashboardModule("reports", "Reportes", "Analiza ventas y productos", true))
                 }
+                if (session.hasCapability(AppPermission.MANAGE_USERS)) {
+                    add(DashboardModule("staff", "Personal", "Administra roles, sucursales y accesos", true))
+                }
                 if (session.hasCapability(AppPermission.VIEW_OWN_SALES)) {
                     add(DashboardModule("mysales", "Mis comandas", "Consulta tus ventas recientes", true))
                 }

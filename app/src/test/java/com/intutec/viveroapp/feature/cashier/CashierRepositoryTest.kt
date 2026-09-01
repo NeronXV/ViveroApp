@@ -37,6 +37,28 @@ class CashierRepositoryTest {
     }
 
     @Test
+    fun `accepts authoritative product promotion as effective line subtotal`() = runTest {
+        val promotedItem = item().copy(
+            listPriceCents = 10_000,
+            unitPriceCents = 7_500,
+            discountCents = 2_500,
+            lineTotalCents = 7_500,
+        )
+        val promotedOrder = order().copy(
+            subtotalCents = 7_500,
+            totalCents = 7_500,
+            items = listOf(promotedItem),
+        )
+        val repository = SupabaseCashierRepository(StubRemote(orders = listOf(promotedOrder)))
+
+        val detail = repository.getPendingOrder(BRANCH_ID, SALE_ID).getOrThrow()
+
+        assertEquals(7_500L, detail.subtotalCents)
+        assertEquals(2_500L, detail.items.single().discountCents)
+        assertEquals(7_500L, detail.summary.totalCents)
+    }
+
+    @Test
     fun `rejects row returned from another branch`() = runTest {
         val repository = SupabaseCashierRepository(
             StubRemote(orders = listOf(order().copy(branchId = OTHER_BRANCH_ID))),

@@ -10,7 +10,14 @@ data class Dashboard(
     val sessionMode: SessionMode,
     val canCreateSales: Boolean,
     val modules: List<DashboardModule>,
-)
+) {
+    val workspaceTitle: String
+        get() = when (role) {
+            UserRole.SALES, UserRole.CASHIER, UserRole.INVENTORY -> "Panel de trabajador"
+            UserRole.MANAGER -> "Panel de gerencia"
+            UserRole.ADMIN, UserRole.OWNER -> "Panel de administración"
+        }
+}
 
 data class DashboardModule(
     val id: String,

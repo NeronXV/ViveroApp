@@ -34,4 +34,5 @@ data class CashierOrderItem(
     val unitPriceCents: Long,
     val discountCents: Long,
     val lineTotalCents: Long,
+    val promotionName: String? = null,
 )

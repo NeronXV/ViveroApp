@@ -8,6 +8,9 @@ import com.intutec.viveroapp.core.session.UserSession
 import com.intutec.viveroapp.feature.catalog.data.remote.CatalogRemoteDataSource
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryItemDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPricingDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPricingItemDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPromotionDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCategoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductImageDto
@@ -36,6 +39,33 @@ class SupabaseCatalogRepositoryTest {
         assertFalse(mapped.stockKnown)
         assertEquals(0, mapped.stockAvailable)
         assertEquals("", mapped.imageKey)
+    }
+
+    @Test
+    fun `maps authoritative catalog promotion from pricing RPC`() = runTest {
+        val remote = remote(
+            pricing = RemoteCatalogPricingDto(
+                schemaVersion = 1,
+                items = listOf(
+                    RemoteCatalogPricingItemDto(
+                        productId = PRODUCT_ID,
+                        listPriceCents = 58_900L,
+                        effectivePriceCents = 47_120L,
+                        activePromotion = RemoteCatalogPromotionDto(
+                            id = PROMOTION_ID,
+                            name = "Campaña de temporada",
+                            discountPercent = 20.0,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val mapped = SupabaseCatalogRepository(remote).observeCatalog().first().products.single()
+
+        assertEquals(58_900L, mapped.priceCents)
+        assertEquals(47_120L, mapped.effectivePriceCents)
+        assertEquals("Campaña de temporada", mapped.promotion?.name)
     }
 
     @Test
@@ -101,7 +131,7 @@ class SupabaseCatalogRepositoryTest {
 
         assertTrue(snapshot.categories.isEmpty())
         assertTrue(snapshot.products.isEmpty())
-        assertEquals(3, remote.readCalls)
+        assertEquals(4, remote.readCalls)
     }
 
     @Test
@@ -138,7 +168,7 @@ class SupabaseCatalogRepositoryTest {
         val snapshot = repository.observeCatalog().first()
 
         assertTrue(snapshot.products.isEmpty())
-        assertEquals(3, remoteData.readCalls)
+        assertEquals(4, remoteData.readCalls)
     }
 
     @Test
@@ -165,7 +195,12 @@ class SupabaseCatalogRepositoryTest {
             .toSet()
 
         assertEquals(
-            setOf("loadVisibleCategories", "loadActiveProducts", "loadMyBranchInventory"),
+            setOf(
+                "loadVisibleCategories",
+                "loadActiveProducts",
+                "loadCatalogPricing",
+                "loadMyBranchInventory",
+            ),
             operations,
         )
     }
@@ -217,12 +252,14 @@ class SupabaseCatalogRepositoryTest {
     private fun remote(
         categories: List<RemoteCategoryDto> = listOf(category()),
         products: List<RemoteProductDto> = listOf(product()),
+        pricing: RemoteCatalogPricingDto = pricingFor(products),
         inventory: RemoteBranchCatalogInventoryDto? = null,
-    ) = RecordingRemoteDataSource(categories, products, inventory)
+    ) = RecordingRemoteDataSource(categories, products, pricing, inventory)
 
     private class RecordingRemoteDataSource(
         private val categories: List<RemoteCategoryDto>,
         private val products: List<RemoteProductDto>,
+        private val pricing: RemoteCatalogPricingDto,
         private val inventory: RemoteBranchCatalogInventoryDto?,
     ) : CatalogRemoteDataSource {
         var readCalls = 0
@@ -240,6 +277,12 @@ class SupabaseCatalogRepositoryTest {
             return products
         }
 
+        override suspend fun loadCatalogPricing(): RemoteCatalogPricingDto {
+            readCalls += 1
+            failure?.let { throw it }
+            return pricing
+        }
+
         override suspend fun loadMyBranchInventory(): RemoteBranchCatalogInventoryDto? {
             readCalls += 1
             failure?.let { throw it }
@@ -250,6 +293,7 @@ class SupabaseCatalogRepositoryTest {
     companion object {
         private const val CATEGORY_ID = "11111111-1111-4111-8111-111111111111"
         private const val PRODUCT_ID = "22222222-2222-4222-8222-222222222222"
+        private const val PROMOTION_ID = "66666666-6666-4666-8666-666666666666"
         private const val BRANCH_ID = "55555555-5555-4555-8555-555555555555"
         private const val IMAGE_ID_1 = "33333333-3333-4333-8333-333333333331"
         private const val IMAGE_ID_2 = "33333333-3333-4333-8333-333333333332"
@@ -286,6 +330,17 @@ class SupabaseCatalogRepositoryTest {
             createdAt = createdAt,
             updatedAt = updatedAt,
             images = images,
+        )
+
+        private fun pricingFor(products: List<RemoteProductDto>) = RemoteCatalogPricingDto(
+            schemaVersion = 1,
+            items = products.map {
+                RemoteCatalogPricingItemDto(
+                    productId = it.id,
+                    listPriceCents = it.priceCents,
+                    effectivePriceCents = it.priceCents,
+                )
+            },
         )
 
         private fun image(id: String, sortOrder: Int, isPrimary: Boolean) = RemoteProductImageDto(

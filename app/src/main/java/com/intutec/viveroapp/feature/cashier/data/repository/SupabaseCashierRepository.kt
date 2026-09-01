@@ -58,10 +58,8 @@ private fun RemoteCashierOrderDto.toDomain(expectedBranchId: String): CashierOrd
     check(mappedItems.map(CashierOrderItem::id).distinct().size == mappedItems.size) {
         "Caja recibió partidas duplicadas."
     }
-    val subtotal = mappedItems.sumExact { Math.multiplyExact(it.listPriceCents, it.quantity.toLong()) }
-    val discounts = mappedItems.sumExact(CashierOrderItem::discountCents)
-    val total = mappedItems.sumExact(CashierOrderItem::lineTotalCents)
-    check(subtotal == subtotalCents && discounts == discountCents && total == totalCents) {
+    val pricedLineSubtotal = mappedItems.sumExact(CashierOrderItem::lineTotalCents)
+    check(pricedLineSubtotal == subtotalCents) {
         "Caja recibió partidas que no coinciden con el total del servidor."
     }
 
@@ -110,6 +108,7 @@ private fun RemoteCashierOrderItemDto.toDomain(expectedSaleId: String): CashierO
         unitPriceCents = unitPriceCents,
         discountCents = discountCents,
         lineTotalCents = lineTotalCents,
+        promotionName = promotionName?.trim()?.takeIf(String::isNotEmpty),
     )
 }
 

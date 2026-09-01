@@ -46,6 +46,8 @@ import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogAdminRem
 import com.intutec.viveroapp.feature.catalog.data.remote.SupabaseCatalogImageRemoteDataSource
 import com.intutec.viveroapp.feature.catalog.data.repository.SupabaseCatalogAdminRepository
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogAdminRepository
+import com.intutec.viveroapp.feature.staff.data.repository.SupabaseStaffRepository
+import com.intutec.viveroapp.feature.staff.domain.repository.StaffRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -184,4 +186,10 @@ abstract class RepositoryModule {
     abstract fun bindCatalogAdminRepository(
         implementation: SupabaseCatalogAdminRepository,
     ): CatalogAdminRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindStaffRepository(
+        implementation: SupabaseStaffRepository,
+    ): StaffRepository
 }

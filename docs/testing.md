@@ -1,6 +1,6 @@
 # Pruebas
 
-Las pruebas locales cubren el dashboard, restauración de sesión, acceso demo, matriz de permisos, búsqueda/filtros del catálogo, normalización de códigos, supresión de lecturas duplicadas y reglas monetarias/del carrito mediante repositorios falsos y modelos de dominio.
+Las pruebas locales cubren el dashboard, restauración e inicio de sesión, matriz de permisos, búsqueda/filtros del catálogo, normalización de códigos, supresión de lecturas duplicadas y reglas monetarias/del carrito mediante repositorios falsos y modelos de dominio.
 
 Ejecutar desde la raíz:
 
@@ -10,9 +10,9 @@ Ejecutar desde la raíz:
 
 ## Pruebas de seguridad de Supabase
 
-Las diez suites de base de datos declaran 329 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas, 36 del contrato Web de Administración, 23 del endurecimiento de inventario, clientes, promociones y reportes, 12 de la proyección de existencia del catálogo por sucursal, 20 del piloto de inventario y 23 del historial propio de comandas.
+Las doce suites de base de datos declaran 362 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas, 36 del contrato Web de Administración, 23 del endurecimiento de inventario, clientes, promociones y reportes, 12 de la proyección de existencia del catálogo por sucursal, 20 del piloto de inventario, 23 del historial propio de comandas, 14 del descuento gradual de inventario y 19 de promociones de catálogo.
 
-Las pruebas están creadas, pero su ejecución actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las veinticuatro migraciones desde cero y los recorridos integrales de navegador y Android. Deben aprobarse antes de considerar Caja, Inventario, Administración, Mis comandas o los módulos MVP nuevos desplegables; el resultado histórico 215/215 no sustituye esta ejecución actual.
+Las pruebas están creadas, pero su ejecución actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las veintisiete migraciones desde cero y los recorridos integrales de navegador y Android. Deben aprobarse antes de considerar Caja, Inventario, Administración, Mis comandas o los módulos MVP nuevos desplegables; el resultado histórico 215/215 no sustituye esta ejecución actual.
 
 El piloto Android de inventario tiene pruebas unitarias para carga y filtro, recepción, validación de conteo y reutilización de la clave idempotente al reintentar. El módulo de reportes Android cuenta con pruebas unitarias para el parsing de los contratos RPC, validación de rangos de fecha y acceso por permisos.
 
@@ -28,6 +28,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File supabase\tests\verify_mi
 
 La cámara y el reconocimiento visual requieren una prueba instrumental en un dispositivo físico: conceder y denegar permiso, abrir configuración tras una denegación permanente, leer cada formato admitido, validar poca luz y confirmar que una lectura repetida no dispara dos consultas. La entrada manual permite validar el flujo de producto encontrado/no encontrado en emulador.
 
-Para probar el carrito manualmente: entra en demostración, abre Catálogo, agrega varias plantas, cambia cantidades, cierra y vuelve a abrir la app para comprobar el borrador Room, asocia el cliente demo y envía la orden. Confirma que aparece un folio y que un segundo toque no genera otra venta.
+Para probar el carrito manualmente: inicia sesión con una cuenta `SALES`, abre Catálogo, agrega varias plantas, cambia cantidades, cierra y vuelve a abrir la app para comprobar el borrador Room, asocia un cliente y envía la orden. Confirma que aparece un folio y que un segundo toque no genera otra venta.
 
 En fases posteriores se añadirán pruebas de puntos, transiciones de cobro, repositorios remotos y UI crítica. Antes de cerrar cada fase se ejecutarán compilación y pruebas, y se revisarán advertencias relevantes.

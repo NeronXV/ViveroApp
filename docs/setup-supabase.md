@@ -50,4 +50,4 @@ select public.assign_user_branch(
 
 No ejecutes el bootstrap desde Android ni distribuyas una clave administrativa. Los RPC de sucursales exigen perfil activo y capacidades; `ADMIN` no puede cambiar la sucursal de un `OWNER`.
 
-La aplicación usa automáticamente el modo demo mientras las dos propiedades locales estén vacías. Nunca copies la clave `service_role`, la contraseña de Postgres ni tokens personales en Android, `local.properties` o archivos versionados.
+La aplicación requiere ambas propiedades locales para habilitar el inicio de sesión. Si están vacías, la pantalla indica que falta configuración y no permite autenticarse. Nunca copies la clave `service_role`, la contraseña de Postgres ni tokens personales en Android, `local.properties` o archivos versionados.

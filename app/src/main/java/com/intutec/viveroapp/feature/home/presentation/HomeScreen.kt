@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.PointOfSale
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -89,6 +90,7 @@ fun HomeScreenRoute(
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
     onProductsClick: () -> Unit,
+    onStaffClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -103,6 +105,7 @@ fun HomeScreenRoute(
         onMySalesClick = onMySalesClick,
         onProfileClick = onProfileClick,
         onProductsClick = onProductsClick,
+        onStaffClick = onStaffClick,
     )
 }
 
@@ -115,6 +118,7 @@ internal fun onHomeModuleClick(
     onReportsClick: () -> Unit,
     onMySalesClick: () -> Unit,
     onProductsClick: () -> Unit,
+    onStaffClick: () -> Unit = {},
 ) {
     when (module.id) {
         "catalog" -> onCatalogClick()
@@ -124,6 +128,7 @@ internal fun onHomeModuleClick(
         "reports" -> onReportsClick()
         "mysales" -> onMySalesClick()
         "products" -> onProductsClick()
+        "staff" -> onStaffClick()
     }
 }
 
@@ -139,6 +144,7 @@ fun HomeScreen(
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
     onProductsClick: () -> Unit,
+    onStaffClick: () -> Unit,
 ) {
     Scaffold(containerColor = Cream) { padding ->
         Box(
@@ -159,6 +165,7 @@ fun HomeScreen(
                     onMySalesClick = onMySalesClick,
                     onProfileClick = onProfileClick,
                     onProductsClick = onProductsClick,
+                    onStaffClick = onStaffClick,
                 )
             }
         }
@@ -176,6 +183,7 @@ private fun DashboardContent(
     onMySalesClick: () -> Unit,
     onProfileClick: () -> Unit,
     onProductsClick: () -> Unit,
+    onStaffClick: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val expanded = maxWidth >= 720.dp
@@ -214,7 +222,7 @@ private fun DashboardContent(
                                 onHomeModuleClick(
                                     module, onCatalogClick, onCartClick,
                                     onCashierClick, onInventoryClick, onReportsClick,
-                                    onMySalesClick, onProductsClick
+                                    onMySalesClick, onProductsClick, onStaffClick
                                 )
                             },
                         )
@@ -278,7 +286,7 @@ private fun BrandLockup(compact: Boolean) {
 @Composable
 private fun Greeting(dashboard: Dashboard, expanded: Boolean, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text("Buen día,", style = MaterialTheme.typography.bodyMedium, color = Muted)
+        Text(dashboard.workspaceTitle, style = MaterialTheme.typography.bodyMedium, color = Muted)
         Text(
             dashboard.userName,
             style = if (expanded) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
@@ -477,6 +485,7 @@ private fun DashboardModule.icon(): ImageVector = when (id) {
     "reports" -> Icons.Outlined.Assessment
     "mysales" -> Icons.Outlined.History
     "products" -> Icons.Outlined.Category
+    "staff" -> Icons.Outlined.Groups
     else -> Icons.Outlined.LocalFlorist
 }
 
@@ -564,6 +573,7 @@ private fun HomePreview(dashboard: Dashboard, cart: Cart) {
             onMySalesClick = {},
             onProfileClick = {},
             onProductsClick = {},
+            onStaffClick = {},
         )
     }
 }

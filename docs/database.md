@@ -26,6 +26,9 @@ Las migraciones actuales son:
 - `202608290010_my_branch_catalog_inventory.sql`: proyección autenticada de existencias del catálogo limitada a la sucursal activa del usuario.
 - `202608290011_inventory_pilot_contract.sql`: tablero de inventario por sucursal, recepciones idempotentes, conciliación de conteos e historial auditable.
 - `202608290012_my_sales_contract.sql`: historial de ventas propias con estados autoritativos y paginación keyset.
+- `202608290013_catalog_images_storage.sql`: políticas mínimas de escritura para imágenes del catálogo.
+- `202608290014_gradual_inventory_trigger.sql`: activación gradual del descuento automático de inventario al cobrar.
+- `202608290015_catalog_promotions.sql`: campañas para todo el catálogo o productos seleccionados, catálogo público V3 y precios autoritativos en Android y ventas.
 
 El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución. Los módulos posteriores añaden inventario, clientes, promociones y reportes, y la migración de endurecimiento corrige su alcance. Las expresiones SQL especiales de las migraciones MVP aún no ejecutadas se normalizaron antes de su validación desde cero.
 
@@ -39,7 +42,7 @@ El cliente de Administración consume `get_admin_branches`, `get_admin_staff` y 
 
 ## Modelo actual y previsto
 
-Entidades actuales principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes; ventas, partidas, pagos e historial de estados; promociones y descuentos. Membresías, sesiones de caja, ledger de puntos y auditoría detallada permanecen previstas para fases posteriores.
+Entidades actuales principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes; ventas, partidas, pagos e historial de estados; promociones, relaciones `promotion_products` y descuentos. Las promociones conservan alcance `SALE` para descuentos sobre una venta, o usan `ALL_PRODUCTS` y `SELECTED_PRODUCTS` para campañas de catálogo. PostgreSQL selecciona la campaña que produce el menor precio efectivo y guarda la promoción aplicada en cada partida. Membresías, sesiones de caja, ledger de puntos y auditoría detallada permanecen previstas para fases posteriores.
 
 Reglas obligatorias para el diseño:
 

@@ -17,3 +17,4 @@ import kotlinx.serialization.Serializable
 @Serializable data object ReportsRoute
 @Serializable data object MySalesRoute
 @Serializable data object ProductAdminRoute
+@Serializable data object StaffRoute

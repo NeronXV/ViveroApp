@@ -28,6 +28,7 @@ import com.intutec.viveroapp.feature.inventory.presentation.InventoryScreenRoute
 import com.intutec.viveroapp.feature.reports.presentation.ReportsScreenRoute
 import com.intutec.viveroapp.feature.mysales.presentation.MySalesScreenRoute
 import com.intutec.viveroapp.feature.catalog.admin.presentation.ProductAdminScreenRoute
+import com.intutec.viveroapp.feature.staff.presentation.StaffScreenRoute
 
 @Composable
 fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
@@ -57,7 +58,6 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onPasswordChanged = authViewModel::onPasswordChanged,
                 onTogglePassword = authViewModel::togglePasswordVisibility,
                 onSignIn = authViewModel::signIn,
-                onDemoLogin = authViewModel::signInDemo,
                 onForgotPassword = {
                     authViewModel.clearMessages()
                     navController.navigate(PasswordResetRoute)
@@ -82,6 +82,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onMySalesClick = { navController.navigate(MySalesRoute) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
                 onProductsClick = { navController.navigate(ProductAdminRoute) },
+                onStaffClick = { navController.navigate(StaffRoute) },
             )
         }
         composable<CatalogRoute> {
@@ -197,6 +198,13 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onBack = navController::navigateUp,
                 onSignOut = authViewModel::signOut,
             )
+        }
+        composable<StaffRoute> {
+            if (authState.session?.hasCapability(AppPermission.MANAGE_USERS) == true) {
+                StaffScreenRoute(onBack = navController::navigateUp)
+            } else {
+                PlaceholderScreen("Acceso restringido", "permiso de Personal", navController::navigateUp)
+            }
         }
     }
 }

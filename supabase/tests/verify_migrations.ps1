@@ -63,6 +63,9 @@ $catalogImagesStorageSql = Get-Content (
 $gradualInventorySql = Get-Content (
     Join-Path $migrationDirectory '202608290014_gradual_inventory_trigger.sql'
 ) -Raw
+$catalogPromotionsSql = Get-Content (
+    Join-Path $migrationDirectory '202608290015_catalog_promotions.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -93,6 +96,9 @@ $mySalesTestSql = Get-Content (
 $gradualInventoryTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\gradual_inventory_trigger.test.sql'
 ) -Raw
+$catalogPromotionsTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\catalog_promotions.test.sql'
+) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -111,7 +117,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 26) 'exactly twenty-six ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 27) 'exactly twenty-seven ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -135,7 +141,8 @@ Assert-Condition (
         '202608290011_inventory_pilot_contract.sql,' +
         '202608290012_my_sales_contract.sql,' +
         '202608290013_catalog_images_storage.sql,' +
-        '202608290014_gradual_inventory_trigger.sql'
+        '202608290014_gradual_inventory_trigger.sql,' +
+        '202608290015_catalog_promotions.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -588,10 +595,10 @@ Assert-Condition (
     $publicRpcTestSql.Contains('public catalog omits private product fields') -and
     $publicRpcTestSql.Contains('anon has no direct privileges on catalog tables') -and
     $publicRpcTestSql.Contains('service_role cannot execute either presentation RPC') -and
-    $publicRpcTestSql.Contains("'schemaVersion', 2") -and
+    $publicRpcTestSql.Contains("'schemaVersion', 3") -and
     $publicRpcTestSql.Contains("'bucketName', 'catalog-images'") -and
     $publicRpcTestSql.Contains('public catalog returns a null image when no product image exists')
-) 'public RPC tests preserve privacy, role boundaries, and the complete V2 image contract'
+) 'public RPC tests preserve privacy, role boundaries, and the complete V3 pricing contract'
 
 Assert-Condition (
     $userActivationSql.Contains("v_actor_role = 'ADMIN' and v_target_role = 'OWNER'") -and
@@ -822,6 +829,51 @@ Assert-Condition (
     $gradualInventoryTestSql.Contains('select extensions.plan(14);') -and
     ([regex]::Matches($gradualInventoryTestSql, '(?im)select\s+extensions\.(has_function|ok|is|throws_ok)\s*\(').Count -eq 14)
 ) 'gradual inventory trigger pgTAP plan matches its fourteen assertions'
+
+Assert-Condition (
+    $catalogPromotionsSql.Contains("scope in ('SALE', 'ALL_PRODUCTS', 'SELECTED_PRODUCTS')") -and
+    $catalogPromotionsSql.Contains('create table public.promotion_products') -and
+    $catalogPromotionsSql.Contains('public.resolve_catalog_product_price') -and
+    $catalogPromotionsSql.Contains('order by') -and
+    $catalogPromotionsSql.Contains('(e.price_cents - e.discount_cents)')
+) 'catalog promotions define sale-safe scopes and deterministic lowest-price resolution'
+
+Assert-Condition (
+    $catalogPromotionsSql.Contains('create or replace function public.get_catalog_pricing()') -and
+    $catalogPromotionsSql.Contains("'{schemaVersion}', '3'::pg_catalog.jsonb") -and
+    $catalogPromotionsSql.Contains("'originalAmountCents'") -and
+    $catalogPromotionsSql.Contains("'activePromotion'") -and
+    $catalogPromotionsSql.Contains('create or replace function public.submit_sale_to_cashier(') -and
+    $catalogPromotionsSql.Contains('pricing.effective_price_cents') -and
+    $catalogPromotionsSql.Contains('s.discount_cents + coalesce(items.discount_cents, 0)')
+) 'catalog promotions expose one authoritative calculation to public catalog, Android and sales'
+
+Assert-Condition (
+    $catalogPromotionsSql.Contains("public.has_permission('MANAGE_DISCOUNTS')") -and
+    $catalogPromotionsSql.Contains('create or replace function public.upsert_catalog_promotion(') -and
+    $catalogPromotionsSql.Contains("p.scope = 'SALE'") -and
+    ([regex]::Matches(
+        $catalogPromotionsSql,
+        '(?is)revoke all on function public\.(get_catalog_pricing|upsert_catalog_promotion|submit_sale_to_cashier|apply_sale_discount)\s*\([^;]*?\)\s*from public, anon, authenticated, service_role;'
+    ).Count -eq 4)
+) 'catalog promotion mutations and sale pricing keep explicit least-privilege boundaries'
+
+Assert-Condition (
+    $catalogPromotionsTestSql.Contains('select extensions.plan(20);') -and
+    ([regex]::Matches(
+        $catalogPromotionsTestSql,
+        '(?im)select\s+extensions\.(has_column|has_table|ok|results_eq|throws_ok|lives_ok|is)\s*\('
+    ).Count -eq 20)
+) 'catalog promotion pgTAP plan matches its twenty assertions'
+
+Assert-Condition (
+    $catalogPromotionsTestSql.Contains('the promotion producing the lowest effective price wins') -and
+    $catalogPromotionsTestSql.Contains('public catalog exposes the authoritative V3 promotion contract') -and
+    $catalogPromotionsTestSql.Contains('prices the campaign on the server') -and
+    $catalogPromotionsTestSql.Contains('daily sales reports include authoritative product promotion discounts') -and
+    $catalogPromotionsTestSql.Contains('cashier Web detail accepts a sale containing authoritative product prices') -and
+    $catalogPromotionsTestSql.Contains('a product campaign cannot be reused as a whole-sale discount')
+) 'catalog promotion tests cover selection, presentation, checkout and scope isolation'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

@@ -7,8 +7,8 @@ Aplicación Android para apoyar la operación de un vivero. El proyecto se desar
 | Módulo | Estado |
 |---|---|
 | Base MVVM, tema y navegación | Fase 1 implementada |
-| Autenticación y roles | Integración Supabase real con fallback demo explícito |
-| Catálogo | Integración Supabase real con búsqueda, filtros, detalle, imágenes y proyección de existencia por sucursal; fallback demo explícito |
+| Autenticación y roles | Integración Supabase real |
+| Catálogo | Integración Supabase real con búsqueda, filtros, detalle, imágenes y proyección de existencia por sucursal |
 | Escáner inteligente | Fase 4 implementada con CameraX, ML Kit y entrada manual |
 | Carrito y envío a caja | Outbox Room y sincronización idempotente mediante `submit_sale_to_cashier` |
 | Mis comandas | Integración real local con historial propio, estado de cobro y paginación estable |
@@ -29,7 +29,7 @@ Aplicación Android para apoyar la operación de un vivero. El proyecto se desar
 2. Espera a que termine **Gradle Sync**.
 3. Selecciona un emulador o dispositivo.
 4. Pulsa **Run 'app'**.
-5. En la pantalla de acceso pulsa **Explorar demostración** o configura Supabase para iniciar con una cuenta real.
+5. Configura Supabase e inicia sesión con una cuenta real.
 
 También puedes compilar desde la terminal integrada:
 
@@ -44,10 +44,6 @@ Desde Android Studio, haz clic derecho en `app/src/test` y elige **Run Tests**. 
 ```powershell
 .\gradlew.bat testDebugUnitTest
 ```
-
-## Acceso de demostración
-
-Pulsa **Explorar demostración**. No requiere contraseña ni representa una cuenta real.
 
 ## Supabase
 
@@ -65,7 +61,7 @@ Se usa Supabase Kotlin 3.2.6 por compatibilidad binaria con Kotlin 2.2.10. Las r
 
 ## Catálogo
 
-Incluye búsqueda por nombre, nombre científico, código interno y código de barras; filtros por categoría y disponibilidad; precios en centavos y detalle de cuidados. Las sesiones remotas consumen Supabase y el modo de exploración mantiene un repositorio demostrativo claramente separado.
+Incluye búsqueda por nombre, nombre científico, código interno y código de barras; filtros por categoría y disponibilidad; precios en centavos y detalle de cuidados. Las sesiones autenticadas consumen exclusivamente Supabase.
 
 ## Escáner
 
@@ -73,7 +69,7 @@ Reconoce QR, EAN-13, EAN-8 y Code 128 mediante CameraX y ML Kit. Solicita la cá
 
 ## Carrito y envío a Caja
 
-Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en Room aunque cierres la app. En sesión remota, el envío genera un UUID idempotente, conserva un outbox local y llama a `submit_sale_to_cashier`; el backend recalcula precios y es la autoridad. El modo demo no representa persistencia ni cobro real.
+Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en Room aunque cierres la app. El envío genera un UUID idempotente, conserva un outbox local y llama a `submit_sale_to_cashier`; el backend recalcula precios y es la autoridad.
 
 ## Inventario piloto
 

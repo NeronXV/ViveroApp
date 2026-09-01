@@ -24,7 +24,7 @@ class AuthViewModelTest {
 
     @Test
     fun `restored session opens authenticated state`() = runTest(dispatcherRule.testDispatcher) {
-        val session = demoSession()
+        val session = ownerSession()
         val viewModel = AuthViewModel(FakeAuthRepository(restored = session))
 
         advanceUntilIdle()
@@ -90,42 +90,18 @@ class AuthViewModelTest {
             assertEquals(null, viewModel.uiState.value.session)
         }
 
-    @Test
-    fun `demo access authenticates without remote configuration`() = runTest(dispatcherRule.testDispatcher) {
-        val viewModel = AuthViewModel(FakeAuthRepository())
-        advanceUntilIdle()
-
-        viewModel.signInDemo()
-        advanceUntilIdle()
-
-        assertEquals(AuthStatus.AUTHENTICATED, viewModel.uiState.value.status)
-        assertTrue(viewModel.uiState.value.session?.isDemo == true)
-    }
-
     private class FakeAuthRepository(
         private val restored: UserSession? = null,
         private val restoration: CompletableDeferred<Result<UserSession?>>? = null,
     ) : AuthRepository {
         override val isRemoteConfigured = false
-        override val isDemoAvailable = true
         override suspend fun restoreSession() = restoration?.await() ?: Result.success(restored)
-        override suspend fun signIn(email: String, password: String) = Result.success(demoSession())
-        override suspend fun signInDemo() = Result.success(demoSession())
+        override suspend fun signIn(email: String, password: String) = Result.success(ownerSession())
         override suspend fun sendPasswordReset(email: String) = Result.success(Unit)
         override suspend fun signOut() = Result.success(Unit)
     }
 
     companion object {
-        private fun demoSession() = UserSession(
-            userId = "demo",
-            email = "demo@vivero.test",
-            fullName = "Demo",
-            role = UserRole.SALES,
-            capabilities = RolePermissions.permissionsFor(UserRole.SALES),
-            branch = UserBranch("demo-branch", "CENTRO", "Centro", true),
-            mode = SessionMode.DEMO,
-        )
-
         private fun ownerSession() = UserSession(
             userId = "owner",
             email = "",

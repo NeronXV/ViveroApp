@@ -445,6 +445,13 @@ private fun CashierItemsCard(items: List<CashierOrderItem>) {
                             style = MaterialTheme.typography.bodySmall,
                             color = CashierMuted,
                         )
+                        if (item.discountCents > 0) {
+                            Text(
+                                "${item.promotionName ?: "Oferta aplicada"} · precio de lista ${item.listPriceCents.asMxn()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                     Text(item.lineTotalCents.asMxn(), style = MaterialTheme.typography.titleMedium, color = CashierForest)
                 }

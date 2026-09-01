@@ -17,7 +17,7 @@ Compose UI <- UiState/StateFlow <- ViewModel <- caso de uso <- repositorio
 - `feature/<funcionalidad>/domain`: modelos, contratos y casos de uso.
 - `feature/<funcionalidad>/data`: implementaciones, mappers y fuentes de datos.
 
-Los composables reciben estado y emiten eventos; no contienen reglas de negocio. Los modelos de dominio no dependen de DTO de Supabase ni dependerán de entidades Room. Hilt conecta implementaciones con contratos. `AuthRepositoryImpl` usa Supabase cuando existen claves locales y conserva un acceso demo explícito. `SessionStore` comparte solo el perfil de sesión necesario; nunca guarda contraseñas.
+Los composables reciben estado y emiten eventos; no contienen reglas de negocio. Los modelos de dominio no dependen de DTO de Supabase ni dependerán de entidades Room. Hilt conecta implementaciones con contratos. `AuthRepositoryImpl` autentica exclusivamente con Supabase cuando existen claves locales. `SessionStore` comparte solo el perfil de sesión necesario; nunca guarda contraseñas.
 
 ## Autenticación y autorización
 
@@ -25,9 +25,11 @@ Los composables reciben estado y emiten eventos; no contienen reglas de negocio.
 
 ## Catálogo
 
-`CatalogRepository` expone categorías y productos mediante `CatalogSnapshot`. `SessionCatalogRepository` selecciona estrictamente `SupabaseCatalogRepository` para sesiones remotas y `FakeCatalogRepository` para demo, sin fallback entre ambos. Las imágenes remotas conservan UUID, ruta y orden en el dominio; `imageKey` queda reservado a recursos del catálogo demo y el dominio no conoce `R.drawable` ni otras APIs Android.
+`CatalogRepository` expone categorías y productos mediante `CatalogSnapshot`. Las sesiones autenticadas seleccionan estrictamente `SupabaseCatalogRepository`, sin fallback a datos locales. `FakeCatalogRepository` permanece aislado para pruebas y prototipos internos. Las imágenes remotas conservan UUID, ruta y orden en el dominio; el dominio no conoce `R.drawable` ni otras APIs Android.
 
 Los precios se guardan como centavos mediante `Long`. El ViewModel combina consulta, categoría y disponibilidad con el flujo del repositorio, y conserva estados explícitos de carga, contenido, vacío y error reintentable.
+
+El precio promocional no se calcula en Compose. Android obtiene `get_catalog_pricing`, valida que el precio de lista coincida con el producto remoto y mapea la promoción activa al dominio. La Web pública recibe la misma resolución mediante `get_public_catalog` V3. `submit_sale_to_cashier` vuelve a resolver la campaña en PostgreSQL y conserva en `sale_items` el precio de lista, el precio efectivo y la identidad de la promoción; un precio enviado por un cliente nunca se acepta como autoridad de cobro.
 
 ## Escáner
 
@@ -43,7 +45,7 @@ Los precios se guardan como centavos mediante `Long`. El ViewModel combina consu
 
 `RoomCartRepository` mantiene un único borrador activo y conserva instantáneas del nombre, código, precio y promoción del producto. Un `Mutex` serializa mutaciones y envío, por lo que dos pulsaciones no pueden crear dos tickets. Al enviar, Room persiste venta, partidas y dos eventos de estado de manera transaccional, y elimina el borrador únicamente después de completar la transacción.
 
-El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios desde PostgreSQL. Su respuesta es un registro compuesto escalar de `public.sales`; Android valida que UUID, folio, creador, sucursal y estado coincidan antes de marcar `SYNCED`. Los resultados pendientes, rechazados o sin sesión no se reportan como envíos confirmados: el ticket local conserva el error y puede reintentar el mismo UUID sin crear otra venta. El envío inicial crea exactamente dos historiales remotos legítimos: `null → DRAFT` y `DRAFT → SENT_TO_CASHIER`. Una repetición con la misma clave devuelve la venta existente sin agregar partidas ni historiales. La existencia se validará contra `stock_balances` en la Fase 7 y el descuento promocional completo se conectará en la Fase 9; la aplicación no presenta el envío local como pago confirmado.
+El ticket local queda `SENT_TO_CASHIER` con `syncPending=true`. La migración remota incluye `submit_sale_to_cashier`, que utiliza el UUID como clave de idempotencia y recalcula precios y campañas desde PostgreSQL. Su respuesta es un registro compuesto escalar de `public.sales`; Android valida que UUID, folio, creador, sucursal y estado coincidan antes de marcar `SYNCED`. Los resultados pendientes, rechazados o sin sesión no se reportan como envíos confirmados: el ticket local conserva el error y puede reintentar el mismo UUID sin crear otra venta. El envío inicial crea exactamente dos historiales remotos legítimos: `null → DRAFT` y `DRAFT → SENT_TO_CASHIER`. Una repetición con la misma clave devuelve la venta existente sin agregar partidas ni historiales. La aplicación no presenta el envío local como pago confirmado.
 
 ## Inventario operativo
 

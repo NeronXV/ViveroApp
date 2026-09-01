@@ -13,7 +13,7 @@ Supabase es la autoridad de seguridad. Android y el futuro dashboard web pueden 
 | `ADMIN` | Administración operativa delegada; no puede promover a `OWNER` ni modificar a un `OWNER` |
 | `OWNER` | Máxima autoridad de negocio, sin acceso directo a secretos ni operaciones técnicas de la base |
 
-El modo demo de Android usa `SALES`. Cada usuario real tiene un perfil y exactamente un rol activo.
+Cada usuario tiene un perfil y exactamente un rol activo.
 
 ## Capacidades
 
@@ -96,12 +96,12 @@ RLS limita la bandeja de `CASHIER` a `SENT_TO_CASHIER` y `PAYMENT_PENDING` de su
 | `VIEW_ALL_SALES` | `sales_management_read_all` | — | Activa |
 | `MANAGE_PRODUCTS` | `categories_manage`, `products_manage`, `product_images_manage` | `upsert_category`, `upsert_product`, `set_product_image_primary` | Contrato local activo; ejecución integral pendiente |
 | `MANAGE_PRICES` | `products_manage` | `enforce_product_price_permission`, `upsert_product` | Contrato local activo; ejecución integral pendiente |
-| `MANAGE_DISCOUNTS` | lectura de promociones | `apply_sale_discount` | Contrato local endurecido; ejecución integral pendiente |
+| `MANAGE_DISCOUNTS` | lectura de promociones y relaciones de productos | `apply_sale_discount`, `upsert_catalog_promotion` | Campañas de catálogo y descuentos de venta separados por alcance |
 | `MANAGE_INVENTORY` | políticas de ubicaciones, movimientos, saldos y conteos sin escritura directa | `get_my_inventory_dashboard`, `record_inventory_reception`, `reconcile_inventory_count`, `get_my_inventory_history` | Piloto Android implementado para gerente/admin/owner; ejecución integral pendiente |
 | `VIEW_INVENTORY_ALERTS` | `inventory_balances_read` | `get_low_inventory_alerts`, `get_my_inventory_dashboard`, `get_my_inventory_history` | Contrato local endurecido por sucursal; ejecución integral pendiente |
 | `VIEW_REPORTS` | políticas operativas por sucursal | `get_report_daily_sales`, `get_report_top_products` | Integración Web parcial; ejecución integral pendiente |
 | `MANAGE_BRANCHES` | `branches_read_authenticated` para lectura | mutaciones de sucursal y `get_admin_branches` | Integración Web parcial; ejecución integral pendiente |
-| `MANAGE_USERS` | políticas de perfiles, roles y clientes | `set_user_active`, `assign_user_branch`, `get_admin_branches`, `get_admin_staff` | Integración Web parcial; ejecución integral pendiente |
+| `MANAGE_USERS` | políticas de perfiles, roles y clientes | `set_user_active`, `assign_user_branch`, `get_admin_branches`, `get_admin_staff` | Directorio y mutaciones integrados en Android y Web; validación remota por RPC |
 | `ASSIGN_ROLES` | — | `assign_user_role`, `bootstrap_first_owner` controlado | Activa |
 | `VIEW_AUDIT` | — | — | Fase futura |
 | `MANAGE_SETTINGS` | — | — | Fase futura |

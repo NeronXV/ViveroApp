@@ -3,12 +3,15 @@ package com.intutec.viveroapp.feature.catalog.data.repository
 import com.intutec.viveroapp.feature.catalog.data.remote.CatalogRemoteDataSource
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCategoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteBranchCatalogInventoryDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPricingDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPricingItemDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductImageDto
 import com.intutec.viveroapp.feature.catalog.domain.model.CatalogSnapshot
 import com.intutec.viveroapp.feature.catalog.domain.model.Category
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
 import com.intutec.viveroapp.feature.catalog.domain.model.ProductImage
+import com.intutec.viveroapp.feature.catalog.domain.model.ProductPromotion
 import com.intutec.viveroapp.feature.catalog.domain.repository.CatalogRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -51,11 +54,19 @@ class SupabaseCatalogRepository @Inject constructor(
         check(categoriesById.size == categories.size) { "El catálogo remoto contiene categorías duplicadas." }
 
         val remoteProducts = remote.loadActiveProducts()
+        val pricingByProductId = remote.loadCatalogPricing().toPricingByProductId()
         val inventoryByProductId = remote.loadMyBranchInventory().toInventoryByProductId(
             activeProductIds = remoteProducts.map { it.id }.toSet(),
         )
         val products = remoteProducts
-            .map { it.toDomain(categoriesById, inventoryByProductId[it.id]) }
+            .map {
+                it.toDomain(
+                    categoriesById = categoriesById,
+                    pricing = pricingByProductId[it.id]
+                        ?: error("El catálogo remoto no certificó el precio de un producto."),
+                    stockAvailable = inventoryByProductId[it.id],
+                )
+            }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, Product::commonName).thenBy(Product::id))
         check(products.map(Product::id).distinct().size == products.size) {
             "El catálogo remoto contiene productos duplicados."
@@ -73,6 +84,7 @@ private fun RemoteCategoryDto.toDomain(): Category {
 
 private fun RemoteProductDto.toDomain(
     categoriesById: Map<String, Category>,
+    pricing: RemoteCatalogPricingItemDto,
     stockAvailable: Int?,
 ): Product {
     check(isActive) { "El catálogo remoto devolvió un producto inactivo." }
@@ -85,6 +97,28 @@ private fun RemoteProductDto.toDomain(
     }
     check(priceCents >= 0 && (wholesalePriceCents == null || wholesalePriceCents >= 0)) {
         "El catálogo remoto contiene un precio inválido."
+    }
+    check(pricing.productId.requireUuid("pricing product id") == canonicalId) {
+        "El precio remoto pertenece a otro producto."
+    }
+    check(
+        pricing.listPriceCents == priceCents &&
+            pricing.effectivePriceCents in 0..pricing.listPriceCents
+    ) {
+        "El catálogo remoto contiene un precio promocional inválido."
+    }
+    val promotion = pricing.activePromotion?.let {
+        it.id.requireUuid("promotion id")
+        check(it.name.isNotBlank() && it.discountPercent > 0.0 && it.discountPercent <= 100.0) {
+            "El catálogo remoto contiene una promoción inválida."
+        }
+        check(pricing.effectivePriceCents < pricing.listPriceCents) {
+            "El catálogo remoto contiene una promoción sin descuento."
+        }
+        ProductPromotion(name = it.name.trim(), priceCents = pricing.effectivePriceCents)
+    }
+    check(promotion != null || pricing.effectivePriceCents == pricing.listPriceCents) {
+        "El catálogo remoto contiene un descuento sin promoción."
     }
     check(minimumStock.isFinite() && minimumStock >= 0 && minimumStock <= Int.MAX_VALUE) {
         "El catálogo remoto contiene un mínimo de inventario inválido."
@@ -119,12 +153,19 @@ private fun RemoteProductDto.toDomain(
         lightType = lightType,
         recommendedClimate = recommendedClimate,
         isActive = true,
-        promotion = null,
+        promotion = promotion,
         createdAt = createdAt.parseSupabaseTimestamp("product created_at"),
         updatedAt = updatedAt.parseSupabaseTimestamp("product updated_at"),
         stockKnown = stockAvailable != null,
         images = mappedImages,
     )
+}
+
+private fun RemoteCatalogPricingDto.toPricingByProductId(): Map<String, RemoteCatalogPricingItemDto> {
+    check(schemaVersion == 1) { "Los precios remotos usan una versión incompatible." }
+    val result = items.associateBy { it.productId.requireUuid("pricing product id") }
+    check(result.size == items.size) { "Los precios remotos contienen productos duplicados." }
+    return result
 }
 
 private fun RemoteBranchCatalogInventoryDto?.toInventoryByProductId(

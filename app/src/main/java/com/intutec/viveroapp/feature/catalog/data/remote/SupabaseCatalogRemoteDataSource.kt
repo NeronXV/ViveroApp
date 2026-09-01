@@ -25,6 +25,11 @@ class SupabaseCatalogRemoteDataSource @Inject constructor(
             filter { eq("is_active", true) }
         }.decodeList()
 
+    override suspend fun loadCatalogPricing(): RemoteCatalogPricingDto {
+        val response = requireClient().postgrest.rpc("get_catalog_pricing")
+        return pricingJson.decodeFromString(response.data)
+    }
+
     override suspend fun loadMyBranchInventory(): RemoteBranchCatalogInventoryDto? = try {
         val response = requireClient().postgrest.rpc("get_my_branch_catalog_inventory")
         inventoryJson.decodeFromString(response.data)
@@ -38,6 +43,7 @@ class SupabaseCatalogRemoteDataSource @Inject constructor(
 
     private companion object {
         val inventoryJson = Json { ignoreUnknownKeys = false }
+        val pricingJson = Json { ignoreUnknownKeys = false }
         val PRODUCT_COLUMNS = Columns.raw(
             "id,internal_code,barcode,common_name,scientific_name,description,category_id," +
                 "price_cents,wholesale_price_cents,unit,minimum_stock,watering_advice," +

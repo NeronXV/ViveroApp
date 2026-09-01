@@ -38,7 +38,7 @@ class SupabaseCashierRemoteDataSource @Inject constructor(
             "id,folio,branch_id,created_by,subtotal_cents,discount_cents,total_cents," +
                 "status,created_at,updated_at," +
                 "items:sale_items(id,sale_id,product_id,product_name,internal_code,quantity," +
-                "list_price_cents,unit_price_cents,discount_cents,line_total_cents)",
+                "list_price_cents,unit_price_cents,discount_cents,line_total_cents,promotion_name)",
         )
     }
 }

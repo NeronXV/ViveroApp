@@ -1,10 +1,8 @@
 package com.intutec.viveroapp.feature.auth.data.repository
 
-import com.intutec.viveroapp.BuildConfig
 import com.intutec.viveroapp.core.model.UserRole
 import com.intutec.viveroapp.core.network.SupabaseProvider
 import com.intutec.viveroapp.core.security.AppPermission
-import com.intutec.viveroapp.core.security.RolePermissions
 import com.intutec.viveroapp.core.session.SessionMode
 import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.core.session.UserBranch
@@ -15,7 +13,6 @@ import com.intutec.viveroapp.feature.auth.data.remote.InitialAuthState
 import com.intutec.viveroapp.feature.auth.data.remote.RefreshFailureKind
 import com.intutec.viveroapp.feature.auth.domain.repository.AuthRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 class AuthRepositoryImpl @Inject constructor(
@@ -24,7 +21,6 @@ class AuthRepositoryImpl @Inject constructor(
     private val sessionStore: SessionStore,
 ) : AuthRepository {
     override val isRemoteConfigured: Boolean get() = supabaseProvider.isConfigured
-    override val isDemoAvailable: Boolean get() = BuildConfig.DEBUG
 
     override suspend fun restoreSession(): Result<UserSession?> {
         val initialState = try {
@@ -70,36 +66,6 @@ class AuthRepositoryImpl @Inject constructor(
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             failClosed(error)
-        }
-    }
-
-    override suspend fun signInDemo(): Result<UserSession> {
-        if (!isDemoAvailable) {
-            return Result.failure(IllegalStateException("El modo demostración no está disponible en esta compilación."))
-        }
-        return try {
-            remote.signOut()
-            delay(350)
-            val session = UserSession(
-                userId = "demo-sales",
-                email = "ventas@vivero.demo",
-                fullName = "Mariana López",
-                role = UserRole.SALES,
-                capabilities = RolePermissions.permissionsFor(UserRole.SALES),
-                branch = UserBranch(
-                    id = "demo-branch",
-                    code = "CENTRO",
-                    name = "Vivero Centro",
-                    isActive = true,
-                ),
-                mode = SessionMode.DEMO,
-            )
-            sessionStore.update(session)
-            Result.success(session)
-        } catch (error: Throwable) {
-            if (error is CancellationException) throw error
-            sessionStore.clear()
-            Result.failure(error)
         }
     }
 

@@ -114,7 +114,7 @@ reset role;
 select extensions.is(
     public.get_public_catalog(),
     pg_catalog.jsonb_build_object(
-        'schemaVersion', 2,
+        'schemaVersion', 3,
         'items', '[]'::pg_catalog.jsonb,
         'categories', '[]'::pg_catalog.jsonb,
         'page', pg_catalog.jsonb_build_object(
@@ -161,10 +161,10 @@ select extensions.is(
 
 select extensions.ok(
     (
-        select pg_catalog.count(*) = 9
+        select pg_catalog.count(*) = 10
            and pg_catalog.bool_and(public_key.name = any(array[
                'id', 'name', 'scientificName', 'description', 'category',
-               'price', 'care', 'image', 'publicationStatus'
+               'price', 'care', 'image', 'publicationStatus', 'activePromotion'
            ]::pg_catalog.text[]))
         from pg_catalog.jsonb_object_keys(
             public.get_public_catalog()#>'{items,0}'

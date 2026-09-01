@@ -178,19 +178,6 @@ class AuthRepositoryImplTest {
         assertNull(fixture.store.session.value)
     }
 
-    @Test
-    fun `demo is explicit and remains separate from configured remote session`() = runTest {
-        val fixture = fixture()
-
-        val demo = fixture.repository.signInDemo().getOrThrow()
-
-        assertEquals(SessionMode.DEMO, demo.mode)
-        assertTrue(demo.isDemo)
-        assertEquals(0, fixture.remote.signInCalls)
-        assertEquals(1, fixture.remote.signOutCalls)
-        assertEquals(demo, fixture.store.session.value)
-    }
-
     private fun fixture(
         profile: ProfileDto = profile(),
         assignments: List<UserRoleAssignmentDto> = listOf(assignment()),

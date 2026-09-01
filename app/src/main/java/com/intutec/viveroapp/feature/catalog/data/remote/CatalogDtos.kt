@@ -43,6 +43,27 @@ data class RemoteProductDto(
 )
 
 @Serializable
+data class RemoteCatalogPromotionDto(
+    val id: String,
+    val name: String,
+    val discountPercent: Double,
+)
+
+@Serializable
+data class RemoteCatalogPricingItemDto(
+    val productId: String,
+    val listPriceCents: Long,
+    val effectivePriceCents: Long,
+    val activePromotion: RemoteCatalogPromotionDto? = null,
+)
+
+@Serializable
+data class RemoteCatalogPricingDto(
+    val schemaVersion: Int,
+    val items: List<RemoteCatalogPricingItemDto>,
+)
+
+@Serializable
 data class RemoteBranchCatalogInventoryItemDto(
     val productId: String,
     val totalQuantity: Double,

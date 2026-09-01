@@ -20,7 +20,6 @@ data class AuthUiState(
     val password: String = "",
     val passwordVisible: Boolean = false,
     val remoteConfigured: Boolean = false,
-    val demoAvailable: Boolean = false,
     val session: UserSession? = null,
     val errorMessage: String? = null,
     val infoMessage: String? = null,
@@ -33,7 +32,6 @@ class AuthViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(
         AuthUiState(
             remoteConfigured = repository.isRemoteConfigured,
-            demoAvailable = repository.isDemoAvailable,
         ),
     )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -58,8 +56,6 @@ class AuthViewModel @Inject constructor(
         val current = _uiState.value
         runAuthAction { repository.signIn(current.email, current.password) }
     }
-
-    fun signInDemo() = runAuthAction(repository::signInDemo)
 
     fun sendPasswordReset() {
         val email = _uiState.value.email
@@ -94,7 +90,6 @@ class AuthViewModel @Inject constructor(
             _uiState.value = AuthUiState(
                 status = AuthStatus.SIGNED_OUT,
                 remoteConfigured = repository.isRemoteConfigured,
-                demoAvailable = repository.isDemoAvailable,
             )
         }
     }
