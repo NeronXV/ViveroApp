@@ -61,7 +61,7 @@ class CatalogViewModel @Inject constructor(
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val categoryId = MutableStateFlow<String?>(null)
-    private val availableOnly = MutableStateFlow(true)
+    private val availableOnly = MutableStateFlow(false)
     private val refresh = MutableStateFlow(0)
     private val _notices = MutableSharedFlow<String>()
     val notices = _notices.asSharedFlow()

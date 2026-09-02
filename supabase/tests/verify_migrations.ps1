@@ -66,6 +66,12 @@ $gradualInventorySql = Get-Content (
 $catalogPromotionsSql = Get-Content (
     Join-Path $migrationDirectory '202608290015_catalog_promotions.sql'
 ) -Raw
+$adminRoleManagementSql = Get-Content (
+    Join-Path $migrationDirectory '202609010001_admin_role_management.sql'
+) -Raw
+$webOrdersSql = Get-Content (
+    Join-Path $migrationDirectory '202609010002_web_orders.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -99,6 +105,12 @@ $gradualInventoryTestSql = Get-Content (
 $catalogPromotionsTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\catalog_promotions.test.sql'
 ) -Raw
+$adminRoleManagementTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\admin_role_management.test.sql'
+) -Raw
+$webOrdersTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\web_orders.test.sql'
+) -Raw
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -117,7 +129,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 27) 'exactly twenty-seven ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 29) 'exactly twenty-nine ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -142,7 +154,9 @@ Assert-Condition (
         '202608290012_my_sales_contract.sql,' +
         '202608290013_catalog_images_storage.sql,' +
         '202608290014_gradual_inventory_trigger.sql,' +
-        '202608290015_catalog_promotions.sql'
+        '202608290015_catalog_promotions.sql,' +
+        '202609010001_admin_role_management.sql,' +
+        '202609010002_web_orders.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -490,6 +504,63 @@ Assert-Condition (
 ) 'admin Web tests cover authorization, pagination, filtering and privacy'
 
 Assert-Condition (
+    [regex]::Matches(
+        $adminRoleManagementSql,
+        '(?is)create or replace function public\.(get_admin_role_options|set_admin_staff_role)\s*\('
+    ).Count -eq 2 -and
+    [regex]::Matches(
+        $adminRoleManagementSql,
+        '(?is)alter function public\.(get_admin_role_options|set_admin_staff_role)\s*\([^;]*?\) owner to postgres;'
+    ).Count -eq 2
+) 'admin role management defines two postgres-owned secure RPCs'
+Assert-Condition (
+    [regex]::Matches(
+        $adminRoleManagementSql,
+        '(?is)revoke all on function public\.(get_admin_role_options|set_admin_staff_role)\s*\([^;]*?\)\s*from public, anon, authenticated, service_role;'
+    ).Count -eq 2 -and
+    [regex]::Matches(
+        $adminRoleManagementSql,
+        '(?is)grant execute on function public\.(get_admin_role_options|set_admin_staff_role)\s*\([^;]*?\) to authenticated;'
+    ).Count -eq 2 -and
+    -not [regex]::IsMatch(
+        $adminRoleManagementSql,
+        '(?is)grant execute on function public\.(get_admin_role_options|set_admin_staff_role)\s*\([^;]*?\) to (anon|service_role|public);'
+    )
+) 'admin role management execution is granted exclusively to authenticated'
+Assert-Condition (
+    $adminRoleManagementSql.Contains("public.has_permission('ASSIGN_ROLES')") -and
+    $adminRoleManagementSql.Contains('perform public.assign_user_role(p_user_id, v_role_name);') -and
+    $adminRoleManagementSql.Contains("v_actor_role = 'OWNER' or role_row.name <> 'OWNER'")
+) 'admin role management reuses authoritative hierarchy and filters actor-aware options'
+Assert-Condition (
+    $adminRoleManagementSql.Contains("message = 'ROLE_ASSIGNMENT_UNAUTHORIZED'") -and
+    $adminRoleManagementSql.Contains("message = 'ROLE_ASSIGNMENT_INVALID'") -and
+    $adminRoleManagementSql.Contains("message = 'ROLE_TARGET_UNAVAILABLE'") -and
+    $adminRoleManagementSql.Contains("message = 'ROLE_OWNER_RESTRICTED'") -and
+    $adminRoleManagementSql.Contains("message = 'ROLE_LAST_OWNER_REQUIRED'")
+) 'admin role mutation exposes stable application errors'
+Assert-Condition (
+    [regex]::Matches($adminRoleManagementSql, "'schemaVersion', 1").Count -eq 2 -and
+    $adminRoleManagementSql.Contains("'capabilities'") -and
+    -not [regex]::IsMatch($adminRoleManagementSql, '(?i)create\s+table|alter\s+table|create\s+policy|drop\s+') -and
+    -not [regex]::IsMatch($adminRoleManagementSql, '(?i)grant\s+(select|insert|update|delete|all)\s+on\s+table')
+) 'admin role contracts are versioned and change no tables, RLS or table privileges'
+Assert-Condition (
+    $adminRoleManagementTestSql.Contains('select extensions.plan(36);') -and
+    ([regex]::Matches(
+        $adminRoleManagementTestSql,
+        'extensions\.(has_function|ok|is|throws_ok|results_eq|function_returns)\('
+    ).Count -eq 36)
+) 'admin role management pgTAP plan matches its thirty-six assertions'
+Assert-Condition (
+    $adminRoleManagementTestSql.Contains('SALES cannot assign roles') -and
+    $adminRoleManagementTestSql.Contains('ADMIN role options exclude OWNER') -and
+    $adminRoleManagementTestSql.Contains('the last OWNER cannot be reassigned') -and
+    $adminRoleManagementTestSql.Contains('OWNER can promote an active target to OWNER') -and
+    $adminRoleManagementTestSql.Contains('role mutation rejects an inactive target with a stable error')
+) 'admin role tests cover authorization, hierarchy, validation and persistence'
+
+Assert-Condition (
     $accessContextSql.Contains('create or replace function public.get_my_access_context()') -and
     [regex]::IsMatch(
         $accessContextSql,
@@ -812,6 +883,53 @@ Assert-Condition (
     $catalogImagesStorageSql.Contains("public.has_permission('MANAGE_PRODUCTS')") -and
     -not [regex]::IsMatch($catalogImagesStorageSql, '(?i)to\s+service_role')
 ) 'catalog images storage policies enforce MANAGE_PRODUCTS and keep anon write denied'
+
+Assert-Condition (
+    $webOrdersSql.Contains('create table public.web_orders') -and
+    $webOrdersSql.Contains('create table public.web_order_items') -and
+    $webOrdersSql.Contains('create table public.web_order_status_history') -and
+    ([regex]::Matches($webOrdersSql, 'enable row level security;').Count -eq 3) -and
+    $webOrdersSql.Contains('revoke all on table public.web_orders, public.web_order_items, public.web_order_status_history')
+) 'web orders keep customer and order data behind RLS without direct client access'
+
+Assert-Condition (
+    $webOrdersSql.Contains('create or replace function public.submit_web_order(') -and
+    $webOrdersSql.Contains('public.resolve_catalog_product_price') -and
+    $webOrdersSql.Contains('idempotency_key') -and
+    $webOrdersSql.Contains('pg_advisory_xact_lock') -and
+    $webOrdersSql.Contains("message = 'WEB_ORDER_RATE_LIMITED'")
+) 'public web order submission is authoritative, idempotent and rate limited'
+
+Assert-Condition (
+    $webOrdersSql.Contains('create or replace function public.get_admin_web_orders(') -and
+    $webOrdersSql.Contains('create or replace function public.set_admin_web_order_status(') -and
+    $webOrdersSql.Contains("public.has_permission('VIEW_BRANCH_SALES')") -and
+    $webOrdersSql.Contains("public.has_permission('VIEW_ALL_SALES')") -and
+    $webOrdersSql.Contains("v_order.status = 'PENDING'")
+) 'web order administration enforces branch capabilities and controlled transitions'
+
+Assert-Condition (
+    ([regex]::Matches(
+        $webOrdersSql,
+        '(?is)revoke all on function public\.(get_public_web_order_options|submit_web_order|get_admin_web_orders|set_admin_web_order_status)\s*\([^;]*?\)\s*from public, anon, authenticated, service_role;'
+    ).Count -eq 4) -and
+    $webOrdersSql.Contains('grant execute on function public.get_public_web_order_options() to anon, authenticated;') -and
+    -not [regex]::IsMatch(
+        $webOrdersSql,
+        '(?is)grant execute on function public\.(get_admin_web_orders|set_admin_web_order_status)\s*\([^;]*?\)\s*to anon'
+    )
+) 'web order RPC grants separate public checkout from protected administration'
+
+Assert-Condition (
+    $webOrdersTestSql.Contains('select extensions.plan(21);') -and
+    ([regex]::Matches(
+        $webOrdersTestSql,
+        '(?im)select\s+extensions\.(has_table|has_type|ok|is|throws_ok|lives_ok)\s*\('
+    ).Count -eq 21) -and
+    $webOrdersTestSql.Contains('repeating the same order key returns an idempotent confirmation') -and
+    $webOrdersTestSql.Contains('branch manager lists orders from the assigned branch') -and
+    $webOrdersTestSql.Contains('status transitions cannot skip operational steps')
+) 'web order pgTAP covers privileges, idempotency, authoritative totals and administration'
 
 Assert-Condition (
     -not [regex]::IsMatch($allSql, '(?im)^\s*(do|as)\s+\$(?!\$|[a-z0-9_]+\$)') -and

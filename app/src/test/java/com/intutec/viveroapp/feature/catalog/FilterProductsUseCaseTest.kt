@@ -38,6 +38,13 @@ class FilterProductsUseCaseTest {
     }
 
     @Test
+    fun `catalog without availability filter keeps zero stock products visible`() {
+        val result = filter(products, "", null, false)
+
+        assertEquals(listOf("monstera", "lavanda"), result.map(Product::id))
+    }
+
+    @Test
     fun `available filter keeps active products while stock is unknown`() {
         val unknown = product("remote", "PL-099", "75999", "Remoto", interior, stock = 0)
             .copy(stockKnown = false)

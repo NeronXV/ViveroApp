@@ -29,6 +29,8 @@ Las migraciones actuales son:
 - `202608290013_catalog_images_storage.sql`: políticas mínimas de escritura para imágenes del catálogo.
 - `202608290014_gradual_inventory_trigger.sql`: activación gradual del descuento automático de inventario al cobrar.
 - `202608290015_catalog_promotions.sql`: campañas para todo el catálogo o productos seleccionados, catálogo público V3 y precios autoritativos en Android y ventas.
+- `202609010001_admin_role_management.sql`: opciones de rol según el actor y mutación versionada de roles para clientes administrativos.
+- `202609010002_web_orders.sql`: pedidos públicos idempotentes con precios autoritativos, datos de contacto protegidos, alcance administrativo por sucursal y transiciones auditadas.
 
 El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución. Los módulos posteriores añaden inventario, clientes, promociones y reportes, y la migración de endurecimiento corrige su alcance. Las expresiones SQL especiales de las migraciones MVP aún no ejecutadas se normalizaron antes de su validación desde cero.
 
@@ -38,11 +40,11 @@ Supabase configura privilegios predeterminados amplios para tablas nuevas de `pu
 
 Toda función nueva debe crearse y endurecerse en la misma transacción: revocar explícitamente `EXECUTE` de `PUBLIC`, `anon` y cualquier rol cliente no requerido, y concederlo únicamente a la lista mínima necesaria. Las funciones de trigger no se exponen directamente a clientes; una función usada por RLS solo se concede a los roles que evalúan esa política.
 
-El cliente de Administración consume `get_admin_branches`, `get_admin_staff` y `get_admin_inventory_balances`. Android consulta `get_my_branch_catalog_inventory` para ventas y usa `get_my_inventory_dashboard`, `record_inventory_reception`, `reconcile_inventory_count` y `get_my_inventory_history` para el piloto operativo, siempre sin poder elegir otra sucursal. Ningún cliente escribe directamente saldos, conteos ni movimientos.
+El cliente de Administración consume `get_admin_branches`, `get_admin_staff`, `get_admin_role_options`, `set_admin_staff_role` y `get_admin_inventory_balances`. Android consulta `get_my_branch_catalog_inventory` para ventas y usa `get_my_inventory_dashboard`, `record_inventory_reception`, `reconcile_inventory_count` y `get_my_inventory_history` para el piloto operativo, siempre sin poder elegir otra sucursal. Ningún cliente escribe directamente saldos, conteos ni movimientos.
 
 ## Modelo actual y previsto
 
-Entidades actuales principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes; ventas, partidas, pagos e historial de estados; promociones, relaciones `promotion_products` y descuentos. Las promociones conservan alcance `SALE` para descuentos sobre una venta, o usan `ALL_PRODUCTS` y `SELECTED_PRODUCTS` para campañas de catálogo. PostgreSQL selecciona la campaña que produce el menor precio efectivo y guarda la promoción aplicada en cada partida. Membresías, sesiones de caja, ledger de puntos y auditoría detallada permanecen previstas para fases posteriores.
+Entidades actuales principales: perfiles y roles; sucursales; categorías, productos e imágenes; ubicaciones, movimientos y saldos de inventario; clientes; ventas, partidas, pagos e historial de estados; pedidos web y su historial; promociones, relaciones `promotion_products` y descuentos. Las promociones conservan alcance `SALE` para descuentos sobre una venta, o usan `ALL_PRODUCTS` y `SELECTED_PRODUCTS` para campañas de catálogo. PostgreSQL selecciona la campaña que produce el menor precio efectivo y guarda la promoción aplicada en cada partida. Membresías, sesiones de caja, ledger de puntos y auditoría detallada permanecen previstas para fases posteriores.
 
 Reglas obligatorias para el diseño:
 

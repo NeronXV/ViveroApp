@@ -10,9 +10,9 @@ Ejecutar desde la raíz:
 
 ## Pruebas de seguridad de Supabase
 
-Las doce suites de base de datos declaran 362 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas, 36 del contrato Web de Administración, 23 del endurecimiento de inventario, clientes, promociones y reportes, 12 de la proyección de existencia del catálogo por sucursal, 20 del piloto de inventario, 23 del historial propio de comandas, 14 del descuento gradual de inventario y 19 de promociones de catálogo.
+Las catorce suites de base de datos declaran 420 aserciones pgTAP: 66 de seguridad/RLS, 51 de pagos, 60 del contrato Web de Caja, 20 de RPC públicos, 18 de imágenes públicas, 36 del contrato Web de Administración, 36 de administración de roles, 23 del endurecimiento de inventario, clientes, promociones y reportes, 12 de la proyección de existencia del catálogo por sucursal, 20 del piloto de inventario, 23 del historial propio de comandas, 14 del descuento gradual de inventario, 20 de promociones de catálogo y 21 de pedidos web reales.
 
-Las pruebas están creadas, pero su ejecución actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las veintisiete migraciones desde cero y los recorridos integrales de navegador y Android. Deben aprobarse antes de considerar Caja, Inventario, Administración, Mis comandas o los módulos MVP nuevos desplegables; el resultado histórico 215/215 no sustituye esta ejecución actual.
+Las pruebas están creadas, pero su ejecución actual está pendiente porque requiere un entorno PostgreSQL/Supabase local compatible. También permanecen pendientes la aplicación de las veintinueve migraciones desde cero y los recorridos integrales de navegador y Android. Deben aprobarse antes de considerar Caja, Inventario, Administración, Mis comandas, Pedidos Web o los módulos MVP nuevos desplegables; las pruebas unitarias de cliente no sustituyen esta ejecución de base de datos.
 
 El piloto Android de inventario tiene pruebas unitarias para carga y filtro, recepción, validación de conteo y reutilización de la clave idempotente al reintentar. El módulo de reportes Android cuenta con pruebas unitarias para el parsing de los contratos RPC, validación de rangos de fecha y acceso por permisos.
 

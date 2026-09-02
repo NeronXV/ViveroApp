@@ -59,9 +59,9 @@ Son campos protegidos y no tienen privilegio de actualización directa:
 
 Los cambios protegidos deberán pasar por funciones administrativas específicas y auditables. No se entregan permisos directos de escritura sobre `user_roles` a `authenticated`.
 
-Los privilegios generales creados por defaults de Supabase se eliminan explícitamente. `authenticated` conserva lectura sobre las tablas de aplicación, escritura RLS sobre las tres tablas de catálogo y `UPDATE` exclusivamente sobre `profiles.full_name` y `profiles.avatar_path`. `anon` y `PUBLIC` no reciben privilegios directos de tabla; el catálogo público se expone exclusivamente mediante `get_public_catalog`.
+Los privilegios generales creados por defaults de Supabase se eliminan explícitamente. `authenticated` conserva lectura sobre las tablas de aplicación, escritura RLS sobre las tres tablas de catálogo y `UPDATE` exclusivamente sobre `profiles.full_name` y `profiles.avatar_path`. `anon` y `PUBLIC` no reciben privilegios directos de tabla. El catálogo y la captura de pedidos públicos se exponen exclusivamente mediante RPC endurecidos.
 
-La ejecución de funciones también usa una lista blanca. `authenticated` recibe los RPC operativos y `has_permission`; `bootstrap_first_owner` queda reservado a `service_role`; las funciones de trigger no son invocables directamente por clientes. `anon` ejecuta únicamente `get_public_catalog` y `PUBLIC` no ejecuta ninguna función de `public`.
+La ejecución de funciones también usa una lista blanca. `authenticated` recibe los RPC operativos y `has_permission`; `bootstrap_first_owner` queda reservado a `service_role`; las funciones de trigger no son invocables directamente por clientes. `anon` ejecuta únicamente `get_public_catalog`, `get_public_web_order_options` y `submit_web_order`; `PUBLIC` no ejecuta ninguna función de `public`. Las tablas de pedidos, partidas, historial y datos de contacto no tienen lectura o escritura directa para clientes.
 
 La administración de sucursales usa exclusivamente estos RPC:
 
@@ -76,12 +76,14 @@ Los listados administrativos usan contratos de presentación separados:
 
 - `get_admin_branches(integer, text, uuid, boolean)`, autorizado por `MANAGE_BRANCHES` o `MANAGE_USERS`;
 - `get_admin_staff(integer, text, uuid, text, uuid, boolean)`, autorizado por `MANAGE_USERS`.
+- `get_admin_role_options()`, autorizado por `ASSIGN_ROLES`, devuelve solo los roles que el actor puede seleccionar;
+- `set_admin_staff_role(uuid, text)`, autorizado por `ASSIGN_ROLES`, aplica la jerarquía de `assign_user_role` y devuelve la asignación versionada.
 
-Ambos retornan JSON con `schemaVersion` 1, paginación estable y datos mínimos de presentación. No exponen correo, credenciales ni metadatos de `auth.users`.
+Los contratos retornan JSON con `schemaVersion` 1 y datos mínimos de presentación. Los listados conservan paginación estable y no exponen correo, credenciales ni metadatos de `auth.users`. La mutación de rol expone errores estables para autorización, rol inválido, perfil no disponible, protección de `OWNER` y conservación del último propietario.
 
 ## Alcance por sucursal
 
-RLS limita la bandeja de `CASHIER` a `SENT_TO_CASHIER` y `PAYMENT_PENDING` de su sucursal. `MANAGER` consulta ventas de su sucursal mediante una política independiente. `ADMIN` y `OWNER` pueden consultar todas las sucursales. El historial de caja específico se incorporará con su propia consulta o función.
+RLS limita la bandeja de `CASHIER` a `SENT_TO_CASHIER` y `PAYMENT_PENDING` de su sucursal. `MANAGER` consulta ventas y pedidos web de su sucursal; `ADMIN` y `OWNER` pueden consultar todas las sucursales. Los pedidos públicos solo se consultan mediante `get_admin_web_orders`, y sus estados avanzan mediante `set_admin_web_order_status` sin saltar pasos operativos.
 
 ## Cobertura de capacidades
 
