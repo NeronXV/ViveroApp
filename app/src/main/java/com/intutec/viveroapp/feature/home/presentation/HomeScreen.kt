@@ -2,6 +2,8 @@ package com.intutec.viveroapp.feature.home.presentation
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,7 +48,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -70,15 +71,18 @@ import com.intutec.viveroapp.feature.home.domain.model.DashboardModule
 import com.intutec.viveroapp.ui.theme.ViveroAppTheme
 import java.time.Instant
 
-private val Forest = Color(0xFF234D3C)
-private val Sage = Color(0xFF789B78)
-private val PaleLeaf = Color(0xFFDDE9DB)
-private val Cream = Color(0xFFF7F2E8)
-private val Terracotta = Color(0xFFC97754)
-private val TerracottaStrong = Color(0xFFA84F32)
-private val Ink = Color(0xFF24312B)
-private val Paper = Color(0xFFFFFCF6)
-private val Muted = Color(0xFF5F6F67)
+import androidx.compose.ui.graphics.Brush
+
+private val Forest = Color(0xFF075E45)
+private val Sage = Color(0xFF0E9F6E)
+private val PaleLeaf = Color(0xFFE6F4EE)
+private val Cream = Color(0xFFFAF8F5)
+private val Terracotta = Color(0xFFC97E14)
+private val TerracottaStrong = Color(0xFFB87310)
+private val Ink = Color(0xFF0F281E)
+private val Paper = Color(0xFFFFFFFF)
+private val Muted = Color(0xFF4A6359)
+private val SoftBorder = Color(0xFFE5ECE8)
 
 @Composable
 fun HomeScreenRoute(
@@ -140,11 +144,11 @@ fun HomeScreen(
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
     onInventoryClick: () -> Unit,
-    onReportsClick: () -> Unit,
-    onMySalesClick: () -> Unit,
-    onProfileClick: () -> Unit,
-    onProductsClick: () -> Unit,
-    onStaffClick: () -> Unit,
+    onReportsClick: () -> Unit = {},
+    onMySalesClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
+    onProductsClick: () -> Unit = {},
+    onStaffClick: () -> Unit = {},
 ) {
     Scaffold(containerColor = Cream) { padding ->
         Box(
@@ -187,14 +191,18 @@ private fun DashboardContent(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val expanded = maxWidth >= 720.dp
+        val quickAccessColumns = when {
+            maxWidth >= 1100.dp -> 3
+            else -> 2
+        }
         val horizontalPadding = if (expanded) 32.dp else 16.dp
-        val sectionSpacing = if (expanded) 26.dp else 16.dp
+        val sectionSpacing = if (expanded) 24.dp else 14.dp
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = horizontalPadding,
                 end = horizontalPadding,
-                top = if (expanded) 24.dp else 10.dp,
+                top = if (expanded) 24.dp else 14.dp,
                 bottom = 28.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(sectionSpacing),
@@ -217,7 +225,7 @@ private fun DashboardContent(
                         QuickAccesses(
                             modules = content.dashboard.modules,
                             cart = content.cart,
-                            expanded = expanded,
+                            columns = quickAccessColumns,
                             onModuleClick = { module ->
                                 onHomeModuleClick(
                                     module, onCatalogClick, onCartClick,
@@ -252,7 +260,7 @@ private fun HomeHeader(dashboard: Dashboard, expanded: Boolean, onProfileClick: 
             HeaderStatus(dashboard.sessionMode, onProfileClick, showProfile = true)
         }
     } else {
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -271,22 +279,25 @@ private fun HomeHeader(dashboard: Dashboard, expanded: Boolean, onProfileClick: 
 
 @Composable
 private fun BrandLockup(compact: Boolean) {
-    Surface(shape = RoundedCornerShape(if (compact) 15.dp else 18.dp), color = Paper) {
-        Box(
-            modifier = Modifier
-                .width(if (compact) 138.dp else 170.dp)
-                .height(if (compact) 46.dp else 58.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            DulcineaWordmark(Modifier.scale(if (compact) .84f else 1f))
-        }
+    Box(
+        modifier = Modifier
+            .width(if (compact) 154.dp else 180.dp)
+            .height(if (compact) 54.dp else 62.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        DulcineaWordmark()
     }
 }
 
 @Composable
 private fun Greeting(dashboard: Dashboard, expanded: Boolean, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(dashboard.workspaceTitle, style = MaterialTheme.typography.bodyMedium, color = Muted)
+        Text(
+            if (expanded) dashboard.workspaceTitle else dashboard.workspaceTitle.uppercase(),
+            style = if (expanded) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall,
+            color = if (expanded) Muted else Terracotta,
+        )
+        if (!expanded) Spacer(Modifier.height(3.dp))
         Text(
             dashboard.userName,
             style = if (expanded) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
@@ -307,15 +318,31 @@ private fun Greeting(dashboard: Dashboard, expanded: Boolean, modifier: Modifier
 @Composable
 private fun HeaderStatus(sessionMode: SessionMode, onProfileClick: () -> Unit, showProfile: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(color = PaleLeaf, shape = CircleShape) {
+        Surface(
+            color = PaleLeaf,
+            shape = CircleShape,
+            border = BorderStroke(1.dp, Forest.copy(alpha = 0.15f)),
+        ) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(
+                    horizontal = if (showProfile) 14.dp else 10.dp,
+                    vertical = if (showProfile) 7.dp else 5.dp,
+                ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Icon(Icons.Outlined.VerifiedUser, null, Modifier.size(16.dp), tint = Forest)
+                Icon(
+                    Icons.Outlined.VerifiedUser,
+                    null,
+                    Modifier.size(if (showProfile) 16.dp else 14.dp),
+                    tint = Forest,
+                )
                 Text(
-                    if (sessionMode == SessionMode.REMOTE) "Sesión remota activa" else "Modo demo activo",
+                    if (showProfile) {
+                        if (sessionMode == SessionMode.REMOTE) "Sesión remota activa" else "Modo demo activo"
+                    } else {
+                        if (sessionMode == SessionMode.REMOTE) "En línea" else "Modo demo"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = Forest,
                 )
@@ -337,27 +364,45 @@ private fun PrimarySaleAction(
     onCartClick: () -> Unit,
 ) {
     val hasItems = cart.items.isNotEmpty()
-    Surface(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = if (expanded) 190.dp else 174.dp)
+            .heightIn(min = if (expanded) 176.dp else 158.dp)
             .testTag("home_primary_action"),
-        color = if (hasItems) Color(0xFF315B49) else Forest,
-        contentColor = Color.White,
+        colors = CardDefaults.cardColors(containerColor = if (hasItems) Color(0xFF0A4E3B) else Forest),
         shape = RoundedCornerShape(if (expanded) 28.dp else 24.dp),
-        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, Forest.copy(alpha = 0.2f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Box {
+        Box(
+            modifier = Modifier.background(
+                brush = Brush.linearGradient(
+                    colors = if (hasItems) {
+                        listOf(Color(0xFF0F5A44), Color(0xFF094432))
+                    } else {
+                        listOf(Color(0xFF075E45), Color(0xFF054634), Color(0xFF032B20))
+                    }
+                )
+            )
+        ) {
             OrganicLeaves(Modifier.matchParentSize())
             Column(
-                modifier = Modifier.padding(if (expanded) 26.dp else 20.dp),
-                verticalArrangement = Arrangement.spacedBy(if (expanded) 12.dp else 9.dp),
+                modifier = Modifier.padding(if (expanded) 24.dp else 18.dp),
+                verticalArrangement = Arrangement.spacedBy(if (expanded) 11.dp else 8.dp),
             ) {
-                Text(
-                    if (hasItems) "Venta en curso" else "Punto de venta",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = .76f),
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
+                ) {
+                    Text(
+                        if (hasItems) "Venta en curso" else "Punto de venta",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
                 Text(
                     if (hasItems) "Continuar venta" else "Nueva venta",
                     style = if (expanded) MaterialTheme.typography.headlineLarge else MaterialTheme.typography.headlineMedium,
@@ -372,7 +417,7 @@ private fun PrimarySaleAction(
                         "Inicia una comanda con el catálogo de la sucursal."
                     },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = .84f),
+                    color = Color.White.copy(alpha = .88f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -382,13 +427,14 @@ private fun PrimarySaleAction(
                         containerColor = if (hasItems) TerracottaStrong else PaleLeaf,
                         contentColor = if (hasItems) Color.White else Forest,
                     ),
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = CircleShape,
+                    modifier = Modifier.heightIn(min = 46.dp),
                 ) {
-                    Icon(if (hasItems) Icons.Outlined.ShoppingCart else Icons.Outlined.PointOfSale, null)
+                    Icon(if (hasItems) Icons.Outlined.ShoppingCart else Icons.Outlined.PointOfSale, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (hasItems) "Abrir carrito" else "Comenzar")
+                    Text(if (hasItems) "Abrir carrito" else "Comenzar venta", fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(16.dp))
                 }
             }
         }
@@ -419,7 +465,7 @@ private fun SectionTitle(title: String, subtitle: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = Forest)
+        Text(title, style = MaterialTheme.typography.titleLarge, color = Forest, fontWeight = FontWeight.Bold)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Muted)
     }
 }
@@ -428,10 +474,10 @@ private fun SectionTitle(title: String, subtitle: String) {
 private fun QuickAccesses(
     modules: List<DashboardModule>,
     cart: Cart,
-    expanded: Boolean,
+    columns: Int,
     onModuleClick: (DashboardModule) -> Unit,
 ) {
-    GridRows(modules, if (expanded) 2 else 1, 12.dp) { module ->
+    GridRows(modules, columns, 12.dp) { module ->
         QuickAccessCard(
             module = module,
             description = when (module.id) {
@@ -453,26 +499,48 @@ private fun QuickAccessCard(module: DashboardModule, description: String, onClic
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 116.dp)
+            .heightIn(min = 132.dp)
             .testTag("home_module_${module.id}"),
         colors = CardDefaults.cardColors(containerColor = Paper),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = BorderStroke(1.dp, PaleLeaf),
+        border = BorderStroke(1.dp, SoftBorder),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Surface(color = PaleLeaf, shape = RoundedCornerShape(14.dp)) {
-                Icon(module.icon(), null, Modifier.padding(10.dp).size(24.dp), tint = Forest)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Surface(
+                    color = PaleLeaf,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Forest.copy(alpha = 0.10f)),
+                ) {
+                    Icon(module.icon(), null, Modifier.padding(10.dp).size(21.dp), tint = Forest)
+                }
+                Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(18.dp), tint = Forest.copy(alpha = 0.72f))
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(module.title, style = MaterialTheme.typography.titleMedium, color = Ink, maxLines = 1)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = Muted, maxLines = 2)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    module.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Ink,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, Modifier.size(20.dp), tint = Forest)
         }
     }
 }

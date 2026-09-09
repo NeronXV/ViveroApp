@@ -17,11 +17,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -43,8 +41,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +48,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryItem
 import com.intutec.viveroapp.feature.inventory.domain.model.InventoryMovement
 import java.time.ZoneId
@@ -59,11 +57,18 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun InventoryScreenRoute(
+    initialProductId: String? = null,
+    initialAction: String? = null,
     onBack: () -> Unit,
     onCreateProduct: () -> Unit,
     viewModel: InventoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(initialProductId, initialAction, state.items) {
+        if (!initialProductId.isNullOrBlank() && state.items.isNotEmpty()) {
+            viewModel.selectProduct(initialProductId, initialAction)
+        }
+    }
     InventoryScreen(
         state = state,
         onBack = onBack,
@@ -95,7 +100,7 @@ fun InventoryScreen(
     onCloseDialog: () -> Unit,
     onCloseHistory: () -> Unit,
     onDismissMessage: () -> Unit,
-    onCreateProduct: () -> Unit,
+    onCreateProduct: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.error, state.notice) {
@@ -105,31 +110,26 @@ fun InventoryScreen(
         }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") }
-                Column(Modifier.weight(1f)) {
-                    Text("Inventario", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text(if (state.branchName.isNotBlank()) "Sucursal: ${state.branchName}" else "Existencias de tu sucursal", style = MaterialTheme.typography.bodySmall)
-                }
-                Icon(Icons.Outlined.Inventory2, null, Modifier.padding(end = 12.dp).size(28.dp).alpha(.4f))
-            }
+            ViveroTopAppBar(
+                title = "Inventario",
+                onBack = onBack,
+                eyebrow = state.branchName.ifBlank { "EXISTENCIAS" }.uppercase(),
+            )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (state.branchName.isNotBlank()) {
-                Text("Sucursal: ${state.branchName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("inventory_branch_label"))
-            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = onQueryChanged,
-                label = { Text("Buscar producto o código") },
+                label = { Text("Buscar en inventario") },
+                placeholder = { Text("Nombre o código del producto") },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("inventory_search"),
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("inventory_search"),
             )
             when {
                 state.isLoading -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -184,8 +184,10 @@ private fun InventoryCard(
     onOpenHistory: (InventoryItem) -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = if (item.isLowStock) Color(0xFFFFF1EA) else Color(0xFFF7FAF5)),
-        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        border = CardDefaults.outlinedCardBorder(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier.testTag("inventory_card_${item.productId}").semantics {
             contentDescription = "Producto ${item.productName}, código ${item.productCode}, existencia ${item.totalQuantity} ${item.productUnit}"
         }
@@ -196,21 +198,28 @@ private fun InventoryCard(
                     Text(item.productName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(item.productCode, style = MaterialTheme.typography.bodySmall)
                 }
-                Text("${item.totalQuantity} ${item.productUnit}", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "${item.totalQuantity} ${item.productUnit}",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
             }
-            Text(
-                if (item.isLowStock) "Existencia baja · mínimo ${item.minimumStock}" else "Mínimo ${item.minimumStock}",
-                color = if (item.isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = if (item.isLowStock) FontWeight.Medium else FontWeight.Normal,
+            StatusPill(
+                text = if (item.isLowStock) "Existencia baja · mínimo ${item.minimumStock}" else "Mínimo ${item.minimumStock}",
+                containerColor = if (item.isLowStock) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+                contentColor = if (item.isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { onOpenAction(item, InventoryAction.RECEPTION) },
-                    modifier = Modifier.weight(1f).testTag("inventory_reception_${item.productId}")
+                    modifier = Modifier.weight(1f).testTag("inventory_reception_${item.productId}"),
+                    shape = MaterialTheme.shapes.medium,
                 ) { Text("Recibir") }
                 OutlinedButton(
                     onClick = { onOpenAction(item, InventoryAction.COUNT) },
-                    modifier = Modifier.weight(1f).testTag("inventory_count_${item.productId}")
+                    modifier = Modifier.weight(1f).testTag("inventory_count_${item.productId}"),
+                    shape = MaterialTheme.shapes.medium,
                 ) { Text("Contar") }
                 IconButton(
                     onClick = { onOpenHistory(item) },
@@ -233,7 +242,7 @@ private fun OperationDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("inventory_op_dialog"),
-        title = { Text(if (isCount) "Conciliar conteo" else "Registrar recepción") },
+        title = { Text(if (isCount) "Conciliar conteo" else "Registrar recepción", color = MaterialTheme.colorScheme.primary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(checkNotNull(state.selectedItem).productName, fontWeight = FontWeight.Medium)
@@ -282,7 +291,7 @@ private fun HistoryDialog(
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag("inventory_history_dialog"),
-        title = { Text("Historial · ${item.productName}") },
+        title = { Text("Historial · ${item.productName}", color = MaterialTheme.colorScheme.primary) },
         text = {
             Box(Modifier.fillMaxWidth().heightIn(min = 100.dp)) {
                 when {

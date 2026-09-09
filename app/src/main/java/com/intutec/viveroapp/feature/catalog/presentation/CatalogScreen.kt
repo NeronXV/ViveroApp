@@ -18,9 +18,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -41,7 +44,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,10 +56,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.ButtonDefaults
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.feature.catalog.domain.model.Category
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
 
@@ -100,17 +105,18 @@ fun CatalogScreen(
     snackbar: SnackbarHostState,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Column { Text("Catálogo"); Text("Plantas seleccionadas", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") } },
-                actions = { IconButton(onClick = onScanClick) { Icon(Icons.Outlined.QrCodeScanner, "Escanear producto") } },
-            )
+            ViveroTopAppBar(title = "Catálogo", onBack = onBack, eyebrow = "COLECCIÓN BOTÁNICA") {
+                IconButton(onClick = onScanClick) {
+                    Icon(Icons.Outlined.QrCodeScanner, "Escanear producto", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         when (state) {
-            CatalogUiState.Loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            CatalogUiState.Loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             is CatalogUiState.Error -> CatalogMessage(state.message, onRetry, Modifier.padding(padding))
             is CatalogUiState.Content -> ProductGrid(state, onProductClick, onAddToCart, onQueryChanged, onCategorySelected, onAvailableOnlyChanged, padding)
             is CatalogUiState.Empty -> EmptyCatalog(state, onQueryChanged, onCategorySelected, onAvailableOnlyChanged, padding)
@@ -160,13 +166,20 @@ private fun EmptyCatalog(
                     if (state.catalogIsEmpty) "Catálogo sin productos" else "No encontramos plantas",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     if (state.catalogIsEmpty) "Aún no hay productos activos disponibles." else "Prueba otro nombre, código o categoría.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!state.catalogIsEmpty) {
-                    Button(onClick = { onQueryChanged(""); onCategorySelected(null); onAvailableOnlyChanged(false) }) {
+                    Button(
+                        onClick = { onQueryChanged(""); onCategorySelected(null); onAvailableOnlyChanged(false) },
+                        shape = CircleShape,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    ) {
                         Text("Limpiar filtros")
                     }
                 }
@@ -185,33 +198,121 @@ private fun CatalogControls(
     onCategorySelected: (String?) -> Unit,
     onAvailableOnlyChanged: (Boolean) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Nuestra colección", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-            Text("Seleccionada para cada espacio", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Nuestra Colección", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(2.dp))
+            Text("Filtrado por las categorías más deseadas de la temporada", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(4.dp))
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChanged,
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Buscar nombre o código") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { onQueryChanged("") }) { Icon(Icons.Outlined.Clear, "Limpiar búsqueda") } },
-            singleLine = true,
-            shape = MaterialTheme.shapes.large,
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { FilterChip(selected = selectedCategoryId == null, onClick = { onCategorySelected(null) }, label = { Text("Todas") }) }
-            items(categories, key = Category::id) { category ->
-                FilterChip(selected = selectedCategoryId == category.id, onClick = { onCategorySelected(category.id) }, label = { Text(category.name) })
+            shape = CircleShape,
+            color = Color.White,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 2.dp,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChanged,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 14.dp),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    decorationBox = { innerTextField ->
+                        if (query.isEmpty()) {
+                            Text(
+                                "Busca tu planta favorita (ej. Monstera, Suculenta)...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        innerTextField()
+                    },
+                )
+                if (query.isNotEmpty()) {
+                    IconButton(
+                        onClick = { onQueryChanged("") },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(Icons.Outlined.Clear, "Limpiar búsqueda", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Search, "Buscar", modifier = Modifier.size(20.dp), tint = Color.White)
+                    }
+                }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column { Text("Solo disponibles", fontWeight = FontWeight.SemiBold); Text("Oculta productos sin existencia", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Switch(checked = availableOnly, onCheckedChange = onAvailableOnlyChanged)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                CategoryPillChip(
+                    label = "Todas",
+                    selected = selectedCategoryId == null,
+                    onClick = { onCategorySelected(null) },
+                )
+            }
+            items(categories, key = Category::id) { category ->
+                CategoryPillChip(
+                    label = category.name,
+                    selected = selectedCategoryId == category.id,
+                    onClick = { onCategorySelected(category.id) },
+                )
+            }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Text("Solo disponibles", fontWeight = FontWeight.SemiBold)
+                Text("Oculta productos sin existencia", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(
+                checked = availableOnly,
+                onCheckedChange = onAvailableOnlyChanged,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
         }
         Spacer(Modifier.height(2.dp))
+    }
+}
+
+@Composable
+private fun CategoryPillChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.White,
+        contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = if (selected) 2.dp else 1.dp,
+    ) {
+        Box(Modifier.padding(horizontal = 18.dp, vertical = 9.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+        }
     }
 }
 
@@ -220,17 +321,24 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Box {
             CatalogProductImage(
                 product = product,
-                modifier = Modifier.fillMaxWidth().height(218.dp),
+                modifier = Modifier.fillMaxWidth().height(210.dp),
                 contentScale = ContentScale.Crop,
             )
             product.promotion?.let {
-                StatusPill("Promoción", Modifier.align(Alignment.TopStart).padding(12.dp), MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+                StatusPill(
+                    text = "Promoción",
+                    modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.secondary,
+                )
             }
             StatusPill(
                 text = when {
@@ -239,27 +347,67 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
                     else -> "Sin existencia"
                 },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                containerColor = if (product.isAvailable) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
-                contentColor = if (product.isAvailable) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                containerColor = if (product.isAvailable) MaterialTheme.colorScheme.primaryContainer else Color(0xFFFFECEC),
+                contentColor = if (product.isAvailable) MaterialTheme.colorScheme.primary else Color(0xFFB91C1C),
             )
         }
         Column(Modifier.padding(18.dp)) {
-            Text(product.category.name.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Text(product.commonName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            product.scientificName?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Text(
+                text = product.category.name.uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = product.commonName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            product.scientificName?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(product.effectivePriceCents.asMxn(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                if (product.promotion != null) Text(product.priceCents.asMxn(), textDecoration = TextDecoration.LineThrough, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = product.effectivePriceCents.asMxn(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (product.promotion != null) {
+                    Text(
+                        text = product.priceCents.asMxn(),
+                        textDecoration = TextDecoration.LineThrough,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text("/ ${product.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             Button(
                 onClick = onAddToCart,
                 enabled = product.isActive && (!product.stockKnown || product.isAvailable),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             ) {
-                Icon(Icons.Outlined.ShoppingCart, null)
+                Icon(Icons.Outlined.ShoppingCart, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(8.dp))
                 Text(
                     when {
@@ -267,6 +415,7 @@ private fun ProductCard(product: Product, onClick: () -> Unit, onAddToCart: () -
                         product.isAvailable -> "Agregar al carrito"
                         else -> "Sin existencia"
                     },
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }

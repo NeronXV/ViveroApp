@@ -1,7 +1,5 @@
 package com.intutec.viveroapp.feature.cashier.presentation
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -15,14 +13,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -54,8 +50,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -67,7 +61,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
-import com.intutec.viveroapp.core.designsystem.ViveroMark
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderDetail
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderItem
 import com.intutec.viveroapp.feature.cashier.domain.model.CashierOrderSummary
@@ -75,14 +69,13 @@ import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.delay
 
-private val CashierForest = Color(0xFF234D3C)
-private val CashierSage = Color(0xFF789B78)
-private val CashierPaleSage = Color(0xFFDDE9DB)
-private val CashierCream = Color(0xFFF7F2E8)
-private val CashierPaper = Color(0xFFFFFCF6)
-private val CashierTerracotta = Color(0xFFC97754)
-private val CashierInk = Color(0xFF24312B)
-private val CashierMuted = Color(0xFF637068)
+private val CashierForest = Color(0xFF075E45)
+private val CashierPaleSage = Color(0xFFE6F4EE)
+private val CashierCream = Color(0xFFFAF8F5)
+private val CashierPaper = Color(0xFFFFFFFF)
+private val CashierTerracotta = Color(0xFFC97E14)
+private val CashierInk = Color(0xFF0F281E)
+private val CashierMuted = Color(0xFF4A6359)
 private const val COMPLETED_PAYMENT_BANNER_MILLIS = 8_000L
 
 @Composable
@@ -237,6 +230,7 @@ private fun CashierOrderCard(
         colors = CardDefaults.cardColors(containerColor = CashierPaper),
         shape = RoundedCornerShape(22.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = CardDefaults.outlinedCardBorder(),
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -287,7 +281,7 @@ private fun CashierOrderCard(
 private fun CashierStatusLabel() {
     Surface(shape = CircleShape, color = Color(0xFFFFE4D6), contentColor = Color(0xFF7C321F)) {
         Text(
-            "Esperando en caja",
+            "Pendiente",
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             style = MaterialTheme.typography.labelSmall,
             maxLines = 2,
@@ -429,7 +423,11 @@ private fun CashierDetailHeading(order: CashierOrderSummary) {
 
 @Composable
 private fun CashierItemsCard(items: List<CashierOrderItem>) {
-    Card(colors = CardDefaults.cardColors(containerColor = CashierPaper), shape = RoundedCornerShape(22.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CashierPaper),
+        shape = RoundedCornerShape(22.dp),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(Modifier.padding(18.dp)) {
             items.forEachIndexed { index, item ->
                 if (index > 0) HorizontalDivider(Modifier.padding(vertical = 14.dp), color = CashierForest.copy(alpha = .10f))
@@ -512,30 +510,7 @@ private fun CashierRefreshWarning(message: String) {
 
 @Composable
 private fun CashierHeader(title: String, subtitle: String, onBack: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().background(CashierForest).statusBarsPadding().padding(horizontal = 12.dp, vertical = 12.dp),
-    ) {
-        Canvas(Modifier.matchParentSize()) {
-            drawCircle(Color.White.copy(alpha = .05f), size.minDimension * .8f, Offset(size.width * .92f, 0f))
-            drawOval(
-                CashierSage.copy(alpha = .22f),
-                Offset(size.width * .72f, size.height * .12f),
-                Size(size.width * .2f, size.height * .52f),
-            )
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Volver", tint = Color.White)
-            }
-            ViveroMark(markSize = 42.dp, dark = true)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = .78f))
-            }
-            Icon(Icons.Rounded.PointOfSale, null, tint = Color.White, modifier = Modifier.padding(10.dp).size(26.dp))
-        }
-    }
+    ViveroTopAppBar(title = title, onBack = onBack, eyebrow = subtitle.uppercase())
 }
 
 @Composable
@@ -575,6 +550,7 @@ private fun CashierMessageContent(
         colors = CardDefaults.cardColors(containerColor = CashierPaper),
         shape = RoundedCornerShape(28.dp),
         modifier = Modifier.fillMaxWidth(),
+        border = CardDefaults.outlinedCardBorder(),
     ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 34.dp),

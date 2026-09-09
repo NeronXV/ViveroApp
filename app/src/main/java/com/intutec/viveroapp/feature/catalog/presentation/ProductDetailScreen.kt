@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Thermostat
@@ -29,7 +28,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,11 +39,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.UiState
 import com.intutec.viveroapp.core.common.asMxn
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.core.designsystem.StatusPill
 import com.intutec.viveroapp.feature.catalog.domain.model.Product
 
@@ -74,21 +81,26 @@ fun ProductDetailScreen(
     snackbar: SnackbarHostState,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("Detalle del producto") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") } },
-                actions = { IconButton(onClick = onScanClick) { Icon(Icons.Outlined.QrCodeScanner, "Escanear") } },
-            )
+            ViveroTopAppBar(title = "Detalle de producto", onBack = onBack, eyebrow = "CATÁLOGO BOTÁNICO") {
+                IconButton(onClick = onScanClick) {
+                    Icon(Icons.Outlined.QrCodeScanner, "Escanear", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             when (state) {
-                UiState.Loading -> CircularProgressIndicator()
+                UiState.Loading -> CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 is UiState.Error -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(state.message, style = MaterialTheme.typography.titleMedium)
-                    Button(onClick = onRetry) { Text("Reintentar") }
+                    Button(
+                        onClick = onRetry,
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    ) { Text("Reintentar") }
                 }
                 is UiState.Empty -> Text(state.message)
                 is UiState.Success -> ProductDetailContent(
@@ -108,27 +120,72 @@ private fun ProductDetailContent(product: Product, onAddToCart: () -> Unit) {
     ) {
         item {
             Column(Modifier.fillMaxWidth().widthIn(max = 980.dp)) {
-                CatalogProductImage(
-                    product = product,
-                    modifier = Modifier.fillMaxWidth().height(390.dp),
-                    contentScale = ContentScale.Crop,
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                ) {
+                    CatalogProductImage(
+                        product = product,
+                        modifier = Modifier.fillMaxWidth().height(360.dp),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
                 Column(Modifier.padding(22.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusPill(product.category.name)
-                        product.promotion?.let { StatusPill(it.name, containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer) }
+                        StatusPill(
+                            text = product.category.name,
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.secondary,
+                        )
+                        product.promotion?.let {
+                            StatusPill(
+                                text = it.name,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Text(product.commonName, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                    product.scientificName?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    Text("${product.internalCode} · ${product.unit}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(18.dp))
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(product.effectivePriceCents.asMxn(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        if (product.promotion != null) Text(product.priceCents.asMxn(), textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = product.commonName,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    product.scientificName?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Text(
-                        when {
+                        text = "${product.internalCode} · ${product.unit}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = product.effectivePriceCents.asMxn(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (product.promotion != null) {
+                            Text(
+                                text = product.priceCents.asMxn(),
+                                textDecoration = TextDecoration.LineThrough,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = when {
                             !product.stockKnown -> "Disponibilidad por confirmar"
                             product.isAvailable -> "${product.stockAvailable} piezas disponibles"
                             else -> "Sin existencia"
@@ -136,25 +193,29 @@ private fun ProductDetailContent(product: Product, onAddToCart: () -> Unit) {
                         color = if (product.stockKnown && !product.isAvailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Spacer(Modifier.height(22.dp))
-                    Text(product.description, style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(24.dp))
-                    Text("Guía de cuidado", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(20.dp))
+                    Text(product.description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(26.dp))
+                    Text("Guía de cuidado", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(12.dp))
                     CareCard(Icons.Outlined.WaterDrop, "Riego", product.wateringAdvice)
                     Spacer(Modifier.height(10.dp))
                     CareCard(Icons.Outlined.LightMode, "Iluminación", product.lightType)
                     Spacer(Modifier.height(10.dp))
                     CareCard(Icons.Outlined.Thermostat, "Clima recomendado", product.recommendedClimate)
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(28.dp))
                     Button(
                         onClick = onAddToCart,
                         enabled = product.isActive && (!product.stockKnown || product.isAvailable),
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
                     ) {
                         Text(
-                            if (!product.stockKnown) "Agregar · existencia pendiente"
+                            text = if (!product.stockKnown) "Agregar · existencia pendiente"
                             else if (product.isAvailable) "Agregar al carrito"
                             else "Producto sin existencia",
                             fontWeight = FontWeight.Bold,
@@ -169,10 +230,31 @@ private fun ProductDetailContent(product: Product, onAddToCart: () -> Unit) {
 
 @Composable
 private fun CareCard(icon: ImageVector, title: String, description: String) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Icon(icon, null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
-            Column { Text(title, fontWeight = FontWeight.Bold); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(44.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

@@ -14,6 +14,8 @@ import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCatalogPromotionD
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteCategoryDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductDto
 import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductImageDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductScanDto
+import com.intutec.viveroapp.feature.catalog.data.remote.RemoteProductScanItemDto
 import com.intutec.viveroapp.feature.catalog.data.repository.FakeCatalogRepository
 import com.intutec.viveroapp.feature.catalog.data.repository.SessionCatalogRepository
 import com.intutec.viveroapp.feature.catalog.data.repository.SupabaseCatalogRepository
@@ -200,9 +202,109 @@ class SupabaseCatalogRepositoryTest {
                 "loadActiveProducts",
                 "loadCatalogPricing",
                 "loadMyBranchInventory",
+                "findActiveProductByCode",
             ),
             operations,
         )
+    }
+
+    @Test
+    fun `scan lookup reads one authoritative product without loading catalog snapshot`() = runTest {
+        val scannedProduct = product()
+        val remote = remote(
+            scan = RemoteProductScanDto(
+                schemaVersion = 1,
+                item = RemoteProductScanItemDto(
+                    product = scannedProduct,
+                    category = category(),
+                    pricing = pricingFor(listOf(scannedProduct)).items.single(),
+                    stockAvailable = 6.0,
+                    stockKnown = true,
+                ),
+            ),
+        )
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("  PL-001  ")
+
+        assertTrue(result.isSuccess)
+        assertEquals(PRODUCT_ID, result.getOrNull()?.id)
+        assertEquals(6, result.getOrNull()?.stockAvailable)
+        assertEquals("PL-001", remote.lastScanCode)
+        assertEquals(1, remote.scanCalls)
+        assertEquals(0, remote.readCalls)
+    }
+
+    @Test
+    fun `unknown scan code returns null without loading catalog snapshot`() = runTest {
+        val remote = remote(scan = RemoteProductScanDto(schemaVersion = 1))
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("NO-EXISTE")
+
+        assertTrue(result.isSuccess)
+        assertNull(result.getOrNull())
+        assertEquals(1, remote.scanCalls)
+        assertEquals(0, remote.readCalls)
+    }
+
+    @Test
+    fun `missing scan RPC fails with clear migration error message without snapshot fallback`() = runTest {
+        val remote = remote()
+        remote.scanError = IllegalStateException(
+            "El servicio de consulta por QR todavía no está disponible en este entorno. Aplica la migración correspondiente y vuelve a intentar.",
+        )
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("PL-001")
+
+        assertTrue(result.isFailure)
+        assertTrue(
+            result.exceptionOrNull()?.message?.contains("El servicio de consulta por QR todavía no está disponible") == true,
+        )
+        assertEquals(1, remote.scanCalls)
+        assertEquals(0, remote.readCalls)
+    }
+
+    @Test
+    fun `unauthorized scan lookup fails with clear permission message`() = runTest {
+        val remote = remote()
+        remote.scanError = IllegalStateException("Tu cuenta no tiene permiso para consultar productos.")
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("PL-001")
+
+        assertTrue(result.isFailure)
+        assertEquals("Tu cuenta no tiene permiso para consultar productos.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `ambiguous code scan lookup fails with clear ambiguity message`() = runTest {
+        val remote = remote()
+        remote.scanError = IllegalStateException("Existe más de un producto activo asociado a este código.")
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("PL-001")
+
+        assertTrue(result.isFailure)
+        assertEquals("Existe más de un producto activo asociado a este código.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `scan lookup rejects inconsistent branch stock contract`() = runTest {
+        val scannedProduct = product()
+        val remote = remote(
+            scan = RemoteProductScanDto(
+                schemaVersion = 1,
+                item = RemoteProductScanItemDto(
+                    product = scannedProduct,
+                    category = category(),
+                    pricing = pricingFor(listOf(scannedProduct)).items.single(),
+                    stockAvailable = null,
+                    stockKnown = true,
+                ),
+            ),
+        )
+
+        val result = SupabaseCatalogRepository(remote).findProductByCode("PL-001")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("inconsistente") == true)
     }
 
     @Test
@@ -254,16 +356,21 @@ class SupabaseCatalogRepositoryTest {
         products: List<RemoteProductDto> = listOf(product()),
         pricing: RemoteCatalogPricingDto = pricingFor(products),
         inventory: RemoteBranchCatalogInventoryDto? = null,
-    ) = RecordingRemoteDataSource(categories, products, pricing, inventory)
+        scan: RemoteProductScanDto? = RemoteProductScanDto(schemaVersion = 1),
+    ) = RecordingRemoteDataSource(categories, products, pricing, inventory, scan)
 
     private class RecordingRemoteDataSource(
         private val categories: List<RemoteCategoryDto>,
         private val products: List<RemoteProductDto>,
         private val pricing: RemoteCatalogPricingDto,
         private val inventory: RemoteBranchCatalogInventoryDto?,
+        private val scan: RemoteProductScanDto?,
     ) : CatalogRemoteDataSource {
         var readCalls = 0
+        var scanCalls = 0
+        var lastScanCode: String? = null
         var failure: Throwable? = null
+        var scanError: Throwable? = null
 
         override suspend fun loadVisibleCategories(): List<RemoteCategoryDto> {
             readCalls += 1
@@ -287,6 +394,14 @@ class SupabaseCatalogRepositoryTest {
             readCalls += 1
             failure?.let { throw it }
             return inventory
+        }
+
+        override suspend fun findActiveProductByCode(code: String): RemoteProductScanDto? {
+            scanCalls += 1
+            lastScanCode = code
+            scanError?.let { throw it }
+            failure?.let { throw it }
+            return scan
         }
     }
 

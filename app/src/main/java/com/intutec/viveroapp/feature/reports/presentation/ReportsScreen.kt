@@ -16,22 +16,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Assessment
-import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,9 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
+import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreenRoute(
     onBack: () -> Unit,
@@ -53,15 +49,9 @@ fun ReportsScreenRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("Reportes de Vivero") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver")
-                    }
-                }
-            )
+            ViveroTopAppBar(title = "Ventas y reportes", onBack = onBack, eyebrow = "RESULTADOS")
         }
     ) { padding ->
         Column(
@@ -69,6 +59,7 @@ fun ReportsScreenRoute(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            Text("Importes cobrados antes de devoluciones. Consulta los ajustes en los cortes de Caja web.", modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
             RangeSelector(state.range, viewModel::setRange)
 
             when {
@@ -111,6 +102,13 @@ private fun ReportsContent(state: ReportsUiState) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            ViveroSectionIntro(
+                title = "Resumen del periodo",
+                subtitle = "Consulta ingresos, ventas y productos con mayor movimiento.",
+                eyebrow = "DESEMPEÑO DE LA SUCURSAL",
+            )
+        }
         item { SummaryCards(state) }
         
         item { SectionTitle("Ventas Diarias") }
@@ -152,11 +150,12 @@ private fun SummaryCard(modifier: Modifier, label: String, value: String, contai
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large,
+        border = CardDefaults.outlinedCardBorder(),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -166,6 +165,7 @@ private fun DailySaleRow(daily: com.intutec.viveroapp.feature.reports.domain.mod
     Card(
         Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
         border = CardDefaults.outlinedCardBorder()
     ) {
         Row(
@@ -213,7 +213,8 @@ private fun TopProductRow(product: com.intutec.viveroapp.feature.reports.domain.
 private fun SectionTitle(title: String) {
     Text(
         title,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(vertical = 8.dp)
     )

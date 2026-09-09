@@ -14,37 +14,32 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.core.session.UserSession
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(session: UserSession?, onBack: () -> Unit, onSignOut: () -> Unit) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("Mi perfil") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") } },
-            )
+            ViveroTopAppBar(title = "Mi perfil", onBack = onBack, eyebrow = "CUENTA DE TRABAJO")
         },
     ) { padding ->
         Column(
@@ -53,7 +48,12 @@ fun ProfileScreen(session: UserSession?, onBack: () -> Unit, onSignOut: () -> Un
         ) {
             if (session == null) return@Column
             Column(Modifier.fillMaxWidth().widthIn(max = 680.dp)) {
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = MaterialTheme.shapes.large,
+                    border = CardDefaults.outlinedCardBorder(),
+                ) {
                     Column(Modifier.padding(26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
                             modifier = Modifier.size(92.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
@@ -67,7 +67,12 @@ fun ProfileScreen(session: UserSession?, onBack: () -> Unit, onSignOut: () -> Un
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = MaterialTheme.shapes.large,
+                    border = CardDefaults.outlinedCardBorder(),
+                ) {
                     Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         ProfileRow(Icons.Outlined.Email, "Correo", session.email)
                         ProfileRow(Icons.Outlined.Badge, "Rol asignado", session.role.displayName)

@@ -29,12 +29,15 @@ sealed interface ScanResultState {
 data class ScannerUiState(
     val result: ScanResultState = ScanResultState.Ready,
     val resetKey: Int = 0,
+    val canCreateSales: Boolean = false,
+    val canManageInventory: Boolean = false,
 )
 
 @HiltViewModel
 class ScannerViewModel @Inject constructor(
     private val findProductByCode: FindProductByCodeUseCase,
     private val addProductToCart: AddProductToCartUseCase,
+    private val sessionStore: com.intutec.viveroapp.core.session.SessionStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ScannerUiState())
     val uiState = _uiState.asStateFlow()
@@ -42,26 +45,45 @@ class ScannerViewModel @Inject constructor(
     val notices = _notices.asSharedFlow()
     private var lookupJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            sessionStore.session.collect { session ->
+                val canSales = session?.canOperateAtBranch(com.intutec.viveroapp.core.security.AppPermission.CREATE_SALES) == true ||
+                    session?.hasCapability(com.intutec.viveroapp.core.security.AppPermission.CREATE_SALES) == true
+                val canInv = session?.canOperateAtBranch(com.intutec.viveroapp.core.security.AppPermission.MANAGE_INVENTORY) == true
+                _uiState.update {
+                    it.copy(
+                        canCreateSales = canSales,
+                        canManageInventory = canInv,
+                    )
+                }
+            }
+        }
+    }
+
     fun onCodeDetected(code: String, format: ScanFormat) {
         if (_uiState.value.result != ScanResultState.Ready) return
-        _uiState.update { it.copy(result = ScanResultState.Searching(code.trim(), format)) }
+        val trimmed = code.trim()
+        _uiState.update { it.copy(result = ScanResultState.Searching(trimmed, format)) }
         lookupJob = viewModelScope.launch {
-            val result = findProductByCode(code)
+            val result = findProductByCode(trimmed)
             currentCoroutineContext().ensureActive()
             result.fold(
                 onSuccess = { product ->
                     _uiState.update {
                         it.copy(
                             result = if (product != null) {
-                                ScanResultState.Found(code.trim(), format, product)
+                                ScanResultState.Found(trimmed, format, product)
                             } else {
-                                ScanResultState.NotFound(code.trim(), format)
+                                ScanResultState.NotFound(trimmed, format)
                             },
                         )
                     }
                 },
                 onFailure = { error ->
-                    _uiState.update { it.copy(result = ScanResultState.Error(error.message ?: "No pudimos consultar el producto.")) }
+                    _uiState.update {
+                        it.copy(result = ScanResultState.Error(error.message ?: "No pudimos consultar el producto."))
+                    }
                 },
             )
         }

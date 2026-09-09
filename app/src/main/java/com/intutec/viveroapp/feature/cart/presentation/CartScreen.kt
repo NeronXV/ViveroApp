@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -42,7 +41,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,11 +56,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.feature.cart.domain.model.Cart
 import com.intutec.viveroapp.feature.cart.domain.model.CartItem
 import com.intutec.viveroapp.feature.cart.domain.model.SaleTicket
@@ -128,17 +132,15 @@ private fun CartScreen(
         (state.error ?: state.message)?.let { snackbar.showSnackbar(it); onNoticeShown() }
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Column { Text("Carrito actual"); Text("Venta en preparación", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") } },
-            )
+            ViveroTopAppBar(title = "Carrito de venta", onBack = onBack, eyebrow = "PUNTO DE VENTA")
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             when {
-                state.loading -> CircularProgressIndicator()
+                state.loading -> CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 state.sentTicket != null -> SentTicketContent(
                     ticket = state.sentTicket,
                     working = state.working,
@@ -206,7 +208,7 @@ private fun CartContent(
     ) {
         item {
             Column {
-                Text("Orden botánica", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Orden botánica", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Text("${cart.itemCount} unidades listas para enviar a caja", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -216,15 +218,35 @@ private fun CartContent(
         item { CustomerCard(cart, onAssociateCustomer, onRemoveCustomer, working) }
         item { TotalsCard(cart) }
         item {
-            Button(onClick = onSend, enabled = !working, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                if (working) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                else { Icon(Icons.AutoMirrored.Outlined.Send, null); Spacer(Modifier.width(8.dp)); Text("Enviar orden a caja") }
+            Button(
+                onClick = onSend,
+                enabled = !working,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            ) {
+                if (working) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
+                else {
+                    Icon(Icons.AutoMirrored.Outlined.Send, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Enviar orden a caja", fontWeight = FontWeight.Bold)
+                }
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = onSaveDraft, enabled = !working, modifier = Modifier.weight(1f)) { Text("Guardar borrador") }
-                TextButton(onClick = onCancel, enabled = !working, modifier = Modifier.weight(1f)) { Text("Cancelar", color = MaterialTheme.colorScheme.error) }
+                OutlinedButton(
+                    onClick = onSaveDraft,
+                    enabled = !working,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = CircleShape,
+                ) { Text("Guardar borrador") }
+                TextButton(
+                    onClick = onCancel,
+                    enabled = !working,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = CircleShape,
+                ) { Text("Cancelar", color = MaterialTheme.colorScheme.error) }
             }
         }
         item { Spacer(Modifier.height(18.dp)) }
@@ -233,12 +255,19 @@ private fun CartContent(
 
 @Composable
 private fun CartItemCard(item: CartItem, working: Boolean, onIncrement: (String) -> Unit, onDecrement: (String) -> Unit, onRemove: (String) -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surface, shadowElevation = 5.dp) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 1.dp,
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Image(
                 painter = painterResource(productImageResource(item.imageKey)),
                 contentDescription = null,
-                modifier = Modifier.size(88.dp),
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop,
             )
             Spacer(Modifier.width(14.dp))
@@ -247,26 +276,34 @@ private fun CartItemCard(item: CartItem, working: Boolean, onIncrement: (String)
                 Text(item.internalCode, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(item.unitPriceCents.asMxn(), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    if (item.promotionName != null) Text(item.listPriceCents.asMxn(), textDecoration = TextDecoration.LineThrough, style = MaterialTheme.typography.bodySmall)
+                    if (item.promotionName != null) Text(item.listPriceCents.asMxn(), textDecoration = TextDecoration.LineThrough, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (!item.stockKnown) {
                     Text(
                         "Existencia aún no sincronizada",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                 }
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onDecrement(item.productId) }, enabled = !working) { Icon(Icons.Outlined.Remove, "Disminuir") }
+                    IconButton(onClick = { onDecrement(item.productId) }, enabled = !working, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.Remove, "Disminuir", modifier = Modifier.size(16.dp))
+                    }
                     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                        Text(item.quantity.toString(), Modifier.padding(horizontal = 14.dp, vertical = 6.dp), fontWeight = FontWeight.Bold)
+                        Text(item.quantity.toString(), Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Bold)
                     }
                     IconButton(
                         onClick = { onIncrement(item.productId) },
                         enabled = !working && (!item.stockKnown || item.quantity < item.stockAvailable),
-                    ) { Icon(Icons.Outlined.Add, "Aumentar") }
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(Icons.Outlined.Add, "Aumentar", modifier = Modifier.size(16.dp))
+                    }
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { onRemove(item.productId) }, enabled = !working) { Icon(Icons.Outlined.DeleteOutline, "Eliminar", tint = MaterialTheme.colorScheme.error) }
+                    IconButton(onClick = { onRemove(item.productId) }, enabled = !working, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.DeleteOutline, "Eliminar", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }
@@ -275,20 +312,37 @@ private fun CartItemCard(item: CartItem, working: Boolean, onIncrement: (String)
 
 @Composable
 private fun CustomerCard(cart: Cart, onAssociate: () -> Unit, onRemove: () -> Unit, working: Boolean) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = .55f)) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.PersonAdd, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(14.dp))
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 1.dp,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.PersonAdd, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(cart.customer?.name ?: "Cliente opcional", fontWeight = FontWeight.Bold)
+                Text(cart.customer?.name ?: "Cliente opcional", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    cart.customer?.let { "Identificado para esta orden" } ?: "Identifica al cliente para asignar la venta",
+                    cart.customer?.let { "Identificado para esta orden" } ?: "Asocia un cliente a esta comanda",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = if (cart.customer == null) onAssociate else onRemove, enabled = !working) {
-                Text(if (cart.customer == null) "Asociar" else "Quitar")
+            TextButton(
+                onClick = if (cart.customer == null) onAssociate else onRemove,
+                enabled = !working,
+                shape = CircleShape,
+            ) {
+                Text(if (cart.customer == null) "Asociar" else "Quitar", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -296,12 +350,17 @@ private fun CustomerCard(cart: Cart, onAssociate: () -> Unit, onRemove: () -> Un
 
 @Composable
 private fun TotalsCard(cart: Cart) {
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface, shadowElevation = 9.dp) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Resumen", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Resumen de Comanda", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             MoneyRow("Subtotal", cart.subtotalCents)
             MoneyRow("Descuentos autorizados", -cart.discountCents, emphasized = cart.discountCents > 0)
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             MoneyRow("Total", cart.totalCents, total = true)
             Text("El backend volverá a validar precios, descuentos y existencia antes del cobro.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -362,7 +421,7 @@ private fun SentTicketContent(
 internal fun SaleTicket.offersMySalesNavigation(): Boolean = syncState == SaleSyncState.SYNCED
 
 @Composable
-private fun CustomerSearchDialog(
+internal fun CustomerSearchDialog(
     query: String,
     searching: Boolean,
     results: List<Customer>,

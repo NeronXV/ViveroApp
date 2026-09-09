@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(21);
+select extensions.plan(25);
 
 select extensions.has_table('public', 'web_orders', 'web orders table exists');
 select extensions.has_table('public', 'web_order_items', 'web order items table exists');
@@ -205,6 +205,19 @@ select extensions.ok(
     'authorized status change is persisted and audited'
 );
 
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"92000000-0000-4000-8000-000000000001","role":"authenticated"}';
+select extensions.is((public.send_web_order_to_cashier('95000000-0000-4000-8000-000000000002')->>'totalCents')::bigint,10000::bigint,'web order becomes cashier sale at accepted price');
+select extensions.is((public.send_web_order_to_cashier('95000000-0000-4000-8000-000000000002')->>'idempotentReplay')::boolean,true,'sending order twice does not create a second sale');
+select public.set_admin_web_order_status('95000000-0000-4000-8000-000000000002','READY',null);
+select extensions.throws_ok(
+ $$select public.set_admin_web_order_status('95000000-0000-4000-8000-000000000002','COMPLETED',null)$$,
+ 'P0001','WEB_ORDER_PAYMENT_REQUIRED','unpaid web order cannot be completed');
+select extensions.lives_ok(
+ $$select public.set_admin_web_order_status('95000000-0000-4000-8000-000000000002','CANCELLED',null)$$,
+ 'unclaimed unpaid checkout can be cancelled');
+reset role;
 select * from extensions.finish();
 
 rollback;

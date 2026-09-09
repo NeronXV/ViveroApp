@@ -1,5 +1,7 @@
 package com.intutec.viveroapp.feature.auth.data.remote
 
+import com.intutec.viveroapp.BuildConfig
+
 import com.intutec.viveroapp.core.network.SupabaseProvider
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -49,7 +51,11 @@ class SupabaseAuthRemoteDataSource @Inject constructor(
     }
 
     override suspend fun sendPasswordReset(email: String) {
-        requireClient().auth.resetPasswordForEmail(email)
+        val redirectUrl = BuildConfig.AUTH_REDIRECT_URL.takeIf { it.isNotBlank() }
+        require(redirectUrl == null || redirectUrl.startsWith("https://")) {
+            "La dirección de recuperación debe usar HTTPS."
+        }
+        requireClient().auth.resetPasswordForEmail(email, redirectUrl = redirectUrl)
     }
 
     override suspend fun signOut() {

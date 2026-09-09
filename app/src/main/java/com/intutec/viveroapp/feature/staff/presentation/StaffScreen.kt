@@ -1,22 +1,23 @@
 package com.intutec.viveroapp.feature.staff.presentation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -24,7 +25,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.model.UserRole
+import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.feature.staff.domain.model.StaffBranch
 import com.intutec.viveroapp.feature.staff.domain.model.StaffMember
 
@@ -57,7 +60,6 @@ fun StaffScreenRoute(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StaffScreen(
     state: StaffUiState,
@@ -78,13 +80,12 @@ private fun StaffScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Personal") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") } },
-                actions = { TextButton(onClick = onRefresh, enabled = !state.operationInProgress) { Text("Actualizar") } },
-            )
+            ViveroTopAppBar(title = "Personal", onBack = onBack, eyebrow = "EQUIPO Y ACCESOS") {
+                TextButton(onClick = onRefresh, enabled = !state.operationInProgress) { Text("Actualizar") }
+            }
         },
     ) { padding ->
         when {
@@ -104,8 +105,11 @@ private fun StaffScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {
-                    Text("Equipo y accesos", style = MaterialTheme.typography.headlineSmall)
-                    Text("Los permisos efectivos los valida Supabase según el rol asignado.", style = MaterialTheme.typography.bodyMedium)
+                    ViveroSectionIntro(
+                        title = "Tu equipo",
+                        subtitle = "Administra los roles, sucursales y accesos de cada integrante.",
+                        eyebrow = "PERSONAL AUTORIZADO",
+                    )
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
                 }
                 items(state.members, key = StaffMember::id) { member ->
@@ -154,17 +158,46 @@ private fun StaffCard(
     onBranch: () -> Unit,
     onActive: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.large,
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(member.fullName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Text(if (member.isActive) "Activo" else "Inactivo", color = if (member.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(44.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        member.fullName.staffInitials(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(member.fullName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${member.role?.displayName ?: "Sin rol"} · ${member.branch?.name ?: "Sin sucursal"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                StatusPill(
+                    text = if (member.isActive) "Activo" else "Inactivo",
+                    containerColor = if (member.isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                    contentColor = if (member.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
             }
-            Text("${member.role?.displayName ?: "Sin rol"} · ${member.branch?.name ?: "Sin sucursal"}")
             if (canManageTarget) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canAssignRoles) OutlinedButton(onClick = onRole, enabled = !busy && member.isActive) { Text("Rol") }
-                OutlinedButton(onClick = onBranch, enabled = !busy && member.isActive) { Text("Sucursal") }
-                OutlinedButton(onClick = onActive, enabled = !busy) { Text(if (member.isActive) "Desactivar" else "Reactivar") }
+                if (canAssignRoles) OutlinedButton(onClick = onRole, enabled = !busy && member.isActive, modifier = Modifier.weight(1f)) { Text("Rol") }
+                OutlinedButton(onClick = onBranch, enabled = !busy && member.isActive, modifier = Modifier.weight(1f)) { Text("Sucursal") }
+                OutlinedButton(onClick = onActive, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (member.isActive) "Desactivar" else "Reactivar") }
             }
         }
     }
@@ -179,7 +212,7 @@ private fun <T> ChoiceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, color = MaterialTheme.colorScheme.primary) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(choices) { (label, value) -> TextButton(onClick = { onSelect(value) }, modifier = Modifier.fillMaxWidth()) { Text(label) } }
@@ -189,3 +222,9 @@ private fun <T> ChoiceDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
 }
+
+private fun String.staffInitials(): String = trim()
+    .split(Regex("\\s+"))
+    .take(2)
+    .mapNotNull { it.firstOrNull()?.uppercase() }
+    .joinToString("")

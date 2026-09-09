@@ -31,6 +31,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.intutec.viveroapp.R
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+
 @Composable
 fun BotanicalBackdrop(modifier: Modifier = Modifier) {
     val primary = MaterialTheme.colorScheme.primary
@@ -39,19 +53,19 @@ fun BotanicalBackdrop(modifier: Modifier = Modifier) {
         drawRect(
             brush = Brush.linearGradient(
                 colors = listOf(
-                    Color(0xFF006B4F),
-                    Color(0xFF064E3B),
-                    Color(0xFF032E23),
+                    Color(0xFF075E45),
+                    Color(0xFF054634),
+                    Color(0xFF032B20),
                 ),
                 start = Offset.Zero,
                 end = Offset(size.width, size.height),
             ),
         )
-        drawCircle(Color.White.copy(alpha = 0.06f), radius = size.minDimension * .42f, center = Offset(size.width * .08f, size.height * .12f))
-        drawCircle(secondary.copy(alpha = 0.12f), radius = size.minDimension * .34f, center = Offset(size.width * .92f, size.height * .86f))
+        drawCircle(Color.White.copy(alpha = 0.05f), radius = size.minDimension * .45f, center = Offset(size.width * .08f, size.height * .12f))
+        drawCircle(secondary.copy(alpha = 0.12f), radius = size.minDimension * .35f, center = Offset(size.width * .92f, size.height * .86f))
         rotate(-28f, pivot = Offset(size.width * .78f, size.height * .18f)) {
             drawOval(
-                color = Color.White.copy(alpha = .08f),
+                color = Color.White.copy(alpha = .07f),
                 topLeft = Offset(size.width * .61f, size.height * .03f),
                 size = Size(size.width * .34f, size.height * .15f),
             )
@@ -61,6 +75,33 @@ fun BotanicalBackdrop(modifier: Modifier = Modifier) {
                 color = primary.copy(alpha = .18f),
                 topLeft = Offset(size.width * .01f, size.height * .67f),
                 size = Size(size.width * .36f, size.height * .16f),
+            )
+        }
+    }
+}
+
+@Composable
+fun LightBotanicalBackdrop(modifier: Modifier = Modifier) {
+    val background = MaterialTheme.colorScheme.background
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    Canvas(modifier = modifier) {
+        drawRect(background)
+        drawCircle(
+            color = primary.copy(alpha = .055f),
+            radius = size.minDimension * .32f,
+            center = Offset(size.width * 1.04f, size.height * .15f),
+        )
+        drawCircle(
+            color = secondary.copy(alpha = .055f),
+            radius = size.minDimension * .24f,
+            center = Offset(size.width * -.05f, size.height * .88f),
+        )
+        rotate(-30f, pivot = Offset(size.width * .88f, size.height * .28f)) {
+            drawOval(
+                color = primary.copy(alpha = .055f),
+                topLeft = Offset(size.width * .73f, size.height * .20f),
+                size = Size(size.width * .28f, size.height * .10f),
             )
         }
     }
@@ -115,14 +156,45 @@ fun StatusPill(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.secondaryContainer,
     contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
+    borderColor: Color? = null,
 ) {
-    Surface(modifier = modifier, color = containerColor, contentColor = contentColor, shape = CircleShape) {
+    val stroke = borderColor ?: contentColor.copy(alpha = 0.18f)
+    Surface(
+        modifier = modifier,
+        color = containerColor,
+        contentColor = contentColor,
+        shape = CircleShape,
+        border = BorderStroke(1.dp, stroke),
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(contentColor))
+            Box(Modifier.size(6.dp).clip(CircleShape).background(contentColor))
+            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+fun WebHeroBadge(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.secondary,
+        shape = CircleShape,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.22f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
             Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         }
     }
@@ -136,8 +208,95 @@ fun PremiumCard(
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
-        tonalElevation = 2.dp,
-        shadowElevation = 14.dp,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shadowElevation = 6.dp,
         content = { Row(content = content) },
     )
+}
+
+@Composable
+fun ViveroCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+    ) {
+        Column(content = content)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ViveroTopAppBar(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    eyebrow: String = "VIVERO DULCINEA",
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    TopAppBar(
+        title = {
+            Column {
+                Text(
+                    eyebrow,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Volver",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        },
+        actions = actions,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface,
+        ),
+    )
+}
+
+@Composable
+fun ViveroSectionIntro(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    eyebrow: String? = null,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (eyebrow != null) {
+            Text(
+                eyebrow.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+        }
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

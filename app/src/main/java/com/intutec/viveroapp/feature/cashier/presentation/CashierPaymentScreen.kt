@@ -62,10 +62,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 
-private val PaymentForest = Color(0xFF234D3C)
-private val PaymentSage = Color(0xFFDDE9DB)
-private val PaymentCream = Color(0xFFF7F2E8)
-private val PaymentTerracotta = Color(0xFFC97754)
+private val PaymentForest = Color(0xFF075E45)
+private val PaymentSage = Color(0xFFE6F4EE)
+private val PaymentTerracotta = Color(0xFFC97E14)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,7 +87,7 @@ fun CashierPaymentFlow(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = { if (state.stage == CashierPaymentStage.FORM) onCancel() },
-        containerColor = PaymentCream,
+        containerColor = MaterialTheme.colorScheme.background,
         modifier = Modifier.testTag("cashier_payment_sheet"),
         sheetState = sheetState,
     ) {
@@ -100,7 +99,7 @@ fun CashierPaymentFlow(
     if (state.stage == CashierPaymentStage.CONFIRMATION) {
         AlertDialog(
             onDismissRequest = onDismissConfirmation,
-            title = { Text("Confirmar cobro") },
+            title = { Text("Confirmar cobro", color = MaterialTheme.colorScheme.primary) },
             text = {
                 PaymentConfirmationSummary(order, state)
             },
@@ -216,7 +215,11 @@ private fun PaymentConfirmationSummary(order: CashierOrderDetail, state: Cashier
 
 @Composable
 private fun PaymentSuccessStatus(result: CashierPaymentResult, onDone: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(22.dp),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(26.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -250,7 +253,7 @@ private fun PaymentSuccessStatus(result: CashierPaymentResult, onDone: () -> Uni
 @Composable
 private fun PaymentSummaryRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(label, Modifier.weight(1f), color = Color(0xFF637068))
+        Text(label, Modifier.weight(1f), color = Color(0xFF4A6359))
         Text(value, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.End)
     }
 }
@@ -261,7 +264,7 @@ private fun ReservationBanner(seconds: Long, onRenew: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.HourglassBottom, null, tint = PaymentForest)
             Spacer(Modifier.width(10.dp))
-            Text("Reserva visual: ${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}", Modifier.weight(1f))
+            Text("Reserva de cobro: ${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}", Modifier.weight(1f))
             if (seconds in 1..60) FilledTonalButton(onClick = onRenew, modifier = Modifier.height(48.dp)) { Text("Renovar") }
         }
     }
@@ -363,7 +366,7 @@ private fun PaymentFields(
             supportingText = { Text("No ingreses cuentas bancarias ni información sensible.") },
             modifier = Modifier.fillMaxWidth().testTag("payment_reference"),
         )
-        null -> Text("Selecciona cómo se recibió el pago.", color = Color(0xFF637068))
+        null -> Text("Selecciona cómo se recibió el pago.", color = Color(0xFF4A6359))
     }
 }
 
@@ -379,7 +382,11 @@ private fun PaymentProgress(label: String) {
 
 @Composable
 private fun PaymentStatus(icon: ImageVector, title: String, message: String, action: String, onAction: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(22.dp)) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(22.dp),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(26.dp),
             horizontalAlignment = Alignment.CenterHorizontally,

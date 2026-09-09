@@ -37,13 +37,23 @@ class SupabaseCatalogRepository @Inject constructor(
 
     override suspend fun findProductByCode(code: String): Result<Product?> = runCatching {
         val normalized = code.trim()
-        require(normalized.isNotEmpty()) { "El código no puede estar vacío." }
-        val matches = loadSnapshot().products.filter {
-            it.barcode.equals(normalized, ignoreCase = true) ||
-                it.internalCode.equals(normalized, ignoreCase = true)
+        require(normalized.length in 2..128) {
+            "El código escaneado no es válido. Verifica el formato e intenta nuevamente."
         }
-        check(matches.size <= 1) { "El código remoto identifica más de un producto." }
-        matches.singleOrNull()
+        val response = remote.findActiveProductByCode(normalized)
+            ?: return@runCatching null
+        check(response.schemaVersion == 1) { "La búsqueda remota usa una versión incompatible." }
+        response.item?.let { item ->
+            val category = item.category.toDomain()
+            check(item.stockKnown == (item.stockAvailable != null)) {
+                "La búsqueda remota contiene una existencia inconsistente."
+            }
+            item.product.toDomain(
+                categoriesById = mapOf(category.id to category),
+                pricing = item.pricing,
+                stockAvailable = item.stockAvailable.toWholeStockOrNull(),
+            )
+        }
     }
 
     private suspend fun loadSnapshot(): CatalogSnapshot {
@@ -188,6 +198,14 @@ private fun RemoteBranchCatalogInventoryDto?.toInventoryByProductId(
     }
     check(balances.size == items.size) { "El inventario remoto contiene productos duplicados." }
     return balances
+}
+
+private fun Double?.toWholeStockOrNull(): Int? {
+    if (this == null) return null
+    check(isFinite() && this >= 0 && this <= Int.MAX_VALUE && this % 1.0 == 0.0) {
+        "La búsqueda remota contiene una existencia inválida."
+    }
+    return toInt()
 }
 
 private fun RemoteProductImageDto.toDomain(expectedProductId: String): ProductImage {

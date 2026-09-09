@@ -32,6 +32,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"${localString("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localString("SUPABASE_PUBLISHABLE_KEY")}\"")
+        buildConfigField("String", "AUTH_REDIRECT_URL", "\"${localString("AUTH_REDIRECT_URL")}\"")
     }
 
     buildTypes {
@@ -91,10 +92,35 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.mockito.core)
+    testImplementation(libs.zxing.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+tasks.register<JavaExec>("generateQrLabels") {
+    group = "verification"
+    description = "Genera una hoja HTML imprimible de etiquetas QR desde un CSV."
+    dependsOn("compileDebugUnitTestKotlin")
+    classpath = configurations.getByName("debugUnitTestRuntimeClasspath") +
+        files(
+            layout.buildDirectory.dir(
+                "intermediates/built_in_kotlinc/debugUnitTest/" +
+                    "compileDebugUnitTestKotlin/classes",
+            ),
+        )
+    mainClass.set("com.intutec.viveroapp.tools.QrLabelGenerator")
+
+    doFirst {
+        val inputPath = providers.gradleProperty("qrLabelsFile")
+            .orElse(rootProject.file("docs/qr-labels-sample.csv").absolutePath)
+            .get()
+        val outputPath = providers.gradleProperty("qrLabelsOutput")
+            .orElse(layout.buildDirectory.file("qr-labels/labels.html").get().asFile.absolutePath)
+            .get()
+        args(inputPath, outputPath)
+    }
 }

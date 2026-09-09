@@ -124,10 +124,69 @@ class ScannerViewModelTest {
         assertEquals("cancelled", caught?.message)
     }
 
+    @Test
+    fun `missing scan RPC presents clear migration error message`() = runTest {
+        val viewModel = viewModel(RecordingCatalogRepository {
+            Result.failure(
+                IllegalStateException(
+                    "El servicio de consulta por QR todavía no está disponible en este entorno. Aplica la migración correspondiente y vuelve a intentar.",
+                ),
+            )
+        })
+
+        viewModel.onCodeDetected("PL-001", ScanFormat.QR)
+        advanceUntilIdle()
+
+        val result = viewModel.uiState.value.result as ScanResultState.Error
+        assertTrue(result.message.contains("El servicio de consulta por QR todavía no está disponible"))
+    }
+
+    @Test
+    fun `unauthorized error presents clear permission message`() = runTest {
+        val viewModel = viewModel(RecordingCatalogRepository {
+            Result.failure(
+                IllegalStateException("Tu cuenta no tiene permiso para consultar productos."),
+            )
+        })
+
+        viewModel.onCodeDetected("PL-001", ScanFormat.QR)
+        advanceUntilIdle()
+
+        val result = viewModel.uiState.value.result as ScanResultState.Error
+        assertEquals("Tu cuenta no tiene permiso para consultar productos.", result.message)
+    }
+
+    @Test
+    fun `session capabilities reflect sales and inventory permissions`() = runTest {
+        val sessionStore = com.intutec.viveroapp.core.session.SessionStore().apply {
+            update(
+                UserSession(
+                    userId = "user-id",
+                    email = "manager@example.test",
+                    fullName = "Gerente",
+                    role = com.intutec.viveroapp.core.model.UserRole.MANAGER,
+                    capabilities = setOf(
+                        com.intutec.viveroapp.core.security.AppPermission.SCAN_PRODUCTS,
+                        com.intutec.viveroapp.core.security.AppPermission.CREATE_SALES,
+                        com.intutec.viveroapp.core.security.AppPermission.MANAGE_INVENTORY,
+                    ),
+                    branch = com.intutec.viveroapp.core.session.UserBranch("b1", "CENTRO", "Centro", true),
+                    mode = com.intutec.viveroapp.core.session.SessionMode.REMOTE,
+                ),
+            )
+        }
+        val viewModel = viewModel(RecordingCatalogRepository { Result.success(product()) }, sessionStore = sessionStore)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.canCreateSales)
+        assertTrue(viewModel.uiState.value.canManageInventory)
+    }
+
     private fun viewModel(
         catalog: CatalogRepository,
         cart: RecordingCartRepository = RecordingCartRepository(),
-    ) = ScannerViewModel(FindProductByCodeUseCase(catalog), AddProductToCartUseCase(cart))
+        sessionStore: com.intutec.viveroapp.core.session.SessionStore = com.intutec.viveroapp.core.session.SessionStore(),
+    ) = ScannerViewModel(FindProductByCodeUseCase(catalog), AddProductToCartUseCase(cart), sessionStore)
 
     private class RecordingCatalogRepository(
         private val result: suspend (String) -> Result<Product?>,

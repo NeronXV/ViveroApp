@@ -82,6 +82,31 @@ class InventoryViewModel @Inject constructor(
 
     fun updateQuery(value: String) = _uiState.update { it.copy(query = value) }
 
+    fun selectProduct(productId: String, actionName: String? = null) {
+        val items = _uiState.value.items
+        val item = items.singleOrNull {
+            it.productId == productId || it.productCode.equals(productId, ignoreCase = true)
+        }
+        val action = when (actionName) {
+            "COUNT" -> InventoryAction.COUNT
+            "RECEPTION" -> InventoryAction.RECEPTION
+            else -> null
+        }
+        if (item != null) {
+            _uiState.update {
+                it.copy(
+                    query = item.productCode,
+                    selectedItem = if (action != null) item else null,
+                    action = action,
+                    quantityInput = if (action == InventoryAction.COUNT) item.totalQuantity.toString() else "",
+                    detailInput = "",
+                )
+            }
+        } else {
+            _uiState.update { it.copy(query = productId) }
+        }
+    }
+
     fun openAction(item: InventoryItem, action: InventoryAction) {
         _uiState.update {
             it.copy(

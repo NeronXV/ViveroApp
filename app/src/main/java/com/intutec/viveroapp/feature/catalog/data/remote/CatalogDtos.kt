@@ -76,3 +76,18 @@ data class RemoteBranchCatalogInventoryDto(
     val branchId: String,
     val items: List<RemoteBranchCatalogInventoryItemDto>,
 )
+
+@Serializable
+data class RemoteProductScanItemDto(
+    val product: RemoteProductDto,
+    val category: RemoteCategoryDto,
+    val pricing: RemoteCatalogPricingItemDto,
+    val stockAvailable: Double? = null,
+    val stockKnown: Boolean,
+)
+
+@Serializable
+data class RemoteProductScanDto(
+    val schemaVersion: Int,
+    val item: RemoteProductScanItemDto? = null,
+)

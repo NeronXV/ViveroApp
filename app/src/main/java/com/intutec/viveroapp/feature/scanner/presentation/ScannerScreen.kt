@@ -84,6 +84,7 @@ import java.util.concurrent.Executors
 fun ScannerScreenRoute(
     onBack: () -> Unit,
     onProductDetails: (String) -> Unit,
+    onNavigateToInventory: (productId: String, action: String?) -> Unit,
     viewModel: ScannerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -97,6 +98,7 @@ fun ScannerScreenRoute(
         onScanAgain = viewModel::scanAgain,
         onProductDetails = onProductDetails,
         onAddToCart = viewModel::addCurrentProductToCart,
+        onNavigateToInventory = onNavigateToInventory,
         snackbar = snackbar,
     )
 }
@@ -110,6 +112,7 @@ private fun ScannerScreen(
     onScanAgain: () -> Unit,
     onProductDetails: (String) -> Unit,
     onAddToCart: () -> Unit,
+    onNavigateToInventory: (productId: String, action: String?) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     var showManualEntry by rememberSaveable { mutableStateOf(false) }
@@ -135,9 +138,12 @@ private fun ScannerScreen(
 
             ScanResultCard(
                 result = state.result,
+                canCreateSales = state.canCreateSales,
+                canManageInventory = state.canManageInventory,
                 onScanAgain = onScanAgain,
                 onProductDetails = onProductDetails,
                 onAddToCart = onAddToCart,
+                onNavigateToInventory = onNavigateToInventory,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -296,9 +302,12 @@ private fun ScannerHeader(onBack: () -> Unit, onManualEntry: () -> Unit, modifie
 @Composable
 private fun ScanResultCard(
     result: ScanResultState,
+    canCreateSales: Boolean,
+    canManageInventory: Boolean,
     onScanAgain: () -> Unit,
     onProductDetails: (String) -> Unit,
     onAddToCart: () -> Unit,
+    onNavigateToInventory: (productId: String, action: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (result == ScanResultState.Ready) return
@@ -315,10 +324,19 @@ private fun ScanResultCard(
                 Spacer(Modifier.width(16.dp))
                 Column { Text("Consultando catálogo", fontWeight = FontWeight.Bold); Text(result.code, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            is ScanResultState.Found -> FoundProduct(result.product, result.format, onScanAgain, onProductDetails, onAddToCart)
+            is ScanResultState.Found -> FoundProduct(
+                product = result.product,
+                format = result.format,
+                canCreateSales = canCreateSales,
+                canManageInventory = canManageInventory,
+                onScanAgain = onScanAgain,
+                onProductDetails = onProductDetails,
+                onAddToCart = onAddToCart,
+                onNavigateToInventory = onNavigateToInventory,
+            )
             is ScanResultState.NotFound -> MessageResult(
                 title = "Producto no encontrado",
-                body = "El código ${result.code} no está registrado en el catálogo actual.",
+                body = "No encontramos un producto activo con ese código.",
                 action = "Escanear otro",
                 onAction = onScanAgain,
             )
@@ -331,9 +349,12 @@ private fun ScanResultCard(
 private fun FoundProduct(
     product: Product,
     format: ScanFormat,
+    canCreateSales: Boolean,
+    canManageInventory: Boolean,
     onScanAgain: () -> Unit,
     onProductDetails: (String) -> Unit,
     onAddToCart: () -> Unit,
+    onNavigateToInventory: (productId: String, action: String?) -> Unit,
 ) {
     Column(Modifier.padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -348,32 +369,109 @@ private fun FoundProduct(
                     StatusPill(format.label)
                     product.promotion?.let { StatusPill("Oferta") }
                 }
-                Text(product.commonName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(product.internalCode, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(product.effectivePriceCents.asMxn(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 Text(
-                    when {
+                    text = product.commonName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                product.scientificName?.let { scientific ->
+                    Text(
+                        text = scientific,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    text = "Código: ${product.internalCode}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "Unidad: ${product.unit}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = product.effectivePriceCents.asMxn(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (product.promotion != null && product.priceCents > product.effectivePriceCents) {
+                        Text(
+                            text = product.priceCents.asMxn(),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    text = when {
                         !product.stockKnown -> "Disponibilidad por confirmar"
-                        product.isAvailable -> "${product.stockAvailable} disponibles"
-                        else -> "Sin existencia"
+                        product.stockAvailable > 0 -> "${product.stockAvailable} disponibles en tu sucursal"
+                        else -> "Sin existencia en tu sucursal"
                     },
                     color = if (product.stockKnown && !product.isAvailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         }
         Spacer(Modifier.height(14.dp))
-        Button(
-            onClick = onAddToCart,
-            enabled = product.isActive && (!product.stockKnown || product.isAvailable),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Outlined.ShoppingBag, null)
-            Spacer(Modifier.width(8.dp))
-            Text(if (!product.stockKnown) "Agregar · existencia pendiente" else if (product.isAvailable) "Agregar al carrito" else "Sin existencia")
+
+        if (canCreateSales) {
+            val isAddEnabled = product.isActive && (!product.stockKnown || product.stockAvailable > 0)
+            Button(
+                onClick = onAddToCart,
+                enabled = isAddEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.ShoppingBag, null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        !product.stockKnown -> "Agregar · existencia pendiente"
+                        product.stockAvailable > 0 -> "Agregar al carrito"
+                        else -> "Sin existencia"
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         }
+
+        if (canManageInventory) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { onNavigateToInventory(product.id, null) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Ver en inventario")
+                }
+                OutlinedButton(
+                    onClick = { onNavigateToInventory(product.id, "COUNT") },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Realizar conteo")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = onScanAgain, modifier = Modifier.weight(1f)) { Text("Otro código") }
-            FilledTonalButton(onClick = { onProductDetails(product.id) }, modifier = Modifier.weight(1f)) { Text("Ver detalle") }
+            OutlinedButton(onClick = onScanAgain, modifier = Modifier.weight(1f)) {
+                Text("Escanear otro")
+            }
+            FilledTonalButton(onClick = { onProductDetails(product.id) }, modifier = Modifier.weight(1f)) {
+                Text("Ver detalle")
+            }
         }
     }
 }

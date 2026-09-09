@@ -1,0 +1,110 @@
+[
+  {
+    "lineNumber": 2,
+    "rawDescription": "PALMA AREKA B02 (YA LAS PEDI A FLOR)",
+    "containerCode": "B02",
+    "suggestedCommonName": "Palma areca",
+    "suggestedPresentation": "B02 - medida por confirmar",
+    "quantity": 50,
+    "unitCostCents": 2600
+  },
+  {
+    "lineNumber": 8,
+    "rawDescription": "PALMA AREKA",
+    "containerCode": "B08",
+    "suggestedCommonName": "Palma areca",
+    "suggestedPresentation": "B08 - medida por confirmar",
+    "quantity": 15,
+    "unitCostCents": 9000
+  },
+  {
+    "lineNumber": 13,
+    "rawDescription": "CLOROFITO",
+    "containerCode": "M10",
+    "suggestedCommonName": "Clorofito",
+    "suggestedPresentation": "M10 - medida por confirmar",
+    "quantity": 7,
+    "unitCostCents": 6000
+  },
+  {
+    "lineNumber": 14,
+    "rawDescription": "CLOROFITO",
+    "containerCode": "M06",
+    "suggestedCommonName": "Clorofito",
+    "suggestedPresentation": "M06 - medida por confirmar",
+    "quantity": 10,
+    "unitCostCents": 1300
+  },
+  {
+    "lineNumber": 52,
+    "rawDescription": "AVE DE PARAISO",
+    "containerCode": "B10",
+    "suggestedCommonName": "Ave del paraiso",
+    "suggestedPresentation": "B10 - medida por confirmar",
+    "quantity": 10,
+    "unitCostCents": 8500
+  },
+  {
+    "lineNumber": 54,
+    "rawDescription": "AVE DE PARAISO",
+    "containerCode": "B04",
+    "suggestedCommonName": "Ave del paraiso",
+    "suggestedPresentation": "B04 - medida por confirmar",
+    "quantity": 10,
+    "unitCostCents": 5500
+  },
+  {
+    "lineNumber": 58,
+    "rawDescription": "PHILEA",
+    "containerCode": "M06",
+    "suggestedCommonName": "Pilea",
+    "suggestedPresentation": "M06 - medida por confirmar",
+    "quantity": 5,
+    "unitCostCents": 7000
+  },
+  {
+    "lineNumber": 59,
+    "rawDescription": "PHILEA",
+    "containerCode": "M10",
+    "suggestedCommonName": "Pilea",
+    "suggestedPresentation": "M10 - medida por confirmar",
+    "quantity": 5,
+    "unitCostCents": 12000
+  },
+  {
+    "lineNumber": 60,
+    "rawDescription": "FICUS PANDURATA",
+    "containerCode": "M06",
+    "suggestedCommonName": "Ficus pandurata",
+    "suggestedPresentation": "M06 - medida por confirmar",
+    "quantity": 5,
+    "unitCostCents": 6500
+  },
+  {
+    "lineNumber": 70,
+    "rawDescription": "ROMERO",
+    "containerCode": "B02",
+    "suggestedCommonName": "Romero",
+    "suggestedPresentation": "B02 - medida por confirmar",
+    "quantity": 35,
+    "unitCostCents": 1400
+  },
+  {
+    "lineNumber": 73,
+    "rawDescription": "LAVANDA",
+    "containerCode": "B02",
+    "suggestedCommonName": "Lavanda",
+    "suggestedPresentation": "B02 - medida por confirmar",
+    "quantity": 35,
+    "unitCostCents": 1600
+  },
+  {
+    "lineNumber": 77,
+    "rawDescription": "SANCIVERIA HANNY VERDE",
+    "containerCode": "M06",
+    "suggestedCommonName": "Sansevieria Hahnii verde",
+    "suggestedPresentation": "M06 - medida por confirmar",
+    "quantity": 12,
+    "unitCostCents": 7500
+  }
+]

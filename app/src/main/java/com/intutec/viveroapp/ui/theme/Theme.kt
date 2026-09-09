@@ -1,7 +1,6 @@
 package com.intutec.viveroapp.ui.theme
 
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -9,6 +8,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
@@ -39,20 +39,24 @@ private val LightColorScheme = lightColorScheme(
     onPrimaryContainer = OnLeafContainer,
     secondary = EarthBrown,
     secondaryContainer = EarthContainer,
-    tertiary = EarthBrown,
-    tertiaryContainer = EarthContainer,
+    onSecondaryContainer = Color(0xFF7A4805),
+    tertiary = LeafGreenLight,
+    tertiaryContainer = LeafContainer,
     background = CreamBackground,
     surface = CreamSurface,
+    surfaceContainerLow = Color(0xFFFFFFFF),
+    surfaceContainer = CreamBackground,
     onBackground = DarkText,
     onSurface = DarkText,
     onSurfaceVariant = MutedText,
     outline = SoftOutline,
+    outlineVariant = SoftOutline,
     error = ErrorRed,
 )
 
 @Composable
 fun ViveroAppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {

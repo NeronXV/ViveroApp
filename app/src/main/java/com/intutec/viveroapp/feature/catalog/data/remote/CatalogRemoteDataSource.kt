@@ -5,4 +5,5 @@ interface CatalogRemoteDataSource {
     suspend fun loadActiveProducts(): List<RemoteProductDto>
     suspend fun loadCatalogPricing(): RemoteCatalogPricingDto
     suspend fun loadMyBranchInventory(): RemoteBranchCatalogInventoryDto?
+    suspend fun findActiveProductByCode(code: String): RemoteProductScanDto?
 }

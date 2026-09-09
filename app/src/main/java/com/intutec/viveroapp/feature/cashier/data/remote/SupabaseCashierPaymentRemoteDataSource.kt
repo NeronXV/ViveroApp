@@ -105,6 +105,7 @@ internal fun CashierPaymentFailureCode.userMessage(): String = when (this) {
     CashierPaymentFailureCode.IDEMPOTENCY_CONFLICT -> "El intento guardado no coincide con la operación enviada."
     CashierPaymentFailureCode.IDEMPOTENCY_KEY_INVALID -> "El identificador seguro del intento no es válido."
     CashierPaymentFailureCode.SALE_TOTAL_INVALID -> "El total de la comanda no es válido para cobrar."
+    CashierPaymentFailureCode.INVENTORY_INSUFFICIENT -> "No hay existencias suficientes. Solicita revisar el inventario antes de registrar el cobro."
     CashierPaymentFailureCode.RESPONSE_UNKNOWN,
     CashierPaymentFailureCode.RESPONSE_INVALID,
     CashierPaymentFailureCode.TEMPORARY -> "No pudimos confirmar la respuesta de Caja."

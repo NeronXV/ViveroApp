@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $migrationDirectory = Join-Path $projectRoot 'supabase\migrations'
@@ -72,6 +72,12 @@ $adminRoleManagementSql = Get-Content (
 $webOrdersSql = Get-Content (
     Join-Path $migrationDirectory '202609010002_web_orders.sql'
 ) -Raw
+$productScanLookupSql = Get-Content (
+    Join-Path $migrationDirectory '202609010003_product_scan_lookup.sql'
+) -Raw
+$supplierPurchasesSql = Get-Content (
+    Join-Path $migrationDirectory '202609010004_supplier_purchases.sql'
+) -Raw
 $paymentTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\cashier_payments.test.sql'
 ) -Raw
@@ -111,6 +117,15 @@ $adminRoleManagementTestSql = Get-Content (
 $webOrdersTestSql = Get-Content (
     Join-Path $projectRoot 'supabase\tests\database\web_orders.test.sql'
 ) -Raw
+$productScanLookupTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\product_scan_lookup.test.sql'
+) -Raw
+$supplierPurchasesTestSql = Get-Content (
+    Join-Path $projectRoot 'supabase\tests\database\supplier_purchases.test.sql'
+) -Raw
+$supplierPurchasePilotJson = Get-Content (
+    Join-Path $projectRoot 'docs\supplier-purchase-pilot-items.json'
+) -Raw | ConvertFrom-Json
 $appPermissions = Get-Content (
     Join-Path $projectRoot 'app\src\main\java\com\intutec\viveroapp\core\security\AppPermission.kt'
 ) -Raw
@@ -129,7 +144,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 29) 'exactly twenty-nine ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 34) 'exactly thirty-four ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -156,7 +171,12 @@ Assert-Condition (
         '202608290014_gradual_inventory_trigger.sql,' +
         '202608290015_catalog_promotions.sql,' +
         '202609010001_admin_role_management.sql,' +
-        '202609010002_web_orders.sql'
+        '202609010002_web_orders.sql,' +
+        '202609010003_product_scan_lookup.sql,' +
+        '202609010004_supplier_purchases.sql,' +
+        '202609080001_presential_checkout.sql,' +
+        '202609080002_cashier_closings_refunds.sql,' +
+        '202609080003_newsletter.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -921,11 +941,11 @@ Assert-Condition (
 ) 'web order RPC grants separate public checkout from protected administration'
 
 Assert-Condition (
-    $webOrdersTestSql.Contains('select extensions.plan(21);') -and
+    $webOrdersTestSql.Contains('select extensions.plan(25);') -and
     ([regex]::Matches(
         $webOrdersTestSql,
         '(?im)select\s+extensions\.(has_table|has_type|ok|is|throws_ok|lives_ok)\s*\('
-    ).Count -eq 21) -and
+    ).Count -eq 25) -and
     $webOrdersTestSql.Contains('repeating the same order key returns an idempotent confirmation') -and
     $webOrdersTestSql.Contains('branch manager lists orders from the assigned branch') -and
     $webOrdersTestSql.Contains('status transitions cannot skip operational steps')
@@ -992,6 +1012,116 @@ Assert-Condition (
     $catalogPromotionsTestSql.Contains('cashier Web detail accepts a sale containing authoritative product prices') -and
     $catalogPromotionsTestSql.Contains('a product campaign cannot be reused as a whole-sale discount')
 ) 'catalog promotion tests cover selection, presentation, checkout and scope isolation'
+
+Assert-Condition (
+    $productScanLookupSql.Contains('create or replace function public.get_product_by_scan_code(') -and
+    $productScanLookupSql.Contains("public.has_permission('VIEW_CATALOG')") -and
+    $productScanLookupSql.Contains('public.resolve_catalog_product_price') -and
+    $productScanLookupSql.Contains('balance.branch_id = v_branch_id') -and
+    $productScanLookupSql.Contains('products_active_internal_code_scan_idx') -and
+    $productScanLookupSql.Contains('products_active_barcode_scan_idx')
+) 'product scan lookup is indexed, server-priced and fixed to the actor branch'
+
+Assert-Condition (
+    [regex]::IsMatch(
+        $productScanLookupSql,
+        "(?is)security\s+definer\s+set\s+search_path\s*=\s*''"
+    ) -and
+    $productScanLookupSql.Contains(
+        'revoke all on function public.get_product_by_scan_code(pg_catalog.text)'
+    ) -and
+    $productScanLookupSql.Contains('from public, anon, authenticated, service_role;') -and
+    $productScanLookupSql.Contains(
+        'grant execute on function public.get_product_by_scan_code(pg_catalog.text)'
+    ) -and
+    -not [regex]::IsMatch(
+        $productScanLookupSql,
+        '(?is)grant execute on function public\.get_product_by_scan_code\s*\([^;]*?\)\s*to\s+(anon|service_role)'
+    )
+) 'product scan lookup exposes only the authenticated execution boundary'
+
+Assert-Condition (
+    $productScanLookupTestSql.Contains('select extensions.plan(17);') -and
+    ([regex]::Matches(
+        $productScanLookupTestSql,
+        '(?im)select\s+extensions\.(has_function|ok|is|throws_ok)\s*\('
+    ).Count -eq 17) -and
+    $productScanLookupTestSql.Contains('internal code lookup is trimmed and case insensitive') -and
+    $productScanLookupTestSql.Contains('inventory only from the actor branch') -and
+    $productScanLookupTestSql.Contains('cross-field scan code collisions are rejected')
+) 'product scan pgTAP covers lookup formats, authorization, branch stock and ambiguity'
+
+Assert-Condition (
+    ([regex]::Matches(
+        $supplierPurchasesSql,
+        '(?im)^create table public\.(suppliers|supplier_presentations|supplier_purchase_documents|supplier_purchase_items|supplier_product_aliases)\s*\('
+    ).Count -eq 5) -and
+    ([regex]::Matches($supplierPurchasesSql, '(?im)^alter table public\.supplier.* enable row level security;').Count -eq 5) -and
+    $supplierPurchasesSql.Contains('alter table public.suppliers enable row level security;') -and
+    $supplierPurchasesSql.Contains('unit_cost_cents pg_catalog.int8') -and
+    $supplierPurchasesSql.Contains('resolution_status')
+) 'supplier purchases preserve costs and review state in five RLS tables'
+
+Assert-Condition (
+    $supplierPurchasesSql.Contains('create or replace function public.create_supplier_purchase_draft(') -and
+    $supplierPurchasesSql.Contains("status pg_catalog.text not null default 'DRAFT'") -and
+    $supplierPurchasesSql.Contains("message = 'PURCHASE_TOTAL_MISMATCH'") -and
+    $supplierPurchasesSql.Contains('on conflict (idempotency_key) do nothing') -and
+    $supplierPurchasesSql.Contains('source_items <> p_items')
+) 'supplier purchase drafts validate totals and canonical idempotent retries'
+
+Assert-Condition (
+    $supplierPurchasesSql.Contains('create or replace function public.resolve_supplier_purchase_item(') -and
+    $supplierPurchasesSql.Contains('public.supplier_product_aliases') -and
+    $supplierPurchasesSql.Contains("'AUTO_MATCHED'") -and
+    $supplierPurchasesSql.Contains('create or replace function public.set_supplier_presentation(') -and
+    $supplierPurchasesSql.Contains('create or replace function public.confirm_supplier_purchase(') -and
+    $supplierPurchasesSql.Contains("'RECEPTION'") -and
+    $supplierPurchasesSql.Contains('v_item.id')
+) 'supplier purchase review learns aliases and confirmation creates idempotent receptions'
+
+Assert-Condition (
+    ([regex]::Matches(
+        $supplierPurchasesSql,
+        '(?is)revoke all on function public\.(upsert_supplier|create_supplier_purchase_draft|get_my_supplier_purchases|get_supplier_purchase|set_supplier_presentation|resolve_supplier_purchase_item|confirm_supplier_purchase)\s*\([^;]*?\)\s*from public, anon, authenticated, service_role;'
+    ).Count -eq 7) -and
+    ([regex]::Matches(
+        $supplierPurchasesSql,
+        '(?is)grant execute on function public\.(upsert_supplier|create_supplier_purchase_draft|get_my_supplier_purchases|get_supplier_purchase|set_supplier_presentation|resolve_supplier_purchase_item|confirm_supplier_purchase)\s*\([^;]*?\)\s*to authenticated;'
+    ).Count -eq 7)
+) 'supplier purchase RPCs use exact authenticated execution boundaries'
+
+Assert-Condition (
+    $supplierPurchasesTestSql.Contains('select extensions.plan(32);') -and
+    ([regex]::Matches(
+        $supplierPurchasesTestSql,
+        '(?im)select\s+extensions\.(has_table|ok|is|throws_ok)\s*\('
+    ).Count -eq 32) -and
+    $supplierPurchasesTestSql.Contains('creating a draft does not affect inventory') -and
+    $supplierPurchasesTestSql.Contains('a reviewed purchase is received atomically') -and
+    $supplierPurchasesTestSql.Contains('enriched with a confirmed measurement') -and
+    $supplierPurchasesTestSql.Contains('future supplier descriptions are matched automatically')
+) 'supplier purchase pgTAP covers drafts, costs, branch isolation, matching and receipt'
+
+$pilotTotalCents = [int64]0
+foreach ($pilotItem in $supplierPurchasePilotJson) {
+    $pilotTotalCents += [int64]$pilotItem.quantity * [int64]$pilotItem.unitCostCents
+}
+$pilotQuantity = ($supplierPurchasePilotJson | Measure-Object -Property quantity -Sum).Sum
+Assert-Condition (
+    $supplierPurchasePilotJson.Count -eq 12 -and
+    $pilotQuantity -eq 199 -and
+    $pilotTotalCents -eq 782500 -and
+    ($supplierPurchasePilotJson.lineNumber | Sort-Object -Unique).Count -eq 12
+) 'supplier purchase pilot contains twelve unique lines, 199 units and the audited total'
+
+$checkoutRelease = Get-Content (Join-Path $migrationDirectory '202609080001_presential_checkout.sql') -Raw
+$cashierRelease = Get-Content (Join-Path $migrationDirectory '202609080002_cashier_closings_refunds.sql') -Raw
+$mailRelease = Get-Content (Join-Path $migrationDirectory '202609080003_newsletter.sql') -Raw
+Assert-Condition ($checkoutRelease.Contains('web_order_id') -and $checkoutRelease.Contains('WEB_ORDER_PAYMENT_REQUIRED') -and $checkoutRelease.Contains('branch_inventory_activation')) 'web checkout requires payment and inventory activation is per branch'
+Assert-Condition ($cashierRelease.Contains('for update') -and $cashierRelease.Contains('p_money_returned is distinct from true') -and $cashierRelease.Contains('v_payment.amount_due_cents')) 'refunds lock sales and use the actual paid amount with explicit acknowledgement'
+Assert-Condition ($cashierRelease.Contains('unnest(v_payment_ids)') -and $cashierRelease.Contains('unnest(v_refund_ids)') -and $cashierRelease.Contains('IDEMPOTENCY_CONFLICT')) 'closings assign exact operation IDs and reject conflicting retries'
+Assert-Condition ($mailRelease.Contains('to service_role;') -and $mailRelease.Contains("interval '24 hours'") -and $mailRelease.Contains('if v_created then')) 'newsletter separates token preparation, expiring confirmation and immutable recipient snapshots'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

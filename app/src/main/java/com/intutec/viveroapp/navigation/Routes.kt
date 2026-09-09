@@ -13,7 +13,10 @@ import kotlinx.serialization.Serializable
 @Serializable data object ProfileRoute
 @Serializable data class CashierQueueRoute(val completedFolio: String? = null)
 @Serializable data class CashierDetailRoute(val orderId: String)
-@Serializable data object InventoryRoute
+@Serializable data class InventoryRoute(
+    val productId: String? = null,
+    val initialAction: String? = null,
+)
 @Serializable data object ReportsRoute
 @Serializable data object MySalesRoute
 @Serializable data object ProductAdminRoute

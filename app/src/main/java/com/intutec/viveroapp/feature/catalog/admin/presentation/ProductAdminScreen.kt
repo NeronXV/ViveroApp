@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,14 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -35,7 +34,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -65,6 +63,9 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
+import com.intutec.viveroapp.core.designsystem.ViveroCard
+import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
 import java.io.File
 import java.util.UUID
 
@@ -201,19 +202,14 @@ fun ProductAdminScreen(
         )
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver") }
-                Column(Modifier.weight(1f)) {
-                    Text("Productos", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (state.branchName.isNotBlank()) "Sucursal: ${state.branchName}" else "Alta de producto / planta",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Icon(Icons.Outlined.Category, null, Modifier.padding(end = 12.dp).size(28.dp))
-            }
+            ViveroTopAppBar(
+                title = "Productos y plantas",
+                onBack = onBack,
+                eyebrow = state.branchName.ifBlank { "ALTA DE PRODUCTO" }.uppercase(),
+            )
         },
     ) { padding ->
         when (state.sessionGate) {
@@ -238,75 +234,116 @@ fun ProductAdminScreen(
                     Button(onClick = onBack) { Text("Volver") }
                 }
             }
-            ProductAdminSessionGate.READY -> Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            when {
-                state.isLoadingCategories -> Row(Modifier.fillMaxWidth().testTag("product_admin_loading"), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(22.dp))
-                    Text("Cargando categorías…")
+            ProductAdminSessionGate.READY -> Column(
+                Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ViveroSectionIntro(
+                    title = "Nueva planta o producto",
+                    subtitle = "Completa la información en bloques. Los campos con asterisco son obligatorios.",
+                    eyebrow = "CATÁLOGO INTERNO",
+                )
+                ProductFormSection("Clasificación", "Selecciona una categoría existente o crea una nueva.") {
+                    when {
+                        state.isLoadingCategories -> Row(Modifier.fillMaxWidth().testTag("product_admin_loading"), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(22.dp))
+                            Text("Cargando categorías…")
+                        }
+                        state.categoriesError != null -> Column(Modifier.testTag("product_admin_categories_error"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(state.categoriesError, color = MaterialTheme.colorScheme.error)
+                            Button(onClick = onRetryCategories, modifier = Modifier.testTag("product_admin_retry")) { Text("Reintentar") }
+                        }
+                        else -> {
+                            CategoryDropdown(state.categories, state.selectedCategoryId, onCategorySelected, state.fieldErrors["category"])
+                            Spacer(Modifier.height(12.dp))
+                            CategoryCreator(state.newCategoryName, onNewCategoryNameChanged, onCreateCategory, state.isCreatingCategory, state.newCategoryError)
+                        }
+                    }
                 }
-                state.categoriesError != null -> Column(Modifier.testTag("product_admin_categories_error"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(state.categoriesError, color = MaterialTheme.colorScheme.error)
-                    Button(onClick = onRetryCategories, modifier = Modifier.testTag("product_admin_retry")) { Text("Reintentar") }
+                ProductFormSection("Fotografía", "Usa una imagen clara para reconocer el producto en catálogo y escáner.") {
+                    PhotoSection(state, onTakePhoto, onPickPhoto, onRemovePhoto, onRetryUpload)
                 }
-                else -> {
-                    CategoryDropdown(
-                        categories = state.categories,
-                        selectedId = state.selectedCategoryId,
-                        onSelected = onCategorySelected,
-                        error = state.fieldErrors["category"],
+                ProductFormSection("Identificación", "Nombres y códigos con los que el equipo encontrará este producto.") {
+                    OutlinedTextField(value = state.internalCode, onValueChange = onInternalCodeChanged, label = { Text("Código interno *") }, singleLine = true, isError = state.fieldErrors.containsKey("internalCode"), supportingText = { state.fieldErrors["internalCode"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_internal_code"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.barcode, onValueChange = onBarcodeChanged, label = { Text("Código de barras (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product_barcode"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.commonName, onValueChange = onCommonNameChanged, label = { Text("Nombre común *") }, singleLine = true, isError = state.fieldErrors.containsKey("commonName"), supportingText = { state.fieldErrors["commonName"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_common_name"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.scientificName, onValueChange = onScientificNameChanged, label = { Text("Nombre científico (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product_scientific_name"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.description, onValueChange = onDescriptionChanged, label = { Text("Descripción") }, minLines = 2, modifier = Modifier.fillMaxWidth().testTag("product_description"))
+                }
+                ProductFormSection("Precio e inventario", "Define la unidad de venta y el nivel mínimo para alertas.") {
+                    OutlinedTextField(
+                        value = state.priceInput,
+                        onValueChange = onPriceChanged,
+                        label = { Text("Precio * (ej. 120.50)") },
+                        singleLine = true,
+                        enabled = state.canManagePrices,
+                        isError = state.fieldErrors.containsKey("price"),
+                        supportingText = { state.fieldErrors["price"]?.let { Text(it) } ?: if (!state.canManagePrices) Text("Requiere permiso para administrar precios") else null },
+                        modifier = Modifier.fillMaxWidth().testTag("product_price"),
                     )
-                    CategoryCreator(
-                        newName = state.newCategoryName,
-                        onNameChanged = onNewCategoryNameChanged,
-                        onCreate = onCreateCategory,
-                        isCreating = state.isCreatingCategory,
-                        error = state.newCategoryError,
-                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.wholesalePriceInput, onValueChange = onWholesalePriceChanged, label = { Text("Precio mayoreo (opcional)") }, singleLine = true, enabled = state.canManagePrices, modifier = Modifier.fillMaxWidth().testTag("product_wholesale_price"))
+                    Spacer(Modifier.height(12.dp))
+                    UnitDropdown(state.unit, onUnitChanged, state.fieldErrors["unit"])
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.minimumStockInput, onValueChange = onMinimumStockChanged, label = { Text("Existencia mínima *") }, singleLine = true, isError = state.fieldErrors.containsKey("minimumStock"), supportingText = { state.fieldErrors["minimumStock"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_minimum_stock"))
                 }
+                ProductFormSection("Cuidados", "Información útil para orientar al cliente.") {
+                    OutlinedTextField(value = state.wateringAdvice, onValueChange = onWateringChanged, label = { Text("Riego (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("product_watering"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.lightType, onValueChange = onLightChanged, label = { Text("Luz (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("product_light"))
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = state.recommendedClimate, onValueChange = onClimateChanged, label = { Text("Clima recomendado (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("product_climate"))
+                }
+                ProductFormSection("Disponibilidad", "Controla si este producto aparece en los flujos activos.") {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text("Producto activo", style = MaterialTheme.typography.titleSmall)
+                            Text("Visible para el personal autorizado", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = state.isActive, onCheckedChange = onActiveChanged, modifier = Modifier.testTag("product_is_active"))
+                    }
+                    if (!state.canManagePrices) {
+                        Spacer(Modifier.height(10.dp))
+                        Text("Tu rol no permite modificar precios.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("product_save_error")) }
+                Button(
+                    onClick = onSave,
+                    enabled = !state.isSaving && !state.isLoadingCategories,
+                    modifier = Modifier.fillMaxWidth().height(54.dp).testTag("product_save_btn"),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    if (state.isSaving) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Guardar producto", fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    "Se registrará en ${state.branchName.ifBlank { "la sucursal asignada a tu perfil" }}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).testTag("product_branch_label"),
+                )
             }
-            PhotoSection(state, onTakePhoto, onPickPhoto, onRemovePhoto, onRetryUpload)
-            OutlinedTextField(value = state.internalCode, onValueChange = onInternalCodeChanged, label = { Text("Código interno *") }, singleLine = true, isError = state.fieldErrors.containsKey("internalCode"), supportingText = { state.fieldErrors["internalCode"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_internal_code"))
-            OutlinedTextField(value = state.barcode, onValueChange = onBarcodeChanged, label = { Text("Código de barras (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product_barcode"))
-            OutlinedTextField(value = state.commonName, onValueChange = onCommonNameChanged, label = { Text("Nombre común *") }, singleLine = true, isError = state.fieldErrors.containsKey("commonName"), supportingText = { state.fieldErrors["commonName"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_common_name"))
-            OutlinedTextField(value = state.scientificName, onValueChange = onScientificNameChanged, label = { Text("Nombre científico (opcional)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product_scientific_name"))
-            OutlinedTextField(value = state.description, onValueChange = onDescriptionChanged, label = { Text("Descripción") }, minLines = 2, modifier = Modifier.fillMaxWidth().testTag("product_description"))
-            OutlinedTextField(
-                value = state.priceInput,
-                onValueChange = onPriceChanged,
-                label = { Text("Precio * (ej. 120.50)") },
-                singleLine = true,
-                enabled = state.canManagePrices,
-                isError = state.fieldErrors.containsKey("price"),
-                supportingText = { state.fieldErrors["price"]?.let { Text(it) } ?: if (!state.canManagePrices) Text("Requiere MANAGE_PRICES") else null },
-                modifier = Modifier.fillMaxWidth().testTag("product_price"),
-            )
-            OutlinedTextField(
-                value = state.wholesalePriceInput,
-                onValueChange = onWholesalePriceChanged,
-                label = { Text("Precio mayoreo (opcional)") },
-                singleLine = true,
-                enabled = state.canManagePrices,
-                modifier = Modifier.fillMaxWidth().testTag("product_wholesale_price"),
-            )
-            UnitDropdown(selected = state.unit, onSelected = onUnitChanged, error = state.fieldErrors["unit"])
-            OutlinedTextField(value = state.minimumStockInput, onValueChange = onMinimumStockChanged, label = { Text("Existencia mínima *") }, singleLine = true, isError = state.fieldErrors.containsKey("minimumStock"), supportingText = { state.fieldErrors["minimumStock"]?.let { Text(it) } }, modifier = Modifier.fillMaxWidth().testTag("product_minimum_stock"))
-            OutlinedTextField(value = state.wateringAdvice, onValueChange = onWateringChanged, label = { Text("Riego (opcional)") }, singleLine = false, modifier = Modifier.fillMaxWidth().testTag("product_watering"))
-            OutlinedTextField(value = state.lightType, onValueChange = onLightChanged, label = { Text("Luz (opcional)") }, singleLine = false, modifier = Modifier.fillMaxWidth().testTag("product_light"))
-            OutlinedTextField(value = state.recommendedClimate, onValueChange = onClimateChanged, label = { Text("Clima recomendado (opcional)") }, singleLine = false, modifier = Modifier.fillMaxWidth().testTag("product_climate"))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Activo", style = MaterialTheme.typography.titleSmall)
-                Switch(checked = state.isActive, onCheckedChange = onActiveChanged, modifier = Modifier.testTag("product_is_active"))
-            }
-            if (!state.canManagePrices) {
-                Text("No tienes MANAGE_PRICES: el precio se enviará igualmente pero el backend lo rechazará si tu rol no lo permite.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("product_save_error")) }
-            Button(onClick = onSave, enabled = !state.isSaving && !state.isLoadingCategories, modifier = Modifier.fillMaxWidth().testTag("product_save_btn")) {
-                if (state.isSaving) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Guardar producto")
-            }
-            Spacer(Modifier.height(8.dp))
-            Text("Sucursal afectada: ${state.branchName.ifBlank { "Sin sucursal asignada - verifica tu perfil" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("product_branch_label"))
-            }
+        }
+    }
+}
+
+@Composable
+private fun ProductFormSection(
+    title: String,
+    subtitle: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ViveroCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(16.dp))
+            content()
         }
     }
 }
@@ -348,8 +385,6 @@ private fun PhotoSection(
     onRetryUpload: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().testTag("product_photo_section"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Fotografía del producto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        // Preview
         Box(
             Modifier.fillMaxWidth().height(200.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).testTag("product_photo_preview"),
             contentAlignment = Alignment.Center,

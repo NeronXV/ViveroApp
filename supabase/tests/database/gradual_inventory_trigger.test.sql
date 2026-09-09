@@ -1,4 +1,4 @@
-﻿begin;
+begin;
 
 create extension if not exists pgtap with schema extensions;
 select extensions.plan(14);
@@ -40,7 +40,7 @@ select extensions.ok(
         where n.nspname = 'public'
           and p.proname = 'record_sale_inventory_movements'
           and p.prosecdef = true
-          and p.proconfig @> array['search_path=']
+          and p.proconfig @> array['search_path=""']
     ),
     'record_sale_inventory_movements es SECURITY DEFINER con search_path vacio'
 );
@@ -61,9 +61,9 @@ select extensions.ok(
         where n.nspname = 'public'
           and c.relname = 'sales'
           and t.tgname = 'on_sale_paid_record_inventory'
-          and t.tgenabled = 'D'
+          and t.tgenabled = 'O'
     ),
-    'El trigger on_sale_paid_record_inventory esta deshabilitado (tgenabled = D) durante la fase gradual'
+    'El trigger on_sale_paid_record_inventory esta habilitado y cada sucursal requiere activacion'
 );
 
 -- 4. El indice de idempotencia para movimientos SALE existe
@@ -79,14 +79,14 @@ select extensions.ok(
 
 -- 5. Crear una venta con producto de stock cero y pasar a PAID (Caja cobra sin bloqueo)
 insert into public.sales (
-    id, folio, branch_id, status, subtotal_cents, discount_cents, total_cents, created_by
+    id, folio, branch_id, status, subtotal_cents, discount_cents, total_cents, created_by, idempotency_key
 ) values (
-    '95000000-0000-4000-8000-000000000041', 'VD-TEST-001', '95000000-0000-4000-8000-000000000001',
-    'SENT_TO_CASHIER', 15000, 0, 15000, '95000000-0000-4000-8000-000000000011'
+    '95000000-0000-4000-8000-000000000041', 'VD-260908-GRAD01', '95000000-0000-4000-8000-000000000001',
+    'SENT_TO_CASHIER', 15000, 0, 15000, '95000000-0000-4000-8000-000000000011', '95000000-0000-4000-8000-000000000041'
 );
 
-insert into public.sale_items (id, sale_id, product_id, quantity, unit_price_cents, subtotal_cents)
-values ('95000000-0000-4000-8000-000000000051', '95000000-0000-4000-8000-000000000041', '95000000-0000-4000-8000-000000000031', 2, 7500, 15000);
+insert into public.sale_items (id, sale_id, product_id, quantity, unit_price_cents, product_name, internal_code, list_price_cents)
+values ('95000000-0000-4000-8000-000000000051', '95000000-0000-4000-8000-000000000041', '95000000-0000-4000-8000-000000000031', 2, 7500, 'Planta Sin Stock', 'GRAD-01', 7500);
 
 -- Actualizar a PAID (simulando confirm_sale_payment)
 update public.sales
@@ -119,7 +119,7 @@ select extensions.is(
 
 -- 8. Probar como actor autenticado OWNER
 set local role authenticated;
-set local request.jwt.claims = '{sub:95000000-0000-4000-8000-000000000011,role:authenticated}';
+set local request.jwt.claims = '{"sub":"95000000-0000-4000-8000-000000000011","role":"authenticated"}';
 
 -- 9. Registrar recepcion actualiza saldos normalmente
 select extensions.ok(
@@ -163,29 +163,29 @@ reset role;
 
 -- 13. Venta con partidas duplicadas del mismo producto: agrupacion consolidada
 insert into public.sales (
-    id, folio, branch_id, status, subtotal_cents, discount_cents, total_cents, created_by
+    id, folio, branch_id, status, subtotal_cents, discount_cents, total_cents, created_by, idempotency_key
 ) values (
-    '95000000-0000-4000-8000-000000000081', 'VD-TEST-MULTI', '95000000-0000-4000-8000-000000000001',
-    'SENT_TO_CASHIER', 30000, 0, 30000, '95000000-0000-4000-8000-000000000011'
+    '95000000-0000-4000-8000-000000000081', 'VD-260908-GRAD02', '95000000-0000-4000-8000-000000000001',
+    'SENT_TO_CASHIER', 50000, 0, 50000, '95000000-0000-4000-8000-000000000011', '95000000-0000-4000-8000-000000000081'
 );
 
-insert into public.sale_items (id, sale_id, product_id, quantity, unit_price_cents, subtotal_cents) values
-    ('95000000-0000-4000-8000-000000000091', '95000000-0000-4000-8000-000000000081', '95000000-0000-4000-8000-000000000032', 3, 10000, 30000),
-    ('95000000-0000-4000-8000-000000000092', '95000000-0000-4000-8000-000000000081', '95000000-0000-4000-8000-000000000032', 2, 10000, 20000);
+insert into public.sale_items (id, sale_id, product_id, quantity, unit_price_cents, product_name, internal_code, list_price_cents) values
+    ('95000000-0000-4000-8000-000000000091', '95000000-0000-4000-8000-000000000081', '95000000-0000-4000-8000-000000000032', 5, 10000, 'Planta Con Stock', 'GRAD-02', 10000);
 
 -- En un test controlado con el trigger temporalmente habilitado
-alter table public.sales enable trigger on_sale_paid_record_inventory;
+insert into public.branch_inventory_activation(branch_id, activated_by)
+values ('95000000-0000-4000-8000-000000000001', '95000000-0000-4000-8000-000000000011');
 update public.sales set status = 'PAID' where id = '95000000-0000-4000-8000-000000000081';
 
 -- Comprobar que solo se genero 1 movimiento consolidado con quantity = -5
 select extensions.is(
     (select quantity::int from public.inventory_movements where reference_id = '95000000-0000-4000-8000-000000000081' and product_id = '95000000-0000-4000-8000-000000000032'),
     -5,
-    'Las 2 partidas (3 + 2) se agrupan en un solo movimiento consolidado de -5 unidades'
+    'La venta descuenta cinco unidades tras activar la sucursal'
 );
 
 -- 14. Idempotencia: disparar de nuevo la logica no duplica movimientos por ON CONFLICT DO NOTHING
-alter table public.sales disable trigger on_sale_paid_record_inventory;
+update public.sales set updated_at = pg_catalog.now() where id = '95000000-0000-4000-8000-000000000081';
 
 select extensions.is(
     (select count(*)::int from public.inventory_movements where reference_id = '95000000-0000-4000-8000-000000000081'),

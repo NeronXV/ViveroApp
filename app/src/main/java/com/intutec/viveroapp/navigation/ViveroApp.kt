@@ -109,6 +109,9 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 ScannerScreenRoute(
                     onBack = navController::navigateUp,
                     onProductDetails = { navController.navigate(ProductDetailRoute(it)) },
+                    onNavigateToInventory = { productId, action ->
+                        navController.navigate(InventoryRoute(productId = productId, initialAction = action))
+                    },
                 )
             } else {
                 PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
@@ -153,9 +156,12 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
             }
         }
-        composable<InventoryRoute> {
+        composable<InventoryRoute> { entry ->
             if (authState.session?.canOperateAtBranch(AppPermission.MANAGE_INVENTORY) == true) {
+                val route = entry.toRoute<InventoryRoute>()
                 InventoryScreenRoute(
+                    initialProductId = route.productId,
+                    initialAction = route.initialAction,
                     onBack = navController::navigateUp,
                     onCreateProduct = { navController.navigate(ProductAdminRoute) },
                 )
