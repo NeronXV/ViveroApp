@@ -128,7 +128,7 @@ select extensions.ok(
         20,
         'Lote inicial de prueba',
         '95000000-0000-4000-8000-000000000061'
-    ) ->> 'totalQuantity')::int = 20,
+    ) ->> 'totalQuantity')::numeric = 20,
     'record_inventory_reception actualiza saldo a 20 unidades'
 );
 
@@ -140,7 +140,7 @@ select extensions.ok(
         'Conteo fisico de bodega',
         '95000000-0000-4000-8000-000000000071',
         null
-    ) ->> 'adjustmentQuantity')::int = -2,
+    ) ->> 'adjustmentQuantity')::numeric = -2,
     'reconcile_inventory_count calcula ajuste de -2 y existencia de 18'
 );
 

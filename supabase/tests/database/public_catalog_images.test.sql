@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(18);
+select extensions.plan(21);
 
 select extensions.is(
     (
@@ -42,11 +42,10 @@ select extensions.ok(
           and p.cmd in ('ALL', 'INSERT', 'UPDATE', 'DELETE')
           and p.roles && array[
               'public'::pg_catalog.name,
-              'anon'::pg_catalog.name,
-              'authenticated'::pg_catalog.name
+              'anon'::pg_catalog.name
           ]
     ),
-    'catalog migration grants no object write policy to client roles'
+    'catalog storage grants no object write policy to PUBLIC or anon'
 );
 
 select extensions.ok(
@@ -162,6 +161,37 @@ select extensions.throws_ok(
     'new row for relation "product_images" violates check constraint "product_images_storage_path_catalog_object_key_check"',
     'a bucket-prefixed object key is rejected'
 );
+
+-- The later catalog administration contract permits uploads only to staff with
+-- MANAGE_PRODUCTS, and only inside the catalog-images bucket.
+insert into auth.users (id, email, raw_user_meta_data) values
+    ('77000000-0000-4000-8000-000000000001', 'image-owner@example.test', '{"full_name":"Image Owner"}'),
+    ('77000000-0000-4000-8000-000000000002', 'image-sales@example.test', '{"full_name":"Image Sales"}');
+insert into public.user_roles(user_id, role_id)
+select actor.id, r.id from (values
+    ('77000000-0000-4000-8000-000000000001'::uuid, 'OWNER'),
+    ('77000000-0000-4000-8000-000000000002'::uuid, 'SALES')
+) actor(id, role_name) join public.roles r on r.name = actor.role_name;
+insert into storage.buckets(id, name) values ('restricted-test', 'restricted-test');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '77000000-0000-4000-8000-000000000001';
+select extensions.lives_ok(
+    $$insert into storage.objects(bucket_id, name) values ('catalog-images', 'products/owner-photo.webp')$$,
+    'staff with MANAGE_PRODUCTS can upload a catalog image'
+);
+select extensions.throws_ok(
+    $$insert into storage.objects(bucket_id, name) values ('restricted-test', 'products/owner-photo.webp')$$,
+    '42501', 'new row violates row-level security policy for table "objects"',
+    'catalog permission does not authorize another storage bucket'
+);
+set local request.jwt.claim.sub = '77000000-0000-4000-8000-000000000002';
+select extensions.throws_ok(
+    $$insert into storage.objects(bucket_id, name) values ('catalog-images', 'products/sales-photo.webp')$$,
+    '42501', 'new row violates row-level security policy for table "objects"',
+    'staff without MANAGE_PRODUCTS cannot upload catalog images'
+);
+reset role;
 
 select * from extensions.finish();
 rollback;

@@ -61,7 +61,7 @@ select extensions.is(
 -- 3. Search path
 select extensions.is(
     (select p.proconfig from pg_catalog.pg_proc p where p.oid = 'public.get_my_recent_sales(integer,timestamptz,uuid)'::regprocedure),
-    array['search_path='], 'empty search_path'
+    array['search_path=""'], 'empty search_path'
 );
 
 -- 4. Grants

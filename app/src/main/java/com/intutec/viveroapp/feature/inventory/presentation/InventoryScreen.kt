@@ -64,8 +64,8 @@ fun InventoryScreenRoute(
     viewModel: InventoryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(initialProductId, initialAction, state.items) {
-        if (!initialProductId.isNullOrBlank() && state.items.isNotEmpty()) {
+    LaunchedEffect(initialProductId, initialAction, state.isLoading, state.items) {
+        if (!initialProductId.isNullOrBlank() && !state.isLoading && state.error == null) {
             viewModel.selectProduct(initialProductId, initialAction)
         }
     }

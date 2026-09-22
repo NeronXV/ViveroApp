@@ -50,6 +50,7 @@ class InventoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(InventoryUiState())
     val uiState: StateFlow<InventoryUiState> = _uiState.asStateFlow()
     private var pending: PendingOperation? = null
+    private var initialProductSelected = false
 
     init {
         refreshBranch()
@@ -83,6 +84,8 @@ class InventoryViewModel @Inject constructor(
     fun updateQuery(value: String) = _uiState.update { it.copy(query = value) }
 
     fun selectProduct(productId: String, actionName: String? = null) {
+        if (initialProductSelected || _uiState.value.isLoading) return
+        initialProductSelected = true
         val items = _uiState.value.items
         val item = items.singleOrNull {
             it.productId == productId || it.productCode.equals(productId, ignoreCase = true)

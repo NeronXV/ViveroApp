@@ -63,8 +63,10 @@ Este documento describe el recorrido operativo para el piloto del lunes. El obje
 ## Estado Técnico y Pendientes
 Este piloto utiliza contratos backend reales pero no constituye una validación integral del sistema de producción.
 
+**Validado localmente el 21 de septiembre de 2026:**
+- Aplicación de las 35 migraciones desde cero en entorno limpio.
+- Las 499 aserciones pgTAP actuales y cinco escenarios concurrentes de caja/inventario. Ver `database-validation.md`.
+
 **Pendientes de validación integral:**
-- Aplicación de las 24 migraciones desde cero en entorno limpio.
-- Ejecución de las aserciones pgTAP actuales de base de datos.
 - Recorridos completos con datos sintéticos en entorno de piloto autorizado; no se deben usar datos de producción.
 - Autorización formal de despliegue por parte de los responsables.

@@ -144,7 +144,7 @@ function Assert-Condition {
     $checks.Add($Description)
 }
 
-Assert-Condition ($migrationFiles.Count -eq 34) 'exactly thirty-four ordered migration files exist'
+Assert-Condition ($migrationFiles.Count -eq 35) 'exactly thirty-five ordered migration files exist'
 Assert-Condition (
     (($migrationFiles.Name -join ',') -eq (
         '202608080001_auth_roles.sql,202608080002_catalog.sql,202608080003_sales_cart.sql,' +
@@ -176,7 +176,8 @@ Assert-Condition (
         '202609010004_supplier_purchases.sql,' +
         '202609080001_presential_checkout.sql,' +
         '202609080002_cashier_closings_refunds.sql,' +
-        '202609080003_newsletter.sql'
+        '202609080003_newsletter.sql,' +
+        '202609210001_presentation_function_privileges.sql'
     ))
 ) 'migration filenames preserve the required execution order'
 
@@ -659,15 +660,16 @@ Assert-Condition (
     -not $catalogImagesSql.Contains('to service_role;')
 ) 'public catalog V2 preserves the secure RPC boundary and returns relative bucket references'
 Assert-Condition (
-    $catalogImagesTestSql.Contains('select extensions.plan(18);') -and
+    $catalogImagesTestSql.Contains('select extensions.plan(21);') -and
     ([regex]::Matches(
         $catalogImagesTestSql,
         '(?im)select\s+extensions\.(ok|is|lives_ok|throws_ok|throws_like)\s*\('
-    ).Count -eq 18)
-) 'catalog image pgTAP plan matches its eighteen assertions'
+    ).Count -eq 21)
+) 'catalog image pgTAP plan matches its twenty-one assertions'
 Assert-Condition (
     $catalogImagesTestSql.Contains('catalog-images allows exactly the four approved MIME types') -and
-    $catalogImagesTestSql.Contains('catalog migration grants no object write policy to client roles') -and
+    $catalogImagesTestSql.Contains('catalog storage grants no object write policy to PUBLIC or anon') -and
+    $catalogImagesTestSql.Contains('staff without MANAGE_PRODUCTS cannot upload catalog images') -and
     $catalogImagesTestSql.Contains('an absolute URL is rejected') -and
     $catalogImagesTestSql.Contains('parent traversal is rejected') -and
     $catalogImagesTestSql.Contains('a leading slash is rejected') -and
@@ -1122,6 +1124,14 @@ Assert-Condition ($checkoutRelease.Contains('web_order_id') -and $checkoutReleas
 Assert-Condition ($cashierRelease.Contains('for update') -and $cashierRelease.Contains('p_money_returned is distinct from true') -and $cashierRelease.Contains('v_payment.amount_due_cents')) 'refunds lock sales and use the actual paid amount with explicit acknowledgement'
 Assert-Condition ($cashierRelease.Contains('unnest(v_payment_ids)') -and $cashierRelease.Contains('unnest(v_refund_ids)') -and $cashierRelease.Contains('IDEMPOTENCY_CONFLICT')) 'closings assign exact operation IDs and reject conflicting retries'
 Assert-Condition ($mailRelease.Contains('to service_role;') -and $mailRelease.Contains("interval '24 hours'") -and $mailRelease.Contains('if v_created then')) 'newsletter separates token preparation, expiring confirmation and immutable recipient snapshots'
+
+$presentationPrivileges = Get-Content (Join-Path $migrationDirectory '202609210001_presentation_function_privileges.sql') -Raw
+Assert-Condition (
+    $presentationPrivileges.Contains('revoke all on function public.get_my_access_context() from public, anon, service_role;') -and
+    $presentationPrivileges.Contains('revoke all on function public.get_my_branch_catalog_inventory() from public, anon, service_role;') -and
+    $presentationPrivileges.Contains('grant execute on function public.get_my_access_context() to authenticated;') -and
+    $presentationPrivileges.Contains('grant execute on function public.get_my_branch_catalog_inventory() to authenticated;')
+) 'client presentation RPCs revoke inherited service_role execution and preserve authenticated access'
 
 Write-Output "Migration security verification passed: $($checks.Count) checks."
 $checks | ForEach-Object { Write-Output "PASS: $_" }

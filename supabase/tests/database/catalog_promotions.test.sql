@@ -222,7 +222,7 @@ select extensions.lives_ok(
     $$
         select public.submit_sale_to_cashier(
             '86000000-0000-0000-0000-000000000001',
-            'VD-PROMO-000001',
+            'VD-260921-PRO001',
             '[{"product_id":"84000000-0000-0000-0000-000000000001","quantity":2}]'::jsonb
         )
     $$,
@@ -268,7 +268,7 @@ select extensions.ok(
     and (
         select si.list_price_cents = 10000
            and si.unit_price_cents = 7500
-           and si.discount_cents = 2500
+           and si.discount_cents = 5000
            and si.promotion_id = '85000000-0000-0000-0000-000000000002'
            and si.promotion_name = 'Dos mil quinientos seleccionado'
         from public.sale_items si
@@ -285,8 +285,8 @@ select extensions.is(
     (
         public.get_report_daily_sales(
             '81000000-0000-0000-0000-000000000001',
-            pg_catalog.current_date,
-            pg_catalog.current_date
+            current_date,
+            current_date
         )#>>'{0,discountCents}'
     )::bigint,
     5000::bigint,

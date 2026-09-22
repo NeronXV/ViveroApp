@@ -4,6 +4,85 @@ create extension if not exists pgtap with schema extensions;
 
 select extensions.plan(66);
 
+-- Explicit release allowlist. Keep signatures and client grants reviewed together.
+create temporary table expected_public_functions (
+    signature text primary key, anon_allowed boolean not null, authenticated_allowed boolean not null
+) on commit drop;
+insert into expected_public_functions values
+    ('activate_my_inventory(p_initial_count_confirmed boolean)', false, true),
+    ('apply_sale_discount(p_sale_id uuid, p_discount_cents bigint, p_reason text, p_promotion_id uuid)', false, true),
+    ('assign_user_branch(p_user_id uuid, p_branch_id uuid)', false, true),
+    ('assign_user_role(p_user_id uuid, p_role_name text)', false, true),
+    ('bootstrap_first_owner(p_user_id uuid)', false, false),
+    ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)', false, true),
+    ('close_my_cashier(p_opening_cash_cents bigint, p_counted_cash_cents bigint, p_idempotency_key uuid)', false, true),
+    ('confirm_newsletter_subscription(p_token uuid)', true, true),
+    ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)', false, true),
+    ('confirm_supplier_purchase(p_purchase_id uuid, p_confirmation_key uuid)', false, true),
+    ('create_branch(p_code text, p_name text)', false, true),
+    ('create_newsletter_campaign(p_id uuid, p_subject text, p_body text)', false, true),
+    ('create_supplier_purchase_draft(p_supplier_id uuid, p_document_date date, p_external_reference text, p_payment_terms text, p_expected_total_cents bigint, p_source_file_name text, p_items jsonb, p_idempotency_key uuid)', false, true),
+    ('enforce_product_price_permission()', false, false),
+    ('get_admin_branches(p_limit integer, p_after_code text, p_after_id uuid, p_include_inactive boolean)', false, true),
+    ('get_admin_inventory_balances(p_branch_id uuid, p_limit integer, p_after_product_id uuid, p_search text, p_include_zero_stock boolean)', false, true),
+    ('get_admin_role_options()', false, true),
+    ('get_admin_staff(p_limit integer, p_after_full_name text, p_after_id uuid, p_search text, p_branch_id uuid, p_include_inactive boolean)', false, true),
+    ('get_admin_web_orders(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid, p_status web_order_status)', false, true),
+    ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)', false, true),
+    ('get_cashier_sale_detail(p_sale_id uuid)', false, true),
+    ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)', false, true),
+    ('get_catalog_pricing()', false, true),
+    ('get_low_inventory_alerts(p_branch_id uuid)', false, true),
+    ('get_my_access_context()', false, true),
+    ('get_my_branch_catalog_inventory()', false, true),
+    ('get_my_cashier_closing_preview()', false, true),
+    ('get_my_inventory_activation()', false, true),
+    ('get_my_inventory_dashboard(p_limit integer, p_after_product_id uuid)', false, true),
+    ('get_my_inventory_history(p_product_id uuid, p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)', false, true),
+    ('get_my_recent_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)', false, true),
+    ('get_my_supplier_purchases(p_status text, p_limit integer)', false, true),
+    ('get_newsletter_campaigns()', false, true),
+    ('get_product_by_scan_code(p_code text)', false, true),
+    ('get_public_catalog_v2_base(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)', false, false),
+    ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)', true, true),
+    ('get_public_web_order_options()', true, true),
+    ('get_refundable_sale(p_folio text)', false, true),
+    ('get_report_daily_sales(p_branch_id uuid, p_start_date date, p_end_date date)', false, true),
+    ('get_report_top_products(p_branch_id uuid, p_limit integer)', false, true),
+    ('get_supplier_purchase(p_purchase_id uuid)', false, true),
+    ('guard_web_order_checkout()', false, false),
+    ('handle_new_user()', false, false),
+    ('has_permission(required_permission text)', false, true),
+    ('prepare_newsletter_subscription(p_email text)', false, false),
+    ('reconcile_inventory_count(p_product_id uuid, p_counted_quantity numeric, p_reason text, p_idempotency_key uuid, p_location_id uuid)', false, true),
+    ('record_inventory_movement(p_product_id uuid, p_movement_type inventory_movement_type, p_quantity numeric, p_branch_id uuid, p_location_id uuid, p_notes text, p_reference_id uuid)', false, true),
+    ('record_inventory_reception(p_product_id uuid, p_quantity numeric, p_notes text, p_idempotency_key uuid)', false, true),
+    ('record_sale_inventory_movements()', false, false),
+    ('refund_sale_in_person(p_folio text, p_reason text, p_method payment_method, p_restock boolean, p_money_returned boolean, p_idempotency_key uuid)', false, true),
+    ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)', false, true),
+    ('resolve_catalog_product_price(p_product_id uuid, p_at timestamp with time zone)', false, false),
+    ('resolve_supplier_purchase_item(p_item_id uuid, p_resolution text, p_product_id uuid, p_normalized_name text, p_presentation text)', false, true),
+    ('search_customers(p_query text, p_limit integer)', false, true),
+    ('send_web_order_to_cashier(p_order_id uuid)', false, true),
+    ('set_admin_staff_role(p_user_id uuid, p_role_name text)', false, true),
+    ('set_admin_web_order_status(p_order_id uuid, p_status web_order_status, p_observation text)', false, true),
+    ('set_branch_active(p_branch_id uuid, p_is_active boolean)', false, true),
+    ('set_product_image_primary(p_image_id uuid)', false, true),
+    ('set_supplier_presentation(p_supplier_id uuid, p_code text, p_display_name text, p_nominal_size numeric, p_size_unit text, p_notes text)', false, true),
+    ('set_updated_at()', false, false),
+    ('set_user_active(p_user_id uuid, p_is_active boolean)', false, true),
+    ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)', false, true),
+    ('submit_web_order(p_order_id uuid, p_branch_id uuid, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_items jsonb)', true, true),
+    ('unsubscribe_newsletter(p_token uuid)', true, true),
+    ('update_branch(p_branch_id uuid, p_code text, p_name text)', false, true),
+    ('update_inventory_balance()', false, false),
+    ('upsert_catalog_promotion(p_name text, p_description text, p_scope text, p_promo_type text, p_value numeric, p_min_purchase_cents bigint, p_max_discount_cents bigint, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_is_active boolean, p_product_ids uuid[], p_id uuid)', false, true),
+    ('upsert_category(p_id uuid, p_name text, p_description text, p_is_active boolean)', false, true),
+    ('upsert_customer(p_id uuid, p_full_name text, p_email text, p_phone text, p_is_active boolean)', false, true),
+    ('upsert_product(p_id uuid, p_internal_code text, p_barcode text, p_common_name text, p_scientific_name text, p_description text, p_category_id uuid, p_price_cents bigint, p_wholesale_price_cents bigint, p_unit text, p_minimum_stock numeric, p_watering_advice text, p_light_type text, p_recommended_climate text, p_is_active boolean)', false, true),
+    ('upsert_supplier(p_code text, p_name text, p_id uuid)', false, true);
+
+
 insert into public.branches (id, code, name, is_active) values
     ('10000000-0000-0000-0000-000000000001', 'CENTRO', 'Sucursal Centro', true),
     ('10000000-0000-0000-0000-000000000002', 'NORTE', 'Sucursal Norte', true),
@@ -656,31 +735,8 @@ select extensions.results_eq(
     where n.nspname = 'public'
     order by 1
     $$,
-    $$select signature collate "C" from (values
-        ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
-        ('assign_user_role(p_user_id uuid, p_role_name text)'),
-        ('bootstrap_first_owner(p_user_id uuid)'),
-        ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
-        ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
-        ('create_branch(p_code text, p_name text)'),
-        ('enforce_product_price_permission()'),
-        ('get_admin_branches(p_limit integer, p_after_code text, p_after_id uuid, p_include_inactive boolean)'),
-        ('get_admin_staff(p_limit integer, p_after_full_name text, p_after_id uuid, p_search text, p_branch_id uuid, p_include_inactive boolean)'),
-        ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
-        ('get_cashier_sale_detail(p_sale_id uuid)'),
-        ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
-        ('get_my_access_context()'),
-        ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
-        ('handle_new_user()'),
-        ('has_permission(required_permission text)'),
-        ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
-        ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
-        ('set_updated_at()'),
-        ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
-        ('update_branch(p_branch_id uuid, p_code text, p_name text)')
-    ) as expected(signature)
-    $$,
-    'the public function inventory contains exactly twenty-one approved signatures'
+    $$select signature collate "C" from expected_public_functions order by 1$$,
+    'the public function inventory matches the reviewed release allowlist'
 );
 
 select extensions.results_eq(
@@ -692,10 +748,8 @@ select extensions.results_eq(
       and pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
     order by 1
     $$,
-    $$select signature collate "C" from (values (
-        'get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'::pg_catalog.text
-    )) as expected(signature)$$,
-    'anon can execute exactly the public catalog RPC'
+    $$select signature collate "C" from expected_public_functions where anon_allowed order by 1$$,
+    'anon can execute exactly the reviewed public entry points'
 );
 
 select extensions.ok(
@@ -722,27 +776,8 @@ select extensions.results_eq(
       and pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
     order by 1
     $$,
-    $$select signature collate "C" from (values
-        ('assign_user_branch(p_user_id uuid, p_branch_id uuid)'::pg_catalog.text),
-        ('assign_user_role(p_user_id uuid, p_role_name text)'),
-        ('claim_sale_for_payment(p_sale_id uuid, p_claim_token uuid)'),
-        ('confirm_sale_payment(p_sale_id uuid, p_claim_token uuid, p_idempotency_key uuid, p_method payment_method, p_amount_received_cents bigint, p_reference text)'),
-        ('create_branch(p_code text, p_name text)'),
-        ('get_admin_branches(p_limit integer, p_after_code text, p_after_id uuid, p_include_inactive boolean)'),
-        ('get_admin_staff(p_limit integer, p_after_full_name text, p_after_id uuid, p_search text, p_branch_id uuid, p_include_inactive boolean)'),
-        ('get_cashier_payment_result(p_sale_id uuid, p_idempotency_key uuid)'),
-        ('get_cashier_sale_detail(p_sale_id uuid)'),
-        ('get_cashier_sales(p_limit integer, p_after_created_at timestamp with time zone, p_after_id uuid)'),
-        ('get_my_access_context()'),
-        ('get_public_catalog(p_search text, p_category_id uuid, p_limit integer, p_after_name text, p_after_id uuid)'),
-        ('has_permission(required_permission text)'),
-        ('release_sale_payment_claim(p_sale_id uuid, p_claim_token uuid)'),
-        ('set_branch_active(p_branch_id uuid, p_is_active boolean)'),
-        ('submit_sale_to_cashier(p_sale_id uuid, p_folio text, p_items jsonb, p_customer_id uuid)'),
-        ('update_branch(p_branch_id uuid, p_code text, p_name text)')
-    ) as expected(signature)
-    $$,
-    'authenticated can execute exactly the seventeen-function whitelist'
+    $$select signature collate "C" from expected_public_functions where authenticated_allowed order by 1$$,
+    'authenticated can execute exactly the reviewed operational entry points'
 );
 
 select extensions.ok(
@@ -760,7 +795,7 @@ select extensions.ok(
 
 select extensions.ok(
     (
-        select pg_catalog.count(*) = 3
+        select pg_catalog.count(*) = 6
            and pg_catalog.bool_and(
                not pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
                and not pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')

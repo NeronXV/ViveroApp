@@ -77,7 +77,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                 onCatalogClick = { navController.navigate(CatalogRoute) },
                 onCartClick = { navController.navigate(CartRoute) },
                 onCashierClick = { navController.navigate(CashierQueueRoute()) },
-                onInventoryClick = { navController.navigate(InventoryRoute) },
+                onInventoryClick = { navController.navigate(InventoryRoute()) },
                 onReportsClick = { navController.navigate(ReportsRoute) },
                 onMySalesClick = { navController.navigate(MySalesRoute) },
                 onProfileClick = { navController.navigate(ProfileRoute) },
@@ -175,7 +175,7 @@ fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
                     onBack = navController::navigateUp,
                     onRegisterStock = { productId ->
                         // After product creation, go to inventory to register reception
-                        navController.navigate(InventoryRoute) {
+                        navController.navigate(InventoryRoute(productId = productId, initialAction = "RECEPTION")) {
                             popUpTo<ProductAdminRoute> { inclusive = false }
                         }
                     },

@@ -41,7 +41,7 @@ join public.roles role_row on role_row.name = assigned.role_name;
 insert into public.sales (
     id, folio, branch_id, subtotal_cents, total_cents, status, created_by, idempotency_key
 ) values (
-    '93000000-0000-0000-0000-000000000001', 'VD-ADMIN-000001',
+    '93000000-0000-0000-0000-000000000001', 'VD-260921-ADM001',
     '91000000-0000-0000-0000-000000000001', 1000, 1000, 'SENT_TO_CASHIER',
     '92000000-0000-0000-0000-000000000001', '93000000-0000-0000-0000-000000000001'
 );

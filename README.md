@@ -57,6 +57,7 @@ Se usa Supabase Kotlin 3.2.6 por compatibilidad binaria con Kotlin 2.2.10. Las r
 - [Modelo de base de datos](docs/database.md)
 - [Roles y permisos](docs/roles-and-permissions.md)
 - [Pruebas](docs/testing.md)
+- [Preparación de la entrega Android](docs/production-release.md)
 - [Preparación de Supabase](docs/setup-supabase.md)
 
 ## Catálogo
@@ -75,4 +76,4 @@ Agrega plantas desde catálogo, detalle o escáner. El borrador se conserva en R
 
 Las cuentas con `MANAGE_INVENTORY` y sucursal activa disponen de un tablero operativo. La gerente puede registrar recepciones y conciliar un conteo físico con motivo; PostgreSQL genera movimientos auditables y mantiene el saldo. Los reintentos conservan una clave idempotente durante el intento abierto. No existe edición directa del saldo.
 
-Las veinticuatro migraciones, 329 aserciones pgTAP declaradas y los recorridos integrales deben ejecutarse desde cero cuando vuelva a estar disponible la infraestructura local. Hasta entonces Caja, Inventario, Mis comandas y los contratos administrativos nuevos no se consideran desplegables.
+Las 35 migraciones se aplicaron desde cero en una base local aislada y pasaron las 499 aserciones pgTAP de las 18 suites, además de cinco escenarios concurrentes de caja con verificación de inventario. Antes de producción siguen pendientes los recorridos completos de Android/Web y la configuración del destino y firma de release. Consulta la [evidencia de base de datos](docs/database-validation.md).

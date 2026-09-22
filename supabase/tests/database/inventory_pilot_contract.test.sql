@@ -126,11 +126,15 @@ select extensions.is(
     'true',
     'repeated physical count returns an idempotent replay'
 );
+-- Audit rows are deliberately not readable by clients; inspect the side effect
+-- as the test administrator, then resume the authenticated presentation checks.
+reset role;
 select extensions.is(
     (select pg_catalog.count(*) from public.inventory_counts where id = '94000000-0000-4000-8000-000000000042'),
     1::pg_catalog.int8,
     'repeated physical count creates one count audit row'
 );
+set local role authenticated;
 
 select extensions.is(
     pg_catalog.jsonb_array_length(public.get_my_inventory_history('94000000-0000-4000-8000-000000000031') -> 'items'),

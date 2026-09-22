@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -67,6 +68,29 @@ class InventoryViewModelTest {
         assertEquals(1, repository.receptions.size)
         assertEquals(15, viewModel.uiState.value.items.first().totalQuantity)
         assertFalse(viewModel.uiState.value.isSubmitting)
+    }
+
+    @Test
+    fun `initial reception waits for loading and is not reopened after submission`() = runTest(dispatcherRule.testDispatcher) {
+        val repository = FakeInventoryRepository()
+        val viewModel = InventoryViewModel(repository, sessionStoreWithBranch())
+        val productId = repository.items.first().productId
+
+        viewModel.selectProduct(productId, "RECEPTION")
+        advanceUntilIdle()
+        viewModel.selectProduct(productId, "RECEPTION")
+        assertEquals(productId, viewModel.uiState.value.selectedItem?.productId)
+        assertEquals(InventoryAction.RECEPTION, viewModel.uiState.value.action)
+
+        viewModel.updateQuantity("5")
+        viewModel.submit()
+        advanceUntilIdle()
+        viewModel.selectProduct(productId, "RECEPTION")
+
+        assertEquals(1, repository.receptions.size)
+        assertEquals(15, viewModel.uiState.value.items.first().totalQuantity)
+        assertNull(viewModel.uiState.value.action)
+        assertNull(viewModel.uiState.value.selectedItem)
     }
 
     @Test

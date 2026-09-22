@@ -1,3 +1,5 @@
+import java.net.URI
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -16,6 +18,42 @@ val localProperties = Properties().apply {
 fun localString(name: String): String =
     localProperties.getProperty(name, "").replace("\\", "\\\\").replace("\"", "\\\"")
 
+val releaseSigningProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use(::load)
+}
+val releaseSigningFields = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val hasReleaseSigning = releaseSigningFields.all {
+    !releaseSigningProperties.getProperty(it).isNullOrBlank()
+}
+
+val verifyReleaseConfiguration = tasks.register("verifyReleaseConfiguration") {
+    group = "verification"
+    description = "Verifica el destino explícito de release y la configuración de firma sin mostrar credenciales."
+    doLast {
+        val url = localProperties.getProperty("RELEASE_SUPABASE_URL", "")
+        val redirect = localProperties.getProperty("RELEASE_AUTH_REDIRECT_URL", "")
+        val key = localProperties.getProperty("RELEASE_SUPABASE_PUBLISHABLE_KEY", "")
+        fun isHttpsUrl(value: String): Boolean = runCatching {
+            val uri = URI(value)
+            uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
+        }.getOrDefault(false)
+        check(isHttpsUrl(url)) { "Configura RELEASE_SUPABASE_URL con el destino HTTPS de la entrega." }
+        check(isHttpsUrl(redirect)) { "Configura RELEASE_AUTH_REDIRECT_URL con la recuperación HTTPS autorizada." }
+        val isAnonJwt = runCatching {
+            val payload = String(Base64.getUrlDecoder().decode(key.split('.')[1]))
+            Regex("\"role\"\\s*:\\s*\"anon\"").containsMatchIn(payload)
+        }.getOrDefault(false)
+        check(key.startsWith("sb_publishable_") || isAnonJwt) {
+            "Release requiere una clave publicable/anon; nunca una clave administrativa."
+        }
+        check(hasReleaseSigning) { "Configura la firma existente en key.properties (archivo ignorado por Git)." }
+        check(rootProject.file(releaseSigningProperties.getProperty("storeFile")).isFile) {
+            "No se encuentra el almacén de firma configurado."
+        }
+    }
+}
+
 android {
     namespace = "com.intutec.viveroapp"
     compileSdk {
@@ -26,8 +64,8 @@ android {
         applicationId = "com.intutec.viveroapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"${localString("SUPABASE_URL")}\"")
@@ -35,8 +73,23 @@ android {
         buildConfigField("String", "AUTH_REDIRECT_URL", "\"${localString("AUTH_REDIRECT_URL")}\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            buildConfigField("String", "SUPABASE_URL", "\"${localString("RELEASE_SUPABASE_URL")}\"")
+            buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localString("RELEASE_SUPABASE_PUBLISHABLE_KEY")}\"")
+            buildConfigField("String", "AUTH_REDIRECT_URL", "\"${localString("RELEASE_AUTH_REDIRECT_URL")}\"")
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -53,6 +106,10 @@ android {
         compose = true
         buildConfig = true
     }
+}
+
+tasks.matching { it.name == "packageRelease" || it.name == "packageReleaseBundle" }.configureEach {
+    dependsOn(verifyReleaseConfiguration)
 }
 
 dependencies {

@@ -31,12 +31,18 @@ Las migraciones actuales son:
 - `202608290015_catalog_promotions.sql`: campañas para todo el catálogo o productos seleccionados, catálogo público V3 y precios autoritativos en Android y ventas.
 - `202609010001_admin_role_management.sql`: opciones de rol según el actor y mutación versionada de roles para clientes administrativos.
 - `202609010002_web_orders.sql`: pedidos públicos idempotentes con precios autoritativos, datos de contacto protegidos, alcance administrativo por sucursal y transiciones auditadas.
+- `202609010003_product_scan_lookup.sql`: consulta de productos por código y existencias de la sucursal.
+- `202609010004_supplier_purchases.sql`: revisión de compras a proveedores y recepción idempotente.
+- `202609080001_presential_checkout.sql`: enlace del pedido web a Caja y activación de inventario por sucursal.
+- `202609080002_cashier_closings_refunds.sql`: cortes, devoluciones totales y protección de entregas.
+- `202609080003_newsletter.sql`: confirmación, baja y campañas de boletín.
+- `202609210001_presentation_function_privileges.sql`: retira el permiso heredado de `service_role` sobre `get_my_access_context` y `get_my_branch_catalog_inventory`; conserva la ejecución de `authenticated`.
 
-El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución. Los módulos posteriores añaden inventario, clientes, promociones y reportes, y la migración de endurecimiento corrige su alcance. Las expresiones SQL especiales de las migraciones MVP aún no ejecutadas se normalizaron antes de su validación desde cero.
+El modelo resultante conserva restricciones, índices, marcas de tiempo y RLS. Las migraciones de presentación de Caja y Administración añaden únicamente funciones de lectura y privilegios mínimos de ejecución. Los módulos posteriores añaden inventario, clientes, promociones y reportes, y la migración de endurecimiento corrige su alcance. Las 35 migraciones se validaron desde cero junto con las 499 aserciones pgTAP; ver `database-validation.md`.
 
 Las mutaciones de `branches` y `profiles.branch_id` no se conceden directamente a `authenticated`. Se realizan mediante `create_branch`, `update_branch`, `set_branch_active` y `assign_user_branch`. Reactivar conserva el identificador y los datos de la sucursal; repetir el mismo estado o la misma asignación no genera cambios adicionales. Una sucursal no puede eliminarse físicamente mediante estos RPC.
 
-Supabase configura privilegios predeterminados amplios para tablas nuevas de `public`. Cada migración que cree tablas deberá revocar esos privilegios de `anon`, `authenticated` y `PUBLIC`, y conceder después solo las operaciones que sus políticas RLS necesiten. Los privilegios y propietarios de `service_role`, `postgres` y demás roles internos no se modifican.
+Supabase puede configurar privilegios predeterminados amplios para objetos nuevos de `public`. Cada migración deberá revocar los privilegios no requeridos y conceder después solo las operaciones necesarias. Los propietarios y la pertenencia de roles internos se conservan; las funciones de presentación exclusivas de clientes revocan también la ejecución heredada de `service_role`.
 
 Toda función nueva debe crearse y endurecerse en la misma transacción: revocar explícitamente `EXECUTE` de `PUBLIC`, `anon` y cualquier rol cliente no requerido, y concederlo únicamente a la lista mínima necesaria. Las funciones de trigger no se exponen directamente a clientes; una función usada por RLS solo se concede a los roles que evalúan esa política.
 
