@@ -107,9 +107,9 @@ después; ante error, restaurar el contenido anterior y validar de nuevo.
 
 El proxy compartido todavía pertenece al Compose y a la imagen Web de Vivero.
 Mientras se mantenga así, parar/actualizar `web` o respaldar Vivero afecta todos
-los dominios que se añadan. Coordinar esa ventana. La separación futura de Caddy
-a un Compose `platform-proxy` se hará cuando sea necesaria, después de respaldar
-certificados y explicar el corte; no se creó un segundo proxy en esta entrega.
+los dominios que se añadan. Coordinar esa ventana. Separar Caddy a un Compose
+`platform-proxy` es requisito antes de incorporar el segundo proyecto, después
+de respaldar certificados y explicar el corte. No se creó otro proxy.
 
 ## Revisar estado, logs y proxy
 
@@ -129,8 +129,8 @@ Revisar logs en el servidor; sanitizar antes de compartirlos. No ejecutar ni
 publicar `docker inspect` o `docker compose config` completos, porque incluyen
 entornos privados. Usar `config --quiet`. No versionar ni imprimir `.env`.
 Los archivos privados existentes permanecen con modo 600. El acceso individual
-de Toni/Pedro con llaves y usuario de mantenimiento sin root queda pendiente de
-las llaves públicas y del acuerdo de permisos; no se deshabilitó el acceso actual.
+de Pedro se habilitó y probó en la continuación descrita al final. Toni sigue
+pendiente de su llave pública; no se deshabilitó el acceso actual.
 
 ## Actualizar Vivero
 
@@ -191,7 +191,8 @@ recuperación. Tras copiar, comprobar integridad externa y hacer una restauraci�
 periódica en un proyecto nuevo sin puertos públicos. No activar borrado automático
 ni retención destructiva sin revisar el alcance.
 
-No se configuró almacenamiento externo, Restic ni tareas automáticas: faltan
+Al terminar la organización inicial no se configuró almacenamiento externo,
+Restic ni tareas automáticas: faltaban
 destino, titularidad, presupuesto si aplica y custodia de la llave. No hay una
 copia externa ni respaldo Hostinger acreditados en esta inspección.
 
@@ -252,8 +253,153 @@ Las 83 pruebas del bloque de importación son evidencia anterior;
 no se repitieron al organizar el host. Sin cambios de lógica
 Android/Web/backend ni SQL PostgreSQL que justifiquen esas compilaciones/pgTAP.
 
-Pendientes: copia cifrada externa, claves/accesos personales de mantenimiento,
+Pendientes: copia cifrada externa, llave/acceso personal de Toni,
 correo y cinco cuentas nuevas, aceptación UI/dispositivos, activación de stock
 tras revisión e imagen manual. Los consumidores restantes deben completar sus
 contratos API antes de retirar Supabase. No se enviaron correos ni se alteraron
 contraseñas/roles o stock durante esta organización.
+
+## Continuación de cierre: copia externa y accesos
+
+Inspección adicional inicial del 3 de octubre: no había Restic, Rclone ni Borg instalados;
+no se encontraron sus configuraciones en `/srv`, configuración compartida de
+Vivero, directorios habituales de `/etc` y `/root/.config`, ni unidades propias
+o entradas de cron con esos nombres. Los archivos privados compartidos no
+declaran variables de destino externo. Solo se encontró el usuario interactivo
+`root`, con autenticación de contraseña y llave habilitadas. Esto describe las
+rutas revisadas; no garantiza la ausencia de integraciones fuera de ellas.
+
+Se prepararon `infra/host/offsite-backup.py` y `offsite.config.example.json`.
+Son herramientas manuales para un repositorio cifrado Restic por proyecto,
+S3 sobre HTTPS o SFTP externo. No compran almacenamiento, instalan servicios,
+programan tareas ni ejecutan `forget`, `prune` o eliminación de respaldos.
+El script verifica cada lote con el verificador oficial antes de subirlo,
+rechaza destinos locales y exige configuración/contraseña privadas de root.
+La salida del proveedor no se imprime. El envío y la verificación remota
+todavía no se han ejecutado: falta un destino real.
+
+Opciones y datos necesarios:
+
+| Opción | Datos de conexión pendientes |
+|---|---|
+| Bucket S3 compatible fuera del VPS | Proveedor, endpoint HTTPS, bucket existente, región y prefijo exclusivo; credenciales limitadas al repositorio por vía privada |
+| Servidor/NAS externo con SFTP | Host, puerto, usuario, carpeta, llave dedicada y huella del servidor confirmada por su administrador |
+
+Restic cifra también el repositorio remoto; la contraseña de recuperación debe
+guardarse además en el gestor de contraseñas de Pedro/Toni fuera del VPS.
+Para SFTP, usar `sftp:ALIAS_SSH:/RUTA/vivero-dulcinea` y `environment: {}`;
+configurar el alias en `/root/.ssh/config` con llave exclusiva, BatchMode y
+StrictHostKeyChecking, sin aceptar una huella a ciegas. Para S3 usar la plantilla.
+Referencia: [repositorios y cifrado de Restic](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html).
+
+Se instaló después únicamente Restic desde Ubuntu noble-updates/security,
+paquete `0.16.4-2ubuntu0.24.04.3`, sin actualizar/eliminar otros paquetes ni
+reiniciar servicios. Pasó un ensayo local con datos sintéticos: repositorio
+cifrado, `check --read-data`, rechazo de contraseña incorrecta y recuperación
+idéntica byte a byte. El ensayo temporal se limpió; no leyó datos reales ni
+transmitió al exterior. Esto no prueba todavía el acceso a R2.
+
+Una vez confirmado el destino, preparar en el servidor `shared/offsite.json`
+y `shared/offsite.password`, ambos root:root modo 600. Nunca copiar estos archivos
+al repositorio. Custodiar la contraseña externamente antes del primer envío.
+Los archivos de ejemplo solo contienen valores de reemplazo.
+
+```sh
+python3 /srv/apps/vivero-dulcinea/ops/offsite-backup.py init --acknowledge-new-repository
+python3 /srv/apps/vivero-dulcinea/ops/offsite-backup.py upload /var/backups/vivero/LOTE_COMPLETE_VERIFICADO
+python3 /srv/apps/vivero-dulcinea/ops/offsite-backup.py check
+```
+
+`init` solo se usa para un repositorio nuevo confirmado. `check` lee todos los
+datos remotos y puede generar tráfico facturable. Tras la primera copia, recuperar
+un snapshot a una carpeta nueva en maintenance usando Restic, verificar hashes
+del lote recuperado y repetir la restauración aislada SQL/imágenes. No declarar
+protección externa completa hasta pasar esa recuperación. El script copia SQL
+e imágenes; la copia cifrada de configuración/secretos y certificados sigue
+siendo un bloque separado pendiente. No copia volúmenes de DB en vivo.
+
+Pedro identificó `C:\Users\GAMER\.ssh\vivero_vps.pub` como su llave personal.
+Se comprobó contra la llave ya autorizada en root, se habilitó el usuario `pedro`
+y se probó un ingreso SSH real con esa llave. Su contraseña permanece bloqueada.
+`/etc/sudoers.d/vivero-pedro` permite exclusivamente el wrapper root:root con
+`status`, `validate`, `logs api`, `logs web`, `logs db`, `proxy-check`,
+`proxy-reload` y `backup --acknowledge-downtime`. `visudo` pasó; estado/validación
+por sudo funcionaron y sudo general fue rechazado. No pertenece al grupo Docker.
+No se ejecutó otro respaldo ni reload al probar estos permisos.
+
+```powershell
+& 'C:\Windows\System32\OpenSSH\ssh.exe' -i "$env:USERPROFILE\.ssh\vivero_vps" pedro@179.236.238.111
+```
+
+Dentro de esa sesión, anteponer `sudo -n` a los comandos autorizados del wrapper.
+Toni todavía no tiene usuario/acceso; no usar la llave de Pedro para habilitarlo.
+Despliegue, restauración, copia externa y cambios de sistema requieren por ahora
+la sesión administrativa existente. Acordar por separado sudo administrativo
+si se necesita. Root, contraseña y firewall actuales se conservaron; restringirlos
+solo después de probar ambas sesiones personales y el acceso de recuperación.
+
+Recomendación inicial de destino: R2 Standard en una cuenta Cloudflare de Pedro,
+con bucket privado exclusivo para respaldos y credencial limitada al bucket.
+Pedro eligió R2 Standard; falta conectar su cuenta y habilitación. Se propone
+bucket privado `vivero-dulcinea-backups`, prefijo `restic`, región `auto` y endpoint
+`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`. No publicar bucket ni activar
+ciclo de vida que borre objetos de Restic. Usar Object Read & Write limitado
+solo al bucket; no una credencial global de la cuenta.
+[Conexión oficial S3](https://developers.cloudflare.com/r2/get-started/s3/).
+La tarifa consultada el 3 de octubre de 2026 incluye 10 GB-mes, un millón de
+operaciones A y diez millones B mensuales; el exceso de almacenamiento cuesta
+US$0.015/GB-mes y las operaciones excedentes se cobran aparte. No cobra salida.
+[Tarifas oficiales](https://developers.cloudflare.com/r2/pricing/).
+Backblaze B2 o un NAS/servidor SFTP externo son alternativas. No se creó cuenta,
+bucket, suscripción ni credencial; falta confirmar la cuenta y conectar el destino.
+
+## Validación nueva de Web y preparación Android
+
+En esta continuación el navegador mostró login y recuperación Web sin errores
+visibles; no se enviaron formularios/correos ni se completó un recorrido de caja
+en UI. La prueba HTTPS de servidor pasó login OWNER, sucursal/capacidades,
+catálogo, inventario/historial, comprobantes y revocación de sesión.
+
+Android: `assembleDebug testDebugUnitTest` pasó usando JDK 21 instalado y
+`-I tmp/vps-debug.init.gradle`, que fija solo durante la compilación los orígenes
+API/Web públicos a `https://bajastack.network`. No se cambió `local.properties`,
+la firma ni la configuración de release. Se verificaron ambos campos generados.
+Resultado XML: 345 casos, 344 aprobados, un HTTP opcional omitido sin fixture,
+cero fallos/errores. APK debug en `app/build/outputs/apk/debug/app-debug.apk`,
+SHA-256 `73a6287a016a52ae29f2327ef6020307a0c508bf7bc03b8d4ddcd2d90c7a0914`.
+Una compilación normal vuelve a tomar los orígenes privados actuales, que aún
+apuntan a otro destino. El script temporal y APK no se versionan.
+
+No hay dispositivo conectado: falta instalar ese APK y aceptar login/roles,
+venta/cobro, consulta de inventario y recuperación de intentos en tablet.
+No usar ventas reales como fixtures. Para probar escrituras, acordar un entorno
+aislado y datos sintéticos. Correo y contraseñas nuevas quedan aplazados por
+decisión de Pedro. No se cambió ni retiró Supabase.
+
+## Separar el proxy antes del segundo proyecto
+
+Este es un plan pendiente, no una descripción de servicios ya desplegados:
+
+1. Guardar Caddyfile y estado TLS/config de los volúmenes actuales en un respaldo
+   privado verificado; registrar imagen y configuración de rollback. Los seis
+   lotes SQL/imágenes existentes **no** incluyen certificados. Explicar la breve
+   interrupción HTTPS al transferir 80/443 y acordar la ventana antes de recrear.
+2. Crear Compose `platform-proxy` bajo `/srv/proxy`, conectado exclusivamente a
+   `platform_proxy`, con 80/443 públicos. Referenciar los volúmenes existentes
+   como externos por nombre exacto, sin borrarlos ni permitir dos escritores.
+3. Convertir `web` de Vivero en entrada HTTP interna `:80`: conserva frontend
+   compilado y rutas API; quitar sus puertos públicos y montajes TLS/config.
+   El Caddy externo reenvía el dominio al alias `vivero-dulcinea-proxy:80`.
+   Así el servidor Web puede actualizarse sin detener HTTPS de otras apps.
+4. Detener el dueño anterior de los puertos antes de arrancar el nuevo proxy;
+   comprobar certificado, redirección HTTPS, rutas profundas, API, login/logout
+   y permisos. Ante fallo, detener el nuevo proxy y restituir la configuración
+   anterior sin modificar ni restaurar la base de datos.
+5. Adaptar el respaldo de Vivero para pausar solo sus escritores internos.
+   Respaldar el proxy por separado y registrar su propietario independiente.
+   Comprobar que parar Vivero no interrumpe un servicio de prueba del proxy antes
+   de dar de alta el segundo proyecto. No añadir otro panel.
+
+Supabase se conserva hasta aceptación Web y Android, conciliación de intentos
+anteriores y cierre de pendientes de acceso, correo y operación. Las pruebas
+unitarias, un health correcto o un APK compilado no sustituyen esa aceptación.

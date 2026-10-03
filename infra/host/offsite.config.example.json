@@ -1,0 +1,9 @@
+{
+  "repository": "s3:https://replace-account-id.r2.cloudflarestorage.com/vivero-dulcinea-backups/restic",
+  "password_file": "/srv/apps/vivero-dulcinea/shared/offsite.password",
+  "environment": {
+    "AWS_ACCESS_KEY_ID": "replace-with-project-scoped-access-key",
+    "AWS_SECRET_ACCESS_KEY": "replace-with-private-secret-key",
+    "AWS_DEFAULT_REGION": "auto"
+  }
+}
