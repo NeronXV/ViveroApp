@@ -1,0 +1,43 @@
+# Adapt the image's DB/environment contract before deployment. Never use demo data.
+name: ${COMPOSE_PROJECT_NAME:?Set unique project name}
+services:
+  app:
+    image: ${APP_IMAGE:?Set reviewed versioned application image}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:?Set database name}
+      DB_USER: ${DB_USER:?Set application database user}
+      DB_PASSWORD: ${DB_PASSWORD:?Set private database password}
+    networks:
+      database: {}
+      proxy:
+        aliases: ["${PROJECT_SLUG:?Set unique project slug}-web"]
+    depends_on:
+      db: { condition: service_healthy }
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:?Set database name}
+      MARIADB_USER: ${DB_USER:?Set application database user}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set private database password}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set independent maintenance password}
+    volumes: [database:/var/lib/mysql]
+    networks: [database]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+networks:
+  database: { internal: true }
+  proxy: { external: true, name: platform_proxy }
+volumes:
+  database: {}

@@ -1,0 +1,11 @@
+# Host-specific shared proxy network. Existing volumes/project name stay intact.
+services:
+  web:
+    networks:
+      api: {}
+      proxy:
+        aliases: [vivero-dulcinea-proxy]
+networks:
+  proxy:
+    external: true
+    name: platform_proxy
