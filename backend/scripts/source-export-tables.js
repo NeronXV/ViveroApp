@@ -1,0 +1,6 @@
+// Source table names from the authoritative migrations; no target UUIDs.
+export const SOURCE_TABLES = ["auth_users", "roles", "permissions", "role_permissions", "branches", "profiles", "user_roles", "categories", "products", "product_images", "sales", "sale_items", "sale_status_history", "sale_payment_claims", "sale_payments", "inventory_locations", "inventory_movements", "inventory_balances", "customers", "promotions", "sale_discounts", "inventory_counts", "promotion_products", "web_orders", "web_order_items", "web_order_status_history", "suppliers", "supplier_presentations", "supplier_purchase_documents", "supplier_purchase_items", "supplier_product_aliases", "branch_inventory_activation", "sale_refunds", "cashier_closings", "cashier_closing_payments", "cashier_closing_refunds", "newsletter_subscribers", "newsletter_campaigns", "newsletter_deliveries"];
+
+// Tables absent in the source schema confirmed during the cutover inspection.
+// Only these omissions may be declared; operational and identity tables remain required.
+export const LEGACY_ABSENT_TABLES = ["branch_inventory_activation", "sale_refunds", "cashier_closings", "cashier_closing_payments", "cashier_closing_refunds", "newsletter_subscribers", "newsletter_campaigns", "newsletter_deliveries"];

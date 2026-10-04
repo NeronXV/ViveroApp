@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "source_key": "synthetic-demo",
+  "categories": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Demo importada",
+      "description": null,
+      "is_active": true
+    }
+  ],
+  "products": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "category_id": "10000000-0000-4000-8000-000000000001",
+      "internal_code": "IMPORT-DEMO-001",
+      "barcode": null,
+      "common_name": "Planta sintetica importada",
+      "scientific_name": null,
+      "description": "Solo para pruebas locales",
+      "price_cents": 12000,
+      "wholesale_price_cents": null,
+      "unit": "maceta",
+      "watering_advice": "Riego moderado",
+      "light_type": "Indirecta",
+      "recommended_climate": "Templado",
+      "is_active": true
+    }
+  ]
+}

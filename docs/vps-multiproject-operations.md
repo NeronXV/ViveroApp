@@ -129,8 +129,9 @@ Revisar logs en el servidor; sanitizar antes de compartirlos. No ejecutar ni
 publicar `docker inspect` o `docker compose config` completos, porque incluyen
 entornos privados. Usar `config --quiet`. No versionar ni imprimir `.env`.
 Los archivos privados existentes permanecen con modo 600. El acceso individual
-de Pedro se habilitó y probó en la continuación descrita al final. Toni sigue
-pendiente de su llave pública; no se deshabilitó el acceso actual.
+de Pedro se habilitó y probó en la continuación descrita al final. Toni ya tiene
+su usuario y llave configurados; falta su prueba desde su computadora.
+No se deshabilitó el acceso actual.
 
 ## Actualizar Vivero
 
@@ -253,7 +254,7 @@ Las 83 pruebas del bloque de importación son evidencia anterior;
 no se repitieron al organizar el host. Sin cambios de lógica
 Android/Web/backend ni SQL PostgreSQL que justifiquen esas compilaciones/pgTAP.
 
-Pendientes: copia cifrada externa, llave/acceso personal de Toni,
+Pendientes: copia cifrada externa, prueba de conexión personal de Toni,
 correo y cinco cuentas nuevas, aceptación UI/dispositivos, activación de stock
 tras revisión e imagen manual. Los consumidores restantes deben completar sus
 contratos API antes de retirar Supabase. No se enviaron correos ni se alteraron
@@ -332,7 +333,29 @@ No se ejecutó otro respaldo ni reload al probar estos permisos.
 ```
 
 Dentro de esa sesión, anteponer `sudo -n` a los comandos autorizados del wrapper.
-Toni todavía no tiene usuario/acceso; no usar la llave de Pedro para habilitarlo.
+Toni ya tiene usuario `toni` y su propia llave pública autorizada, entregada por
+Pedro el 3 de octubre de 2026. No se reutilizó la llave de Pedro. La cuenta tiene
+contraseña bloqueada y la política `/etc/sudoers.d/vivero-toni` copia exactamente
+los comandos permitidos a Pedro. Se comprobaron sintaxis de sudoers/sshd,
+propietarios y modos de `.ssh`/`authorized_keys`, estado y validación mediante
+ejecución local como Toni; sudo general fue rechazado y no pertenece al grupo
+Docker. Las llaves root/Pedro y la política de Pedro conservaron sus hashes.
+
+```sh
+ssh toni@179.236.238.111
+```
+
+Ese comando usa las llaves estándar o el agente SSH de su computadora. Si guarda
+la llave privada con otro nombre, usar `ssh -i RUTA_LLAVE_PRIVADA toni@179.236.238.111`.
+El comentario `tony-vps` de la llave pública no permite inferir el nombre del
+archivo privado. Huella ED25519 del servidor comprobada:
+`SHA256:/WRISCh2bIoTLHSRwzQY8niIR+z46J6Y7789J9Y8RC8`.
+
+Pendiente: Toni debe conectar desde su equipo con la llave privada correspondiente
+y ejecutar `sudo -n /srv/apps/vivero-dulcinea/ops/viveroctl.sh status` y `validate`.
+Las comprobaciones locales no prueban posesión de su llave privada, conectividad
+desde su red ni autenticación SSH real. No se probaron reload ni backup al
+verificar permisos, porque alterarían el proxy o pausarían servicios.
 Despliegue, restauración, copia externa y cambios de sistema requieren por ahora
 la sesión administrativa existente. Acordar por separado sudo administrativo
 si se necesita. Root, contraseña y firewall actuales se conservaron; restringirlos
@@ -403,3 +426,8 @@ Este es un plan pendiente, no una descripción de servicios ya desplegados:
 Supabase se conserva hasta aceptación Web y Android, conciliación de intentos
 anteriores y cierre de pendientes de acceso, correo y operación. Las pruebas
 unitarias, un health correcto o un APK compilado no sustituyen esa aceptación.
+
+Se preparó posteriormente el ensayo aislado `vivero-acceptance-20261003`, accesible
+solo por loopback/túnel SSH: [aceptación Web y Android](vps-acceptance-web-android.md).
+HTTP/SQL y cliente Kotlin pasaron con datos sintéticos; aceptación manual de tablet
+y Web todavía pendiente. No se cambió el Caddy ni la base de producción.

@@ -21,3 +21,10 @@ local.properties
 key.properties
 *.jks
 *.keystore
+
+# Private migration artifacts and generated Android distribution files.
+/app/release/
+*.apk
+*.aab
+/.codex-remote-attachments/
+/output/

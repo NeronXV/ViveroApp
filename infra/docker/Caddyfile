@@ -1,0 +1,44 @@
+{$VIVERO_DOMAIN} {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        X-Frame-Options DENY
+    }
+    @backend path /api/* /health
+    handle @backend {
+        reverse_proxy api:3001
+    }
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        header Cache-Control "no-cache"
+        file_server
+    }
+}
+
+# Temporary recovery access for payment attempts stored under the previous origin.
+{$VIVERO_LEGACY_DOMAIN:localhost} {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        X-Frame-Options DENY
+    }
+    @recovery path /api/* /health /assets/* /caja /login
+    handle @recovery {
+        @backend path /api/* /health
+        handle @backend {
+            reverse_proxy api:3001
+        }
+        handle {
+            root * /srv
+            try_files {path} /index.html
+            header Cache-Control "no-cache"
+            file_server
+        }
+    }
+    handle {
+        redir https://{$VIVERO_DOMAIN}{uri} 307
+    }
+}

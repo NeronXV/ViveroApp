@@ -2,6 +2,14 @@
 
 ## Propósito y alcance
 
+- Decisión oficial de arquitectura (fase 1): el destino compartido es Backend API
+  + MariaDB + Docker, en `backend/`, `database/mysql/` e `infra/docker/` de este
+  repositorio. Consultar `docs/backend-api-mariadb.md` y
+  `docs/supabase-migration-map.md`. Las reglas de Supabase/PostgreSQL siguientes
+  siguen vigentes para los módulos aún no migrados. No crear otro backend ni
+  migrar consumidores sin preservar sus contratos operativos. Las nuevas tablas
+  MariaDB usan IDs enteros autoincrementales, claves foráneas y centavos enteros.
+
 - Este repositorio contiene la aplicación Android de Vivero Dulcinea y la fuente
   autoritativa de sus contratos y migraciones de Supabase.
 - Trabaja solo dentro de este repositorio salvo que Pedro autorice expresamente

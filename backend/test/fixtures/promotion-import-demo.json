@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "source_key": "synthetic-demo",
+  "promotions": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "name": "Promocion sintetica importada",
+      "description": null,
+      "scope": "SELECTED_PRODUCTS",
+      "promo_type": "PERCENTAGE",
+      "value": "12.50",
+      "min_purchase_cents": 0,
+      "max_discount_cents": null,
+      "starts_at": null,
+      "ends_at": null,
+      "is_active": true,
+      "created_at": "2025-01-01T00:00:00.000123Z",
+      "product_ids": ["20000000-0000-4000-8000-000000000001"]
+    }
+  ]
+}

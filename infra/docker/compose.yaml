@@ -1,0 +1,201 @@
+name: vivero-local
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: vivero
+      MARIADB_USER: catalog_api
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Configure .env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Configure .env}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=+00:00"]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ../../database/mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../../database/mysql/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ../../database/mysql/grants.sql:/docker-entrypoint-initdb.d/03-grants.sql:ro
+      - ../../database/mysql/migrations:/database/migrations:ro
+      - ./init-migrations.sh:/docker-entrypoint-initdb.d/04-migrations.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [database]
+  api:
+    build: ../../backend
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DB_HOST: db
+      DB_NAME: vivero
+      DB_USER: catalog_api
+      DB_PASSWORD: ${MARIADB_PASSWORD:?Configure .env}
+      IMAGE_STORAGE_DIR: /data/catalog-images
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      ACCOUNT_MAIL_FROM: ${ACCOUNT_MAIL_FROM:-}
+      NEWSLETTER_FROM: ${NEWSLETTER_FROM:-}
+      NEWSLETTER_LINK_KEY: ${NEWSLETTER_LINK_KEY:-}
+    volumes:
+      - catalog_images:/data/catalog-images
+    ports:
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "const r=await fetch('http://127.0.0.1:3001/health');process.exit(r.ok?0:1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # A non-internal bridge is needed for the loopback port to reach the host.
+    # MariaDB remains exclusively on the private database network.
+    networks: [database, api]
+  tests:
+    profiles: [test]
+    build: ../../backend
+    command: ["node", "--test", "--test-concurrency=1", "test/integration.test.js", "test/inventory-integration.test.js", "test/sales-integration.test.js", "test/scan-integration.test.js", "test/cashier-integration.test.js", "test/web-order-checkout-integration.test.js", "test/refunds-integration.test.js", "test/closings-integration.test.js", "test/stock-integration.test.js", "test/customers-integration.test.js", "test/administration-integration.test.js", "test/accounts-integration.test.js", "test/account-links-integration.test.js", "test/newsletter-integration.test.js", "test/purchases-integration.test.js", "test/reports-integration.test.js"]
+    environment:
+      API_URL: http://api:3001
+      DB_HOST: db
+      DB_NAME: vivero
+      DB_USER: root
+      DB_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Configure .env}
+      CATALOG_DB_PASSWORD: ${MARIADB_PASSWORD:?Configure .env}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [database]
+  migrate:
+    profiles: [tools]
+    build: ../../backend
+    command: ["node", "scripts/migrate.js"]
+    environment: &maintenance
+      NODE_ENV: development
+      DB_HOST: db
+      DB_NAME: vivero
+      DB_USER: root
+      DB_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Configure .env}
+    volumes:
+      - ../../database/mysql:/database:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+  import-inventory:
+    profiles: [tools]
+    build: ../../backend
+    entrypoint: ["node", "scripts/import-inventory.js"]
+    command: ["--dry-run"]
+    environment:
+      <<: *maintenance
+    volumes:
+      - type: bind
+        source: ${INVENTORY_IMPORT_DIR:-../../tmp/inventory-import}
+        target: /imports
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+  import-history:
+    profiles: [tools]
+    build: ../../backend
+    entrypoint: ["node", "scripts/import-history.js"]
+    command: ["--dry-run"]
+    environment:
+      <<: *maintenance
+    volumes:
+      - type: bind
+        source: ${HISTORY_IMPORT_DIR:-../../tmp/history-import}
+        target: /imports
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+  import-identity:
+    profiles: [tools]
+    build: ../../backend
+    entrypoint: ["node", "scripts/import-identity.js"]
+    command: ["--dry-run"]
+    environment:
+      <<: *maintenance
+    volumes:
+      - type: bind
+        source: ${IDENTITY_IMPORT_DIR:-../../tmp/identity-import}
+        target: /imports
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+  import-catalog:
+    profiles: [tools]
+    build: ../../backend
+    entrypoint: ["node", "scripts/import-catalog.js"]
+    command: ["--dry-run"]
+    environment:
+      <<: *maintenance
+    volumes:
+      - type: bind
+        source: ${CATALOG_IMPORT_FILE:-../../backend/test/fixtures/catalog-import-demo.json}
+        target: /imports/catalog.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CATALOG_IMPORT_IMAGES_DIR:-../../backend/test/fixtures/images}
+        target: /imports/images
+        read_only: true
+        bind:
+          create_host_path: false
+      - catalog_images:/data/catalog-images
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+  bootstrap:
+    profiles: [tools]
+    build: ../../backend
+    command: ["node", "scripts/bootstrap-owner.js"]
+    environment:
+      <<: *maintenance
+      BOOTSTRAP_EMAIL: ${BOOTSTRAP_EMAIL:-}
+      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:-}
+      BOOTSTRAP_FULL_NAME: ${BOOTSTRAP_FULL_NAME:-}
+      BOOTSTRAP_BRANCH_CODE: ${BOOTSTRAP_BRANCH_CODE:-}
+      BOOTSTRAP_BRANCH_NAME: ${BOOTSTRAP_BRANCH_NAME:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [database]
+networks:
+  api:
+  database:
+    internal: true
+volumes:
+  mariadb_data:
+  catalog_images:

@@ -1,0 +1,43 @@
+# Overlay of the official stack; use together with compose.yaml.
+# Rehearsal only until docs/backend-complete-cutover.md is complete.
+services:
+  db:
+    restart: unless-stopped
+    volumes:
+      - ../../database/mysql/seed-production.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+  api:
+    restart: unless-stopped
+    ports: !reset []
+    environment:
+      NODE_ENV: production
+      WEB_ORIGIN: https://${VIVERO_DOMAIN:?Configure VIVERO_DOMAIN}
+      WEB_ORIGIN_ALIASES: ${WEB_ORIGIN_ALIASES:-}
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+  web:
+    build:
+      context: ../../../ViveroWeb
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VIVERO_DOMAIN: ${VIVERO_DOMAIN:?Configure VIVERO_DOMAIN}
+      VIVERO_LEGACY_DOMAIN: ${VIVERO_LEGACY_DOMAIN:-localhost}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [api]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+volumes:
+  caddy_data:
+  caddy_config:

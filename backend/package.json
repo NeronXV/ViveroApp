@@ -1,0 +1,24 @@
+{
+  "name": "vivero-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test:backup": "node --test --test-isolation=none test/backup.test.js",
+    "test": "node --test test/unit.test.js test/auth.test.js test/account-links.test.js test/newsletter.test.js test/images.test.js test/promotions.test.js test/catalog-import.test.js test/promotion-import.test.js test/image-import.test.js test/web-orders.test.js test/inventory.test.js test/sales.test.js test/cashier.test.js test/web-order-checkout.test.js test/refunds.test.js test/closings.test.js test/customers.test.js test/administration.test.js test/purchases.test.js test/reports.test.js test/browser-origin.test.js test/source-export-preflight.test.js test/bootstrap-owner.test.js test/identity-import-plan.test.js test/source-catalog.test.js test/source-sales.test.js test/source-inventory.test.js test/password-change.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/integration.test.js test/inventory-integration.test.js test/sales-integration.test.js test/scan-integration.test.js test/cashier-integration.test.js test/web-order-checkout-integration.test.js test/refunds-integration.test.js test/closings-integration.test.js test/stock-integration.test.js test/customers-integration.test.js test/administration-integration.test.js test/accounts-integration.test.js test/account-links-integration.test.js test/newsletter-integration.test.js test/purchases-integration.test.js test/reports-integration.test.js",
+    "check": "node --check src/server.js && node --check src/app.js && node --check src/catalog.js && node --check src/images.js && node --check src/promotions.js && node --check src/promotion-dates.js && node --check src/catalog-pricing.js && node --check src/auth/password.js && node --check src/auth/service.js && node --check src/auth/account-links.js && node --check src/auth/mail.js && node --check src/newsletter.js && node --check scripts/admin-db.js && node --check scripts/migrate.js && node --check scripts/bootstrap-owner.js && node --check scripts/catalog-import.js && node --check scripts/import-catalog.js && node --check scripts/promotion-import.js && node --check scripts/image-import.js && node --check src/web-orders.js && node --check src/web-order-admin.js && node --check src/inventory.js && node --check src/sales.js && node --check src/cashier.js && node --check src/web-order-checkout.js && node --check src/refunds.js && node --check src/closings.js && node --check src/stock.js && node --check src/customers.js && node --check src/administration.js && node --check src/purchases.js && node --check src/reports.js && node --check scripts/verify-local-install.js && node --check src/browser-origin.js && node --check scripts/source-export-preflight.js && node --check scripts/preflight-source-export.js && node --check scripts/identity-import-plan.js && node --check scripts/identity-import.js && node --check scripts/import-identity.js && node --check scripts/source-catalog.js && node --check scripts/prepare-source-catalog.js && node --check scripts/source-sales.js && node --check scripts/history-import.js && node --check scripts/import-history.js && node --check scripts/source-inventory.js && node --check scripts/inventory-import.js && node --check scripts/import-inventory.js && node --check src/auth/change-password.js",
+    "test:identity-import": "node --test test/identity-import-integration.test.js",
+    "test:source-catalog": "node --test test/source-catalog-integration.test.js",
+    "test:history-import": "node --test test/history-import-integration.test.js",
+    "test:inventory-import": "node --test test/inventory-import-integration.test.js"
+  },
+  "dependencies": {
+    "mysql2": "3.24.5",
+    "sharp": "0.35.5"
+  }
+}

@@ -1,0 +1,10 @@
+# Temporary access through SSH while the public domain/cutover is pending.
+# Apply after compose.yaml and compose.vps.yaml; uses the same stack and volumes.
+services:
+  api:
+    environment:
+      WEB_ORIGIN: https://localhost:33443
+  web:
+    environment:
+      VIVERO_DOMAIN: localhost
+    ports: !override ["127.0.0.1:33080:80", "127.0.0.1:33443:443"]

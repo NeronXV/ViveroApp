@@ -1,0 +1,16 @@
+{
+  "schema_version": 3,
+  "source_key": "synthetic-demo",
+  "images": [
+    {
+      "id": "40000000-0000-4000-8000-000000000001",
+      "product_id": "20000000-0000-4000-8000-000000000001",
+      "file": "demo.png",
+      "sha256": "b3ad5d92a3dda48eb74b9c8dc054b646273ece385345323ef3508b7e36e6cbd5",
+      "content_type": "image/png",
+      "alt_text": "Imagen sintetica de prueba",
+      "sort_order": 0,
+      "is_primary": true
+    }
+  ]
+}
