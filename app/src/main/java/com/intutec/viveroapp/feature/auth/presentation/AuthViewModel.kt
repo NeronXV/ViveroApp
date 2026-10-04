@@ -21,6 +21,7 @@ data class AuthUiState(
     val passwordVisible: Boolean = false,
     val remoteConfigured: Boolean = false,
     val session: UserSession? = null,
+    val backend: com.intutec.viveroapp.core.session.BackendSessionState = com.intutec.viveroapp.core.session.BackendSessionState(),
     val errorMessage: String? = null,
     val infoMessage: String? = null,
 )

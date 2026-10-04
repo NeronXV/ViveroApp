@@ -1,216 +1,103 @@
 package com.intutec.viveroapp.navigation
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import com.intutec.viveroapp.feature.auth.presentation.AuthStatus
-import com.intutec.viveroapp.feature.auth.presentation.AuthViewModel
-import com.intutec.viveroapp.feature.auth.presentation.LoginScreen
-import com.intutec.viveroapp.feature.auth.presentation.PasswordResetScreen
-import com.intutec.viveroapp.feature.catalog.presentation.CatalogScreenRoute
-import com.intutec.viveroapp.feature.catalog.presentation.ProductDetailScreenRoute
+import androidx.navigation.compose.*
 import androidx.navigation.toRoute
-import com.intutec.viveroapp.feature.home.presentation.HomeScreenRoute
-import com.intutec.viveroapp.feature.profile.presentation.ProfileScreen
+import com.intutec.viveroapp.BuildConfig
+import com.intutec.viveroapp.core.network.backendApiOrigin
+import com.intutec.viveroapp.core.session.*
+import com.intutec.viveroapp.feature.auth.presentation.*
+import com.intutec.viveroapp.feature.catalog.presentation.BackendCatalogScreen
+import com.intutec.viveroapp.feature.cart.presentation.BackendCartScreen
+import com.intutec.viveroapp.feature.cashier.presentation.BackendCashierScreen
+import com.intutec.viveroapp.feature.mysales.presentation.BackendHistoryScreen
+import com.intutec.viveroapp.feature.inventory.presentation.BackendInventoryScreen
+import com.intutec.viveroapp.feature.inventory.domain.repository.inventorySession
 import com.intutec.viveroapp.feature.splash.presentation.SplashScreen
-import com.intutec.viveroapp.core.designsystem.PlaceholderScreen
-import com.intutec.viveroapp.feature.scanner.presentation.ScannerScreenRoute
-import com.intutec.viveroapp.feature.cart.presentation.CartScreenRoute
-import com.intutec.viveroapp.core.security.AppPermission
-import com.intutec.viveroapp.feature.cashier.presentation.CashierDetailScreenRoute
-import com.intutec.viveroapp.feature.cashier.presentation.CashierQueueScreenRoute
-import com.intutec.viveroapp.feature.inventory.presentation.InventoryScreenRoute
-import com.intutec.viveroapp.feature.reports.presentation.ReportsScreenRoute
-import com.intutec.viveroapp.feature.mysales.presentation.MySalesScreenRoute
-import com.intutec.viveroapp.feature.catalog.admin.presentation.ProductAdminScreenRoute
-import com.intutec.viveroapp.feature.staff.presentation.StaffScreenRoute
+import com.intutec.viveroapp.feature.home.presentation.BackendHomeScreen
 
 @Composable
-fun ViveroApp(authViewModel: AuthViewModel = hiltViewModel()) {
+fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
     val navController = rememberNavController()
-    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(authState.status) {
-        when (authState.status) {
-            AuthStatus.AUTHENTICATED -> navController.navigate(HomeRoute) {
-                popUpTo(navController.graph.id) { inclusive = true }
-                launchSingleTop = true
-            }
-            AuthStatus.SIGNED_OUT -> navController.navigate(LoginRoute) {
-                popUpTo(navController.graph.id) { inclusive = true }
-                launchSingleTop = true
-            }
-            AuthStatus.CHECKING, AuthStatus.WORKING -> Unit
+    val auth by authViewModel.uiState.collectAsStateWithLifecycle()
+    val passwordChange by authViewModel.passwordChange.collectAsStateWithLifecycle()
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner, authViewModel) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) authViewModel.refresh() }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(auth.status) {
+        when (auth.status) {
+            AuthStatus.AUTHENTICATED -> navController.navigate(HomeRoute) { popUpTo(navController.graph.id) { inclusive = true }; launchSingleTop = true }
+            AuthStatus.SIGNED_OUT -> navController.navigate(LoginRoute) { popUpTo(navController.graph.id) { inclusive = true }; launchSingleTop = true }
+            else -> Unit
         }
     }
-
-    NavHost(navController = navController, startDestination = SplashRoute) {
+    if (auth.status == AuthStatus.AUTHENTICATED && auth.backend.accessStatus != BackendAccessStatus.READY) {
+        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Consulta tus permisos para continuar.")
+            if (auth.backend.accessStatus == BackendAccessStatus.LOADING) CircularProgressIndicator()
+            auth.errorMessage?.let { Text(it) }
+            Button(authViewModel::refresh) { Text("Actualizar permisos") }
+            TextButton(authViewModel::signOut) { Text("Cerrar sesión") }
+        }
+        return
+    }
+    NavHost(navController, startDestination = SplashRoute) {
         composable<SplashRoute> { SplashScreen() }
-        composable<LoginRoute> {
-            LoginScreen(
-                state = authState,
-                onEmailChanged = authViewModel::onEmailChanged,
-                onPasswordChanged = authViewModel::onPasswordChanged,
-                onTogglePassword = authViewModel::togglePasswordVisibility,
-                onSignIn = authViewModel::signIn,
-                onForgotPassword = {
-                    authViewModel.clearMessages()
-                    navController.navigate(PasswordResetRoute)
-                },
-            )
-        }
-        composable<PasswordResetRoute> {
-            PasswordResetScreen(
-                state = authState,
-                onEmailChanged = authViewModel::onEmailChanged,
-                onSubmit = authViewModel::sendPasswordReset,
-                onBack = navController::navigateUp,
-            )
-        }
+        composable<LoginRoute> { LoginScreen(auth, authViewModel::onEmailChanged, authViewModel::onPasswordChanged,
+            authViewModel::togglePasswordVisibility, authViewModel::signIn, { authViewModel.clearMessages(); navController.navigate(PasswordResetRoute) }) }
+        composable<PasswordResetRoute> { PasswordResetScreen(auth, authViewModel::onEmailChanged, authViewModel::sendPasswordReset, { navController.navigateUp() }) }
         composable<HomeRoute> {
-            HomeScreenRoute(
-                onCatalogClick = { navController.navigate(CatalogRoute) },
-                onCartClick = { navController.navigate(CartRoute) },
-                onCashierClick = { navController.navigate(CashierQueueRoute()) },
-                onInventoryClick = { navController.navigate(InventoryRoute()) },
-                onReportsClick = { navController.navigate(ReportsRoute) },
-                onMySalesClick = { navController.navigate(MySalesRoute) },
-                onProfileClick = { navController.navigate(ProfileRoute) },
-                onProductsClick = { navController.navigate(ProductAdminRoute) },
-                onStaffClick = { navController.navigate(StaffRoute) },
-            )
-        }
-        composable<CatalogRoute> {
-            if (authState.session?.hasCapability(AppPermission.VIEW_CATALOG) == true) {
-                CatalogScreenRoute(
-                    onBack = navController::navigateUp,
-                    onProductClick = { navController.navigate(ProductDetailRoute(it)) },
-                    onScanClick = { navController.navigate(ScannerPreviewRoute) },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
-            }
-        }
-        composable<ProductDetailRoute> { entry ->
-            val route = entry.toRoute<ProductDetailRoute>()
-            ProductDetailScreenRoute(
-                productId = route.productId,
-                onBack = navController::navigateUp,
-                onScanClick = { navController.navigate(ScannerPreviewRoute) },
-            )
-        }
-        composable<ScannerPreviewRoute> {
-            if (authState.session?.hasCapability(AppPermission.SCAN_PRODUCTS) == true) {
-                ScannerScreenRoute(
-                    onBack = navController::navigateUp,
-                    onProductDetails = { navController.navigate(ProductDetailRoute(it)) },
-                    onNavigateToInventory = { productId, action ->
-                        navController.navigate(InventoryRoute(productId = productId, initialAction = action))
-                    },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
-            }
-        }
-        composable<CartRoute> {
-            if (authState.session?.canOperateAtBranch(AppPermission.CREATE_SALES) == true) {
-                CartScreenRoute(
-                    onBack = navController::navigateUp,
-                    onBrowseCatalog = { navController.navigate(CatalogRoute) },
-                    onMySales = { navController.navigate(MySalesRoute) },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso correspondiente", navController::navigateUp)
-            }
-        }
-        composable<CashierQueueRoute> { entry ->
-            if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
-                val route = entry.toRoute<CashierQueueRoute>()
-                CashierQueueScreenRoute(
-                    onBack = navController::navigateUp,
-                    onOrderClick = { navController.navigate(CashierDetailRoute(it)) },
-                    completedFolio = route.completedFolio,
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
-            }
-        }
-        composable<CashierDetailRoute> { entry ->
-            if (authState.session?.canOperateAtBranch(AppPermission.OPERATE_CASHIER) == true) {
-                val route = entry.toRoute<CashierDetailRoute>()
-                CashierDetailScreenRoute(
-                    orderId = route.orderId,
-                    onBack = navController::navigateUp,
-                    onPaymentFinished = { completedFolio ->
-                        navController.navigate(CashierQueueRoute(completedFolio)) {
-                            popUpTo<CashierQueueRoute> { inclusive = true }
-                        }
-                    },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Caja", navController::navigateUp)
-            }
-        }
-        composable<InventoryRoute> { entry ->
-            if (authState.session?.canOperateAtBranch(AppPermission.MANAGE_INVENTORY) == true) {
-                val route = entry.toRoute<InventoryRoute>()
-                InventoryScreenRoute(
-                    initialProductId = route.productId,
-                    initialAction = route.initialAction,
-                    onBack = navController::navigateUp,
-                    onCreateProduct = { navController.navigate(ProductAdminRoute) },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Inventario", navController::navigateUp)
-            }
-        }
-        composable<ProductAdminRoute> {
-            if (authState.session?.hasCapability(AppPermission.MANAGE_PRODUCTS) == true) {
-                ProductAdminScreenRoute(
-                    onBack = navController::navigateUp,
-                    onRegisterStock = { productId ->
-                        // After product creation, go to inventory to register reception
-                        navController.navigate(InventoryRoute(productId = productId, initialAction = "RECEPTION")) {
-                            popUpTo<ProductAdminRoute> { inclusive = false }
-                        }
-                    },
-                )
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Productos (MANAGE_PRODUCTS)", navController::navigateUp)
-            }
-        }
-        composable<ReportsRoute> {
-            if (authState.session?.hasCapability(AppPermission.VIEW_REPORTS) == true) {
-                ReportsScreenRoute(onBack = navController::navigateUp)
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Reportes", navController::navigateUp)
-            }
-        }
-        composable<MySalesRoute> {
-            if (authState.session?.hasCapability(AppPermission.VIEW_OWN_SALES) == true) {
-                MySalesScreenRoute(onBack = navController::navigateUp)
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Ventas", navController::navigateUp)
-            }
-        }
-        composable<ProfileRoute> {
-            ProfileScreen(
-                session = authState.session,
-                onBack = navController::navigateUp,
+            val context = LocalContext.current
+            val web = remember { runCatching { backendApiOrigin(BuildConfig.BACKEND_WEB_URL, BuildConfig.DEBUG) }.getOrNull() }
+            BackendHomeScreen(
+                session = auth.backend,
+                onCatalog = { navController.navigate(CatalogRoute) },
+                onCart = { navController.navigate(CartRoute) },
+                onCashier = { navController.navigate(CashierQueueRoute()) },
+                onInventory = { navController.navigate(InventoryRoute()) },
+                onHistory = { navController.navigate(BackendHistoryRoute()) },
+                onWeb = { web?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
+                webAvailable = web != null,
+                onRefresh = authViewModel::refresh,
                 onSignOut = authViewModel::signOut,
+                passwordChange = passwordChange,
+                onChangePassword = authViewModel::changePassword,
+                onClearPasswordChange = authViewModel::clearPasswordChange,
             )
         }
-        composable<StaffRoute> {
-            if (authState.session?.hasCapability(AppPermission.MANAGE_USERS) == true) {
-                StaffScreenRoute(onBack = navController::navigateUp)
-            } else {
-                PlaceholderScreen("Acceso restringido", "permiso de Personal", navController::navigateUp)
-            }
+        composable<CatalogRoute> { if (auth.backend.authorizedSession("VIEW_CATALOG") != null) BackendCatalogScreen({ navController.navigateUp() }, { navController.navigate(CartRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<CartRoute> { if (auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<CashierQueueRoute> { if (auth.backend.authorizedSession("OPERATE_CASHIER", true) != null) BackendCashierScreen({ navController.navigateUp() }, { navController.navigate(BackendHistoryRoute("PAYMENTS")) }, { navController.navigate(BackendHistoryRoute("QUEUE", it)) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<BackendHistoryRoute> { entry ->
+            val route = entry.toRoute<BackendHistoryRoute>()
+            val permitted = if (route.kind == "SALES") auth.backend.authorizedSession("VIEW_OWN_SALES", true) != null && auth.backend.authorizedSession("CREATE_SALES", true) != null else auth.backend.authorizedSession("OPERATE_CASHIER", true) != null
+            if (permitted) BackendHistoryScreen(onBack = { navController.navigateUp() }) else AccessUnavailable { navController.navigate(HomeRoute) }
         }
+        composable<InventoryRoute> { if (auth.backend.inventorySession() != null) BackendInventoryScreen(onBack = { navController.navigateUp() }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+    }
+}
+
+@Composable
+private fun AccessUnavailable(onHome: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Tus permisos actuales no permiten abrir este módulo. Los intentos guardados se conservan.")
+        Button(onHome) { Text("Volver al inicio") }
     }
 }

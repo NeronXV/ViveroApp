@@ -19,5 +19,6 @@ import kotlinx.serialization.Serializable
 )
 @Serializable data object ReportsRoute
 @Serializable data object MySalesRoute
+@Serializable data class BackendHistoryRoute(val kind: String = "SALES", val id: Long? = null)
 @Serializable data object ProductAdminRoute
 @Serializable data object StaffRoute

@@ -226,7 +226,7 @@ class ViveroDatabaseV2Test {
     }
 
     @Test
-    fun freshInstallCreatesVersion3AndAllExistingTables() = runBlocking {
+    fun freshInstallCreatesVersion6AndAllExistingTables() = runBlocking {
         val database = openVersion2(databaseName("fresh-v3"))
         try {
             val sql = database.openHelper.readableDatabase
@@ -234,7 +234,8 @@ class ViveroDatabaseV2Test {
                 buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
             }
             assertTrue(names.containsAll(setOf("cart_drafts", "cart_items", "sales", "sale_items", "sale_status_history", "cashier_payment_attempts")))
-            assertEquals(3, sql.version)
+            assertTrue(names.containsAll(setOf("backend_cart_drafts", "backend_cart_items", "backend_sale_attempts", "backend_payment_attempts", "backend_inventory_attempts")))
+            assertEquals(6, sql.version)
         } finally {
             database.close()
         }
@@ -380,7 +381,7 @@ class ViveroDatabaseV2Test {
 
     private fun openVersion2(name: String): ViveroDatabase =
         Room.databaseBuilder(context, ViveroDatabase::class.java, name)
-            .addMigrations(ViveroDatabase.MIGRATION_1_2, ViveroDatabase.MIGRATION_2_3)
+            .addMigrations(ViveroDatabase.MIGRATION_1_2, ViveroDatabase.MIGRATION_2_3, ViveroDatabase.MIGRATION_3_4, ViveroDatabase.MIGRATION_4_5, ViveroDatabase.MIGRATION_5_6)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

@@ -36,7 +36,7 @@ class HomeScreenTest {
         setHome(dashboard = dashboard(UserRole.OWNER, canCreateSales = true), cart = Cart(), onCatalog = { catalogOpens++ })
 
         composeRule.onNodeWithText("Nueva venta").assertIsDisplayed()
-        composeRule.onNodeWithText("Comenzar").performClick()
+        composeRule.onNodeWithText("Comenzar venta").performClick()
 
         assertEquals(1, catalogOpens)
     }

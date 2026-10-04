@@ -160,7 +160,8 @@ fun HomeScreen(
                 is UiState.Empty -> MessageContent(state.message, onRetry)
                 is UiState.Error -> MessageContent(state.message, onRetry)
                 is UiState.Success -> DashboardContent(
-                    content = state.data,
+                    dashboard = state.data.dashboard,
+                    cart = HomeCartSummary(state.data.cart.itemCount, state.data.cart.totalCents),
                     onCatalogClick = onCatalogClick,
                     onCartClick = onCartClick,
                     onCashierClick = onCashierClick,
@@ -176,9 +177,35 @@ fun HomeScreen(
     }
 }
 
+// Presentation summary shared by the original and API dashboards. No identity conversion.
+data class HomeCartSummary(val itemCount: Int = 0, val totalCents: Long = 0)
+
+@Composable
+fun HomeDashboard(
+    dashboard: Dashboard,
+    cart: HomeCartSummary,
+    onCatalogClick: () -> Unit,
+    onCartClick: () -> Unit,
+    onCashierClick: () -> Unit,
+    onInventoryClick: () -> Unit,
+    onReportsClick: () -> Unit,
+    onMySalesClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onProductsClick: () -> Unit,
+    onStaffClick: () -> Unit,
+) {
+    Scaffold(containerColor = Cream) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            DashboardContent(dashboard, cart, onCatalogClick, onCartClick, onCashierClick,
+                onInventoryClick, onReportsClick, onMySalesClick, onProfileClick, onProductsClick, onStaffClick)
+        }
+    }
+}
+
 @Composable
 private fun DashboardContent(
-    content: HomeContent,
+    dashboard: Dashboard,
+    cart: HomeCartSummary,
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
     onCashierClick: () -> Unit,
@@ -207,24 +234,24 @@ private fun DashboardContent(
             ),
             verticalArrangement = Arrangement.spacedBy(sectionSpacing),
         ) {
-            item { HomeHeader(content.dashboard, expanded, onProfileClick) }
-            if (content.dashboard.canCreateSales) {
+            item { HomeHeader(dashboard, expanded, onProfileClick) }
+            if (dashboard.canCreateSales) {
                 item {
                     PrimarySaleAction(
-                        cart = content.cart,
+                        cart = cart,
                         expanded = expanded,
                         onCatalogClick = onCatalogClick,
                         onCartClick = onCartClick,
                     )
                 }
             }
-            if (content.dashboard.modules.isNotEmpty()) {
+            if (dashboard.modules.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(if (expanded) 16.dp else 10.dp)) {
                         SectionTitle("Accesos rápidos", "Funciones disponibles")
                         QuickAccesses(
-                            modules = content.dashboard.modules,
-                            cart = content.cart,
+                            modules = dashboard.modules,
+                            cart = cart,
                             columns = quickAccessColumns,
                             onModuleClick = { module ->
                                 onHomeModuleClick(
@@ -358,12 +385,12 @@ private fun HeaderStatus(sessionMode: SessionMode, onProfileClick: () -> Unit, s
 
 @Composable
 private fun PrimarySaleAction(
-    cart: Cart,
+    cart: HomeCartSummary,
     expanded: Boolean,
     onCatalogClick: () -> Unit,
     onCartClick: () -> Unit,
 ) {
-    val hasItems = cart.items.isNotEmpty()
+    val hasItems = cart.itemCount > 0
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -473,7 +500,7 @@ private fun SectionTitle(title: String, subtitle: String) {
 @Composable
 private fun QuickAccesses(
     modules: List<DashboardModule>,
-    cart: Cart,
+    cart: HomeCartSummary,
     columns: Int,
     onModuleClick: (DashboardModule) -> Unit,
 ) {
@@ -481,7 +508,7 @@ private fun QuickAccesses(
         QuickAccessCard(
             module = module,
             description = when (module.id) {
-                "cart" -> if (cart.items.isEmpty()) {
+                "cart" -> if (cart.itemCount == 0) {
                     "Sin productos agregados"
                 } else {
                     "${cart.itemCount} ${if (cart.itemCount == 1) "artículo" else "artículos"} · ${cart.totalCents.asMxn()}"

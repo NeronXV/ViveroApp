@@ -199,10 +199,12 @@ class AuthRepositoryImplTest {
             initialState = initialState,
         )
         val store = SessionStore()
+        val provider = org.mockito.Mockito.mock(SupabaseProvider::class.java)
+        org.mockito.Mockito.`when`(provider.isConfigured).thenReturn(true)
         return Fixture(
             remote = remote,
             store = store,
-            repository = AuthRepositoryImpl(SupabaseProvider(), remote, store),
+            repository = AuthRepositoryImpl(provider, remote, store),
         )
     }
 

@@ -1,5 +1,4 @@
 import java.net.URI
-import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -31,22 +30,15 @@ val verifyReleaseConfiguration = tasks.register("verifyReleaseConfiguration") {
     group = "verification"
     description = "Verifica el destino explícito de release y la configuración de firma sin mostrar credenciales."
     doLast {
-        val url = localProperties.getProperty("RELEASE_SUPABASE_URL", "")
-        val redirect = localProperties.getProperty("RELEASE_AUTH_REDIRECT_URL", "")
-        val key = localProperties.getProperty("RELEASE_SUPABASE_PUBLISHABLE_KEY", "")
-        fun isHttpsUrl(value: String): Boolean = runCatching {
+        val url = localProperties.getProperty("RELEASE_BACKEND_API_URL", "")
+        fun isHttpsOrigin(value: String): Boolean = runCatching {
             val uri = URI(value)
-            uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null
+            uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null &&
+                uri.path in listOf("", "/") && uri.query == null && uri.fragment == null
         }.getOrDefault(false)
-        check(isHttpsUrl(url)) { "Configura RELEASE_SUPABASE_URL con el destino HTTPS de la entrega." }
-        check(isHttpsUrl(redirect)) { "Configura RELEASE_AUTH_REDIRECT_URL con la recuperación HTTPS autorizada." }
-        val isAnonJwt = runCatching {
-            val payload = String(Base64.getUrlDecoder().decode(key.split('.')[1]))
-            Regex("\"role\"\\s*:\\s*\"anon\"").containsMatchIn(payload)
-        }.getOrDefault(false)
-        check(key.startsWith("sb_publishable_") || isAnonJwt) {
-            "Release requiere una clave publicable/anon; nunca una clave administrativa."
-        }
+        check(isHttpsOrigin(url)) { "Configura RELEASE_BACKEND_API_URL con el origen HTTPS de la entrega." }
+        val web = localProperties.getProperty("RELEASE_BACKEND_WEB_URL", "")
+        check(web.isBlank() || isHttpsOrigin(web)) { "RELEASE_BACKEND_WEB_URL debe ser un origen HTTPS." }
         check(hasReleaseSigning) { "Configura la firma existente en key.properties (archivo ignorado por Git)." }
         check(rootProject.file(releaseSigningProperties.getProperty("storeFile")).isFile) {
             "No se encuentra el almacén de firma configurado."
@@ -64,13 +56,16 @@ android {
         applicationId = "com.intutec.viveroapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 7
+        versionName = "1.0.6-vps"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "SUPABASE_URL", "\"${localString("SUPABASE_URL")}\"")
-        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localString("SUPABASE_PUBLISHABLE_KEY")}\"")
-        buildConfigField("String", "AUTH_REDIRECT_URL", "\"${localString("AUTH_REDIRECT_URL")}\"")
+        // Public origin only; credentials and sessions never belong in BuildConfig.
+        buildConfigField("String", "BACKEND_API_URL", "\"${localString("BACKEND_API_URL")}\"")
+        buildConfigField("String", "BACKEND_WEB_URL", "\"${localString("BACKEND_WEB_URL")}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"\"")
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
+        buildConfigField("String", "AUTH_REDIRECT_URL", "\"\"")
     }
 
     signingConfigs {
@@ -86,9 +81,8 @@ android {
 
     buildTypes {
         release {
-            buildConfigField("String", "SUPABASE_URL", "\"${localString("RELEASE_SUPABASE_URL")}\"")
-            buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localString("RELEASE_SUPABASE_PUBLISHABLE_KEY")}\"")
-            buildConfigField("String", "AUTH_REDIRECT_URL", "\"${localString("RELEASE_AUTH_REDIRECT_URL")}\"")
+            buildConfigField("String", "BACKEND_API_URL", "\"${localString("RELEASE_BACKEND_API_URL")}\"")
+            buildConfigField("String", "BACKEND_WEB_URL", "\"${localString("RELEASE_BACKEND_WEB_URL")}\"")
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(

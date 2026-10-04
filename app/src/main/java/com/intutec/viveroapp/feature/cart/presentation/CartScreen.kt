@@ -137,6 +137,7 @@ private fun CartScreen(
             ViveroTopAppBar(title = "Carrito de venta", onBack = onBack, eyebrow = "PUNTO DE VENTA")
         },
         snackbarHost = { SnackbarHost(snackbar) },
+        bottomBar = { BackendPendingSalesPanel() },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             when {

@@ -5,6 +5,12 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.intutec.viveroapp.feature.cart.data.local.CartDao
+import com.intutec.viveroapp.feature.cart.data.local.BackendSaleAttemptDao
+import com.intutec.viveroapp.feature.cart.data.local.BackendSaleAttemptEntity
+import com.intutec.viveroapp.feature.cart.data.local.BackendSaleAttemptItemEntity
+import com.intutec.viveroapp.feature.cart.data.local.BackendCartDao
+import com.intutec.viveroapp.feature.cart.data.local.BackendCartEntity
+import com.intutec.viveroapp.feature.cart.data.local.BackendCartItemEntity
 import com.intutec.viveroapp.feature.cart.data.local.CartHeaderEntity
 import com.intutec.viveroapp.feature.cart.data.local.CartItemEntity
 import com.intutec.viveroapp.feature.cart.data.local.SaleEntity
@@ -12,6 +18,10 @@ import com.intutec.viveroapp.feature.cart.data.local.SaleItemEntity
 import com.intutec.viveroapp.feature.cart.data.local.SaleStatusHistoryEntity
 import com.intutec.viveroapp.feature.cashier.data.local.CashierPaymentAttemptDao
 import com.intutec.viveroapp.feature.cashier.data.local.CashierPaymentAttemptEntity
+import com.intutec.viveroapp.feature.cashier.data.local.BackendPaymentAttemptDao
+import com.intutec.viveroapp.feature.cashier.data.local.BackendPaymentAttemptEntity
+import com.intutec.viveroapp.feature.inventory.data.local.BackendInventoryAttemptDao
+import com.intutec.viveroapp.feature.inventory.data.local.BackendInventoryAttemptEntity
 
 @Database(
     entities = [
@@ -21,15 +31,117 @@ import com.intutec.viveroapp.feature.cashier.data.local.CashierPaymentAttemptEnt
         SaleItemEntity::class,
         SaleStatusHistoryEntity::class,
         CashierPaymentAttemptEntity::class,
+        BackendSaleAttemptEntity::class,
+        BackendSaleAttemptItemEntity::class,
+        BackendCartEntity::class,
+        BackendCartItemEntity::class,
+        BackendPaymentAttemptEntity::class,
+        BackendInventoryAttemptEntity::class,
     ],
-    version = 3,
+    version = 6,
     exportSchema = false,
 )
 abstract class ViveroDatabase : RoomDatabase() {
     abstract fun cartDao(): CartDao
+    abstract fun backendSaleAttemptDao(): BackendSaleAttemptDao
+    abstract fun backendCartDao(): BackendCartDao
+    abstract fun backendPaymentAttemptDao(): BackendPaymentAttemptDao
+    abstract fun backendInventoryAttemptDao(): BackendInventoryAttemptDao
     abstract fun cashierPaymentAttemptDao(): CashierPaymentAttemptDao
 
     companion object {
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_inventory_attempts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        actor_id INTEGER NOT NULL,
+                        branch_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        action TEXT NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        notes TEXT,
+                        attempt_key TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        server_id INTEGER
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_backend_inventory_attempts_attempt_key ON backend_inventory_attempts(attempt_key)")
+            }
+        }
+        val RECOVER_INTERRUPTED_BACKEND_INVENTORY_SQL =
+            "UPDATE backend_inventory_attempts SET state='UNCERTAIN' WHERE state='SYNCING'"
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_cart_drafts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        actor_id INTEGER NOT NULL,
+                        branch_id INTEGER NOT NULL,
+                        revision INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_backend_cart_drafts_actor_id_branch_id ON backend_cart_drafts(actor_id, branch_id)")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_cart_items (
+                        cart_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        price_cents INTEGER NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        PRIMARY KEY(cart_id, product_id),
+                        FOREIGN KEY(cart_id) REFERENCES backend_cart_drafts(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_payment_attempts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        attempt_key TEXT NOT NULL,
+                        actor_id INTEGER NOT NULL,
+                        branch_id INTEGER NOT NULL,
+                        sale_id INTEGER NOT NULL,
+                        body TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        receipt TEXT
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_backend_payment_attempts_attempt_key ON backend_payment_attempts(attempt_key)")
+            }
+        }
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_sale_attempts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        attempt_key TEXT NOT NULL,
+                        actor_id INTEGER NOT NULL,
+                        branch_id INTEGER NOT NULL,
+                        expected_total_cents INTEGER NOT NULL,
+                        state TEXT NOT NULL,
+                        server_sale_id INTEGER,
+                        server_folio TEXT,
+                        server_status TEXT,
+                        last_error TEXT
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_backend_sale_attempts_attempt_key ON backend_sale_attempts(attempt_key)")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS backend_sale_attempt_items (
+                        attempt_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        PRIMARY KEY(attempt_id, product_id),
+                        FOREIGN KEY(attempt_id) REFERENCES backend_sale_attempts(id) ON UPDATE NO ACTION ON DELETE RESTRICT
+                    )
+                """.trimIndent())
+            }
+        }
+        val RECOVER_INTERRUPTED_BACKEND_SALES_SQL =
+            "UPDATE backend_sale_attempts SET state = 'UNCERTAIN', last_error = 'Envío interrumpido; recuperar antes de reenviar.' WHERE state = 'SYNCING'"
+        val RECOVER_INTERRUPTED_BACKEND_PAYMENTS_SQL =
+            "UPDATE backend_payment_attempts SET state = 'UNCERTAIN' WHERE state = 'SYNCING'"
+
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE cart_items ADD COLUMN stock_known INTEGER NOT NULL DEFAULT 1")

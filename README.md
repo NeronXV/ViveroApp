@@ -1,8 +1,62 @@
-# Vivero
+# Vivero Dulcinea
+
+## Estado actual — 3 de octubre de 2026
+
+El destino oficial es Backend API + MariaDB + Docker. La Web operativa está en
+https://viverodulcinea.bajastack.network y la app habitual usa la misma API y cuenta.
+La aplicación Android tiene versión 1.0.6-vps (código 7), conserva sus datos en
+Room 6 y ofrece inicio premium, catálogo, carrito, envío a caja, cobro, historial,
+comprobantes e inventario. Desde el perfil permite cambiar la contraseña personal
+con mínimo de 6 caracteres y cierra las sesiones al confirmarlo.
+
+La aceptación operativa completa sigue pendiente. Supabase se conserva para
+conciliación histórica; no es el destino del recorrido operativo activo. AppCliente
+sigue fuera de este corte. No hay entrega por correo ni copia cifrada externa
+configuradas. Las cinco cuentas importadas requieren activación de acceso.
+Caddy todavía pertenece al proyecto Compose de Vivero; antes de incorporar otra
+aplicación se debe separar el proxy según la guía operativa, preservando HTTPS.
+
+### Fuentes y configuración
+
+- `backend/`: API, contratos, scripts de importación y pruebas. Node 24 y lockfile npm.
+- `database/mysql/`: esquema, semillas sintéticas y migraciones hasta 029.
+- `infra/docker/`: Compose, Caddy y respaldo/restauración; MariaDB no publica puertos.
+- `app/`: cliente Android; URLs públicas en `local.properties`, ignorado por Git.
+- `.env.example` y `infra/docker/vps.env.example`: marcadores sin credenciales.
+
+En Android configurar `BACKEND_API_URL` y `BACKEND_WEB_URL` para debug;
+para release, `RELEASE_BACKEND_API_URL` y `RELEASE_BACKEND_WEB_URL` y la firma
+existente en `key.properties`. Nunca incluir claves o contraseñas en el APK.
+Los archivos reales de entorno, APK, respaldos y exportaciones permanecen fuera de Git.
+
+### Guías de trabajo y evidencia
+
+- [Arranque local con MariaDB](docs/backend-fresh-install.md).
+- [Arquitectura oficial](docs/backend-api-mariadb.md) y [mapa de migración](docs/supabase-migration-map.md).
+- [Operación del VPS para Pedro y Toni](docs/vps-multiproject-operations.md).
+- [Corte operativo y pendientes](docs/vps-operational-cutover.md).
+- [Dominio definitivo y recuperación de intentos del dominio anterior](docs/vps-canonical-domain.md).
+- [Diseño Android premium](docs/android-premium-vps.md).
+- [Cambio personal de contraseña y versión 1.0.6](docs/backend-personal-password.md).
+- [Aceptación controlada Web/Android](docs/vps-acceptance-web-android.md).
+
+Validaciones locales de esta entrega: `assembleDebug testDebugUnitTest` correcto,
+355 pruebas Android aprobadas y una HTTP opcional omitida; backend, 87 pruebas
+aprobadas y `npm run check`; verificación SQLite de migraciones Room 3→4→5→6
+correcta. La Web pasó lint, build y 471 pruebas. La prueba HTTP/SQL aislada de
+contraseña de 6 caracteres pasó antes de actualizar la API. Los informes enlazados
+distinguen despliegues anteriores, ensayos técnicos y aceptación humana pendiente.
+No se reejecutaron pruebas instrumentadas, PostgreSQL ni pruebas completas de
+MariaDB en este checkpoint de Git.
+
+## Referencia de la implementación anterior
+
+La documentación siguiente describe el recorrido original con Supabase y sus
+pruebas históricas. No implica que esas pantallas estén activas en el grafo API.
 
 Aplicación Android para apoyar la operación de un vivero. El proyecto se desarrolla en fases pequeñas y verificables.
 
-## Estado actual
+## Estado anterior con Supabase
 
 | Módulo | Estado |
 |---|---|
