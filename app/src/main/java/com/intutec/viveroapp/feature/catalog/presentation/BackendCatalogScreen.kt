@@ -25,11 +25,23 @@ import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
 import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.feature.scanner.presentation.CameraCodeDialog
 
 @Composable
 fun BackendCatalogScreen(onBack: () -> Unit, onCart: () -> Unit, viewModel: BackendCatalogViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var code by remember { mutableStateOf("") }
+    var cameraOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(state.enabled, state.canScan) {
+        if (!state.enabled || !state.canScan) cameraOpen = false
+    }
+    if (cameraOpen && state.enabled && state.canScan) {
+        CameraCodeDialog(onDismiss = { cameraOpen = false }, onCode = {
+            cameraOpen = false
+            code = it
+            viewModel.scan(it)
+        })
+    }
     Scaffold(topBar = { ViveroTopAppBar(title = "Catálogo", onBack = onBack, eyebrow = "COLECCIÓN BOTÁNICA") {
             if (state.canSell) IconButton(onCart) { Icon(Icons.Outlined.ShoppingCart, "Abrir carrito") }
         } }) { padding ->
@@ -51,6 +63,7 @@ fun BackendCatalogScreen(onBack: () -> Unit, onCart: () -> Unit, viewModel: Back
                     TextButton({ viewModel.scan(code) }, enabled = state.enabled && state.canScan && !state.loading && code.trim().length >= 2) { Text("Buscar código") }
                     if (state.canSell) TextButton(onCart) { Text("Abrir carrito") }
                 }
+                OutlinedButton({ cameraOpen = true }, enabled = state.enabled && state.canScan && !state.loading && !state.working, modifier = Modifier.fillMaxWidth()) { Text("Escanear con cámara") }
                 if (state.loading || state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(viewModel::retry) { Text("Reintentar") } }
                 state.message?.let { Text(it) }

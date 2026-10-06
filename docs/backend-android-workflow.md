@@ -1,5 +1,10 @@
 # Recorrido operativo Android con Backend API
 
+Actualización local del 4 de octubre: catálogo integra cámara QR/EAN/Code 128
+mediante la misma consulta API y mantiene el agregado manual al carrito.
+La versión local es 1.0.7-vps; cámara física, instalación y aceptación siguen
+pendientes. [Cierre vigente y evidencia](release-readiness.md).
+
 Estado posterior: inventario nativo integrado con API/MariaDB y Room 6.
 [Alcance y evidencia nuevos](backend-android-inventory.md). Este documento
 conserva los conteos y pendientes históricos de su bloque.

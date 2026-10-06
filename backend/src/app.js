@@ -124,11 +124,12 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
           return top ? service.top(query) : service.daily(query);
         }));
       }
-      const purchaseRoute = /^\/api\/v1\/(suppliers|supplier-purchases)(?:\/([1-9][0-9]*)(?:\/(presentations|confirm|items)(?:\/([1-9][0-9]*))?)?)?$/.exec(url.pathname);
+      const purchaseRoute = /^\/api\/v1\/(suppliers|supplier-purchases)(?:\/([1-9][0-9]*|retire)(?:\/(presentations|confirm|items)(?:\/([1-9][0-9]*))?)?)?$/.exec(url.pathname);
       if (purchaseRoute) {
         bearerToken(request);
         const [, resource, rawId, action, rawItemId] = purchaseRoute;
-        const id = rawId ? positiveId(rawId) : null;
+        const id = rawId && rawId !== 'retire' ? positiveId(rawId) : null;
+        if (rawId === 'retire' && (resource !== 'supplier-purchases' || action || method !== 'POST' || url.search)) throw new ApiError(404, 'NOT_FOUND');
         if (url.search && !(method === 'GET' && !id)) throw new ApiError(400, 'PURCHASE_QUERY_INVALID');
         const result = await auth.withAccess(request, ['MANAGE_INVENTORY'], async (db, context) => {
           for (const [header, actual] of [['x-expected-actor-id', context.user.id], ['x-expected-branch-id', context.branch?.id]]) {
@@ -145,6 +146,11 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
               if (method === 'PUT') return service.savePresentation(id, presentationInput(await body(request)));
             }
           } else {
+            if (rawId === 'retire') {
+              const input = await body(request);
+              if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ApiError(400, 'PURCHASE_INPUT_INVALID');
+              return service.retireDraft(purchaseKey(request.headers['idempotency-key'], 'draft'));
+            }
             if (method === 'GET' && !id) return service.list(purchaseQuery(url.searchParams));
             if (method === 'GET' && id && !action) return service.detail(id);
             if (method === 'POST' && !id) return service.draft(draftInput(await body(request)), purchaseKey(request.headers['idempotency-key'], 'draft'));

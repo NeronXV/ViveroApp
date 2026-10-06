@@ -1,5 +1,11 @@
 # Mapa de transición de Supabase a Backend API/MariaDB
 
+Para el estado actual consultar [README](../README.md#estado-actual) y
+[cierre de entrega](release-readiness.md). Este mapa conserva el estado del
+2 de octubre anterior al despliegue/importación documentados el día 3 y a
+la integración local de cámara del día 4. Sus pendientes históricos no
+sustituyen la evidencia posterior.
+
 ## Estado vigente (2026-10-02)
 
 Mostrador, administración de catálogo/imágenes/promociones y compras/proveedores

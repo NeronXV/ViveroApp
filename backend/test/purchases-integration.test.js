@@ -65,9 +65,27 @@ test('supplier purchases: branch scope, draft replay, review learning, atomic re
     await call(`suppliers/${supplierId}`, 'PATCH', { ...supplier, is_active: false });
     assert.equal((await call('supplier-purchases', 'POST', input, key)).status, 200);
     assert.equal((await call('supplier-purchases', 'POST', { ...input, external_reference: null }, `draft-${suffix}-004`)).status, 409);
+    const rejectedKey = `draft-${suffix}-004`;
+    assert.equal((await call('supplier-purchases/retire', 'POST', {}, rejectedKey, seller)).status, 403);
+    assert.equal((await call('supplier-purchases/retire', 'POST', {}, rejectedKey)).data.status, 'RETIRED');
+    assert.equal((await call('supplier-purchases/retire', 'POST', {}, rejectedKey)).data.status, 'RETIRED');
+    await call(`suppliers/${supplierId}`, 'PATCH', supplier);
+    assert.equal((await call('supplier-purchases', 'POST', { ...input, external_reference: null }, rejectedKey)).data.error, 'PURCHASE_ATTEMPT_RETIRED');
+    assert.equal((await call('supplier-purchases/retire', 'POST', {}, rejectedKey, other)).status, 409);
+    assert.equal((await call('supplier-purchases/retire', 'POST', {}, key)).data.receipt.purchase.id, doc.id);
+    const raceKey = `draft-${suffix}-race`;
+    const retireRace = await Promise.all([
+      call('supplier-purchases', 'POST', { ...input, external_reference: null }, raceKey),
+      call('supplier-purchases/retire', 'POST', {}, raceKey),
+    ]);
+    const retirement = retireRace[1].data;
+    assert.ok(['RETIRED', 'COMMITTED'].includes(retirement.status));
+    if (retirement.status === 'RETIRED') assert.equal(retireRace[0].data.error, 'PURCHASE_ATTEMPT_RETIRED');
+    else assert.equal(retirement.receipt.purchase.id, retireRace[0].data.purchase.id);
     const runtime = await mysql.createConnection({ host: 'db', database: 'vivero', user: 'catalog_api', password: process.env.CATALOG_DB_PASSWORD });
     try {
       await assert.rejects(runtime.execute('DELETE FROM supplier_purchase_documents WHERE id=0'));
+      await assert.rejects(runtime.execute('DELETE FROM purchase_draft_retirements WHERE id=0'));
       await assert.rejects(runtime.execute('UPDATE supplier_purchase_items SET unit_cost_cents=0 WHERE id=0'));
       await assert.rejects(runtime.execute('UPDATE supplier_purchase_documents SET expected_total_cents=0 WHERE id=0'));
     } finally { await runtime.end(); }
@@ -81,7 +99,7 @@ test('supplier purchases: branch scope, draft replay, review learning, atomic re
       await db.execute('DELETE FROM suppliers WHERE id=?', [supplierId]);
     }
     if (branchId) { await db.execute('DELETE FROM inventory_movements WHERE branch_id=?', [branchId]); await db.execute('DELETE FROM inventory WHERE branch_id=?', [branchId]); }
-    for (const id of users) { await db.execute('DELETE FROM auth_sessions WHERE user_id=?', [id]); await db.execute('DELETE FROM users WHERE id=?', [id]); }
+    for (const id of users) { await db.execute('DELETE FROM purchase_draft_retirements WHERE actor_id=?', [id]); await db.execute('DELETE FROM auth_sessions WHERE user_id=?', [id]); await db.execute('DELETE FROM users WHERE id=?', [id]); }
     if (productId) await db.execute('DELETE FROM products WHERE id=?', [productId]);
     if (branchId) await db.execute('DELETE FROM branches WHERE id=?', [branchId]);
     await db.end();

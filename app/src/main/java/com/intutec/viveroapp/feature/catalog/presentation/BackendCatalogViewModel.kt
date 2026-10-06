@@ -83,7 +83,7 @@ class BackendCatalogViewModel @Inject constructor(
     fun scan(code: String) {
         val token = sessions.backend.value.authorizedSession("SCAN_PRODUCTS")?.token ?: return
         request?.cancel(); val rev = ++generation
-        _state.update { it.copy(loading = true, products = emptyList(), next = null, error = null) }
+        _state.update { it.copy(loading = true, products = emptyList(), next = null, error = null, message = null) }
         request = viewModelScope.launch {
             try {
                 val product = remote.scan(token, code)

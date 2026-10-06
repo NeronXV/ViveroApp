@@ -28,3 +28,9 @@ key.properties
 *.aab
 /.codex-remote-attachments/
 /output/
+
+# Auditorías internas temporales
+VIVERO_DULCINEA_*.md
+
+# Carpeta automation n8n
+docs/automation/

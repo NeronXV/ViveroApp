@@ -1,5 +1,12 @@
 # Cierre de versión presencial — 8 septiembre 2026
 
+> Registro histórico. Para el estado vigente consultar [README.md](../README.md#estado-actual)
+> y [database-validation.md](database-validation.md). Los pendientes de pgTAP y
+> concurrencia de este registro fueron resueltos localmente el 21 de septiembre
+> de 2026 (499 aserciones y cinco escenarios). La indicación histórica de no iniciar
+> Docker no describe aquella ejecución posterior ni autoriza nuevas ejecuciones.
+> HTTP, correo, piloto y despliegue siguen sin validación integral acreditada.
+
 Sitio confirmado por Pedro: https://vivero-dulcinea.netlify.app
 
 ## Cambios preparados

@@ -162,7 +162,7 @@ private fun ScannerScreen(
 }
 
 @Composable
-private fun CameraPermissionGate(
+internal fun CameraPermissionGate(
     modifier: Modifier,
     onManualEntry: () -> Unit,
     content: @Composable () -> Unit,
@@ -227,7 +227,7 @@ private fun CameraPermissionGate(
 }
 
 @Composable
-private fun CameraPreview(
+internal fun CameraPreview(
     resetKey: Int,
     onCodeDetected: (String, ScanFormat) -> Unit,
     onFailure: () -> Unit,

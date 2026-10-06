@@ -1,5 +1,11 @@
 # Backend oficial — guía local
 
+Esta guía conserva el arranque y alcance de las primeras fases. La API ya es
+el destino del grafo Android operativo y existe evidencia posterior de VPS e
+importación. Ver [estado actual](../README.md#estado-actual) y
+[cierre de entrega](release-readiness.md); las limitaciones originales de
+consumidores locales/demo no describen el despliegue posterior.
+
 Actualizado con el módulo de [identidad y permisos](backend-identity.md).
 El token compartido de fase 1 se retiró; las mutaciones exigen una sesión de usuario.
 Consultar la [validación real local](backend-local-validation.md); los resultados

@@ -83,3 +83,4 @@ Las limitaciones de stock descritas arriba corresponden al bloque 015. Desde 017
 no suma nada. `restock_available` consulta esa evidencia y la ausencia de devolución.
 Contrato y pruebas actuales en [backend-sale-inventory.md](backend-sale-inventory.md).
 Los consumidores Web/Android permanecen en Supabase.
+

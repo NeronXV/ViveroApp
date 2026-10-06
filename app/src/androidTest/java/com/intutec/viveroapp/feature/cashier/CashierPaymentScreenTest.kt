@@ -35,7 +35,7 @@ class CashierPaymentScreenTest {
     @Test fun cashFormShowsServerTotalCountdownAndAccessibleReviewAction() {
         show(CashierPaymentUiState(CashierPaymentStage.FORM, CashierPaymentMethod.CASH, "120.00", attempt = attempt))
         compose.onNodeWithText("\$100.00").assertIsDisplayed()
-        compose.onNodeWithText("Reserva visual: 3:58").assertIsDisplayed()
+        compose.onNodeWithText("Reserva de cobro: 3:58").assertIsDisplayed()
         compose.onNodeWithText("Cambio estimado:", substring = true).assertIsDisplayed()
         compose.onNodeWithTag("payment_review").performScrollTo().assertIsDisplayed().assertHasClickAction()
     }

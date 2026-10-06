@@ -56,8 +56,8 @@ android {
         applicationId = "com.intutec.viveroapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.6-vps"
+        versionCode = 8
+        versionName = "1.0.7-vps"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Public origin only; credentials and sessions never belong in BuildConfig.

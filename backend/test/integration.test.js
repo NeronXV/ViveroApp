@@ -769,7 +769,9 @@ test('schema enforces foreign keys, money, uniqueness and runtime least privileg
   const runtime = await mysql.createConnection({ ...options, user: 'catalog_api', password: process.env.CATALOG_DB_PASSWORD });
   try {
     const [tables] = await db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'vivero'");
-    assert.equal(tables.length, 45);
+    assert.equal(tables.length, 56); // Canonical schema through migration 030.
+    const [[migration]] = await db.execute("SELECT COUNT(*) AS n FROM schema_migrations WHERE version='030_purchase_draft_retirement'");
+    assert.equal(Number(migration.n), 1);
     await assert.rejects(runtime.execute('DELETE FROM payment_attempt_retirements WHERE id = 0'), { code: 'ER_TABLEACCESS_DENIED_ERROR' });
     await assert.rejects(runtime.execute('UPDATE payment_attempt_retirements SET sale_id = 1 WHERE id = 0'), { code: 'ER_TABLEACCESS_DENIED_ERROR' });
     await assert.rejects(runtime.execute('DELETE FROM web_orders WHERE id = 0'), { code: 'ER_TABLEACCESS_DENIED_ERROR' });

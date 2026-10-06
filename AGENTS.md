@@ -113,6 +113,31 @@
 7. Revisa el diff completo, ejecuta `git diff --check` y vuelve a consultar el estado.
 8. Reporta lo realizado, validaciones, limitaciones y cambios preexistentes separados.
 
+## Cierre de sesión y seguimiento INTUTEC
+
+- Cuando Pedro solicite cerrar una sesión con avances relevantes, actualiza
+  `docs/automation/project-status.json` únicamente con lo realizado y verificado.
+  Mantén coherencia con el estado documentado en `README.md`, sin crear fuentes
+  contradictorias ni inventar avances, acuerdos o despliegues.
+- Distingue las pruebas ejecutadas en esa sesión, la evidencia de pruebas previas
+  y los pendientes o aspectos sin confirmar. No presentes evidencia histórica como
+  una validación nueva ni un commit como prueba de despliegue.
+- Cambia `updated_at`, con zona horaria, solo cuando realmente cambie el contenido
+  del reporte; cerrar la sesión o copiar el archivo no justifica cambiar la fecha.
+  Conserva siempre `client_update_approved=false`.
+- Después ejecuta `docs/automation/sync-project-status.ps1` con PowerShell 7:
+  `pwsh -NoProfile -File docs/automation/sync-project-status.ps1` desde la raíz.
+  Consulta en `README.md` el comando con ruta absoluta si `pwsh` no está en PATH.
+  Este cierre autoriza sincronizar la copia en la carpeta ya permitida por n8n,
+  `C:\Users\GAMER\.n8n-files\intutec\vivero-dulcinea\project-status.json`,
+  conservando el original del repositorio como fuente.
+- Confirma en el reporte final el resultado real de la sincronización. Si falla,
+  informa el error y no consideres actualizada la copia de n8n; no amplíes permisos
+  ni cambies su configuración para eludir el fallo.
+- El envío por WhatsApp sigue siendo manual: no ejecutes el workflow de envío
+  como parte del cierre. Este procedimiento tampoco autoriza programar tareas,
+  publicar workflows, hacer commit ni push.
+
 ## Validación respaldada por el repositorio
 
 - Compilación debug: `.\gradlew.bat assembleDebug`

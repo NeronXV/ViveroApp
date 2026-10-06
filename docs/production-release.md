@@ -1,4 +1,70 @@
-# Entrega Android 1.0.1 (versionCode 2)
+# Firma y entrega Android por APK directo
+
+## Preparación vigente del 4 de octubre de 2026
+
+Pedro confirmó distribución por **APK directo**. El código local prepara
+1.0.7-vps, versionCode 8; la última instalación documentada es 1.0.6-vps,
+versionCode 7, debug. No se instaló ni distribuyó esta nueva versión.
+
+El build vigente requiere `RELEASE_BACKEND_API_URL` y, cuando se usa el portal,
+`RELEASE_BACKEND_WEB_URL` como orígenes HTTPS en `local.properties` ignorado.
+No necesita configuración Supabase para el grafo activo. `key.properties` no
+existe en esta máquina: `verifyReleaseConfiguration` rechaza el empaquetado
+release hasta disponer de la firma. No crear una clave nueva sin resolver
+primero la compatibilidad con las tablets existentes.
+
+La revisión local de los APK encontró firmas válidas, pero distintas:
+
+| Referencia | Certificado SHA-256 |
+|---|---|
+| Debug local 1.0.6 | `54aae00dc34e2e48e287effbb513afb47e448e3e83470ccecb4b42851acf9cb6` |
+| Release antiguo en `app/release/app-release.apk` | `d6bf2430afb91343c1173b55094308c50c957239234562e05d066fa07c6eefbb` |
+
+Estos archivos no prueban por sí solos el certificado actualmente instalado.
+Usar como referencia una copia APK obtenida de cada instalación que vaya a
+actualizarse. Una firma distinta bloquea una actualización normal; no resolverlo
+desinstalando o borrando Room. Una transición a otro certificado requiere un
+procedimiento específico de conservación/conciliación, separado de esta entrega.
+
+### Secuencia de entrega
+
+1. Obtener el APK instalado de referencia y confirmar su paquete, versión y
+   certificado. Conservar todas las bases privadas antes de cualquier ensayo.
+2. Configurar en archivos locales la clave compatible custodiada por Pedro y
+   los orígenes de release. Mantener la clave y sus contraseñas fuera de Git/chat.
+3. Ejecutar `assembleDebug testDebugUnitTest lintRelease`, después
+   `verifyReleaseConfiguration assembleRelease`. No generar AAB para este canal.
+4. Comparar el APK generado con el instalado mediante el verificador siguiente.
+5. Probar `adb install -r` en una tablet protegida, sin desinstalar; verificar
+   conservación del carrito/Room, login y el recorrido de aceptación. Esta
+   revisión no ejecuta instalaciones ni pruebas conectadas.
+6. Entregar el APK aprobado junto con SHA-256, versión, instrucciones y origen
+   de descarga acordado. Conservar el APK anterior y evidencia de aceptación.
+
+```powershell
+$env:JAVA_HOME='C:/Users/GAMER/.gradle/jdks/eclipse_adoptium-21-amd64-windows.2'
+.\gradlew.bat assembleDebug testDebugUnitTest lintRelease
+.\gradlew.bat verifyReleaseConfiguration assembleRelease
+powershell.exe -NoProfile -File scripts/verify-android-apk.ps1 `
+  -ApkPath app/build/outputs/apk/release/app-release.apk `
+  -PreviousApkPath tmp/apk-instalado-de-referencia.apk `
+  -ExpectedVersionCode 8 -ExpectedVersionName 1.0.7-vps
+```
+
+`scripts/verify-android-apk.ps1` es de solo lectura. Verifica firmas, certificado
+idéntico, paquete habitual, incremento de versionCode y versión esperada; rechaza
+APK debug por defecto. `-AllowDebug` permite verificar exclusivamente un ensayo.
+La comparación de certificados es conservadora y no certifica rotaciones de
+clave. Se puede indicar `-BuildToolsPath` para otro SDK instalado. El resultado
+no demuestra el destino HTTPS, Room en dispositivo ni aceptación funcional.
+
+Ver la [lista de aceptación y pendientes](release-readiness.md). La copia cifrada
+externa, el correo real y las cuentas todavía requieren configuración/verificación.
+
+## Registro histórico: entrega Android 1.0.1 (versionCode 2)
+
+Las instrucciones Supabase y requisitos de esta sección corresponden al
+21 de septiembre; para el grafo API actual rige la preparación superior.
 
 Esta entrega corrige la navegación a Inventario, abre la recepción del producto
 recién creado y evita reabrir esa recepción al refrescar las existencias. La

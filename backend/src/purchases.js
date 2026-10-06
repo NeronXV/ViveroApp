@@ -68,6 +68,13 @@ const aliasHash = item => hash(JSON.stringify([item.raw_description.toLowerCase(
 const page = (rows, query) => ({ schema_version: 1, items: rows.slice(0, query.limit), next_after_id: rows.length > query.limit ? rows[query.limit - 1].id : null });
 export function createPurchases(db, context) {
   const branchId = inventoryScope(context, true);
+  // auth.withAccess locks the actor row, serializing submit and retirement
+  // across sessions. The unique key also prevents another actor from using it.
+  async function retired(key) {
+    const [[row]] = await db.execute('SELECT actor_id,branch_id FROM purchase_draft_retirements WHERE idempotency_hash=?', [key]);
+    if (row && (row.actor_id !== context.user.id || row.branch_id !== branchId)) fail(409, 'PURCHASE_IDEMPOTENCY_CONFLICT');
+    return Boolean(row);
+  }
   async function supplier(id, active = false) {
     const [[row]] = await db.execute('SELECT id, code, name, is_active FROM suppliers WHERE id = ? FOR UPDATE', [id]);
     if (!row || (active && !row.is_active)) fail(409, 'SUPPLIER_UNAVAILABLE');
@@ -129,6 +136,7 @@ export function createPurchases(db, context) {
         if (prior.branch_id !== branchId || prior.created_by !== context.user.id || !prior.request_hash.equals(requestHash)) fail(409, 'PURCHASE_IDEMPOTENCY_CONFLICT');
         return { ...await detail(prior.id), idempotent_replay: true };
       }
+      if (await retired(key)) fail(409, 'PURCHASE_ATTEMPT_RETIRED');
       await supplier(input.supplier_id, true);
       const [created] = await db.execute('INSERT INTO supplier_purchase_documents(supplier_id,branch_id,document_date,external_reference,payment_terms,expected_total_cents,source_file_name,source_items,idempotency_hash,request_hash,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)', [input.supplier_id, branchId, input.document_date, input.external_reference, input.payment_terms, input.expected_total_cents, input.source_file_name, JSON.stringify(input.items), key, requestHash, context.user.id]);
       for (const item of input.items) {
@@ -137,6 +145,15 @@ export function createPurchases(db, context) {
         await db.execute('INSERT INTO supplier_purchase_items(purchase_id,line_number,raw_description,supplier_container_code,suggested_common_name,suggested_presentation,quantity,unit_cost_cents,line_total_cents,product_id,resolution_status,resolved_by,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)', [created.insertId, item.line_number, item.raw_description, item.container_code, item.suggested_common_name, item.suggested_presentation, item.quantity, item.unit_cost_cents, (BigInt(item.quantity) * BigInt(item.unit_cost_cents)).toString(), alias?.product_id ?? null, alias ? 'AUTO_MATCHED' : 'UNMATCHED', alias ? context.user.id : null, alias ? new Date() : null]);
       }
       return { ...await detail(created.insertId), idempotent_replay: false };
+    },
+    async retireDraft(key) {
+      const [[prior]] = await db.execute('SELECT id,branch_id,created_by FROM supplier_purchase_documents WHERE idempotency_hash=? FOR UPDATE', [key]);
+      if (prior) {
+        if (prior.branch_id !== branchId || prior.created_by !== context.user.id) fail(409, 'PURCHASE_IDEMPOTENCY_CONFLICT');
+        return { schema_version: 1, status: 'COMMITTED', receipt: await detail(prior.id) };
+      }
+      if (!await retired(key)) await db.execute('INSERT INTO purchase_draft_retirements(actor_id,branch_id,idempotency_hash) VALUES(?,?,?)', [context.user.id, branchId, key]);
+      return { schema_version: 1, status: 'RETIRED', receipt: null };
     },
     async resolve(id, itemId, input) {
       const doc = await purchase(id);

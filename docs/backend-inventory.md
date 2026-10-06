@@ -119,3 +119,4 @@ Corregido el caso de interbloqueo INSERT IGNORE seguido de FOR UPDATE mediante
 bloqueo previo de sucursal. Las recepciones y conteos conservan sus contratos.
 Consultar [backend-sale-inventory.md](backend-sale-inventory.md) para el alcance
 actual y pruebas nuevas. No se activaron sucursales operativas ni consumidores.
+

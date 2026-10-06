@@ -2,6 +2,8 @@ package com.intutec.viveroapp.feature.cart
 
 import com.intutec.viveroapp.core.di.BackendNetworkModule
 import com.intutec.viveroapp.core.network.KtorBackendApiTransport
+import com.intutec.viveroapp.core.network.BackendApiTransport
+import com.intutec.viveroapp.core.network.BackendApiResponse
 import com.intutec.viveroapp.core.session.SessionStore
 import com.intutec.viveroapp.feature.auth.data.remote.ApiBackendAuthRemoteDataSource
 import com.intutec.viveroapp.feature.auth.data.repository.BackendAuthRepository
@@ -34,7 +36,18 @@ class BackendAndroidHttpIntegrationTest {
             "Only isolated local Compose or the explicitly acknowledged VPS acceptance tunnel is accepted"
         }
         val client = BackendNetworkModule.client()
-        val transport = KtorBackendApiTransport(client, origin)
+        val realTransport = KtorBackendApiTransport(client, origin)
+        var dropResponseFor: String? = null
+        val transport = object : BackendApiTransport by realTransport {
+            override suspend fun post(path: String, token: String, headers: Map<String, String>, body: String): BackendApiResponse {
+                val response = realTransport.post(path, token, headers, body)
+                if (path == dropResponseFor && response.status in 200..299) {
+                    dropResponseFor = null
+                    throw java.io.IOException("Synthetic response loss after server commit")
+                }
+                return response
+            }
+        }
         val store = SessionStore()
         val auth = BackendAuthRepository(ApiBackendAuthRemoteDataSource(transport), store)
         try {
@@ -67,7 +80,11 @@ class BackendAndroidHttpIntegrationTest {
             val quote = sales.quote(session.token, identity, lines)
             assertEquals(1000L, quote.totalCents)
             val attempt = BackendSaleAttempt.create(identity, lines, quote.totalCents)
-            val sale = sales.submit(session.token, attempt)
+            dropResponseFor = "/api/v1/sales"
+            assertTrue(runCatching { sales.submit(session.token, attempt) }.isFailure)
+            // A newly constructed source must recover the original key, as after reopening.
+            val sale = BackendSaleRemoteDataSource(realTransport).recover(session.token, attempt)
+            assertEquals(sale.id, sales.submit(session.token, attempt).id)
             assertEquals(sale.id, sales.recover(session.token, attempt).id)
             assertTrue(sales.retire(session.token, attempt) is BackendSaleRetirement.Committed)
             assertEquals(BackendSaleRetirement.Retired, sales.retire(session.token, BackendSaleAttempt.create(identity, lines, 1000)))
@@ -80,7 +97,10 @@ class BackendAndroidHttpIntegrationTest {
             val claim = cashier.claim(session.token, identity, sale.id)
             val body = buildJsonObject { put("claim_token", claim.token); put("method", "CASH"); put("amount_received_cents", 1200); put("reference", JsonNull) }.toString()
             val key = BackendSaleAttempt.create(identity, lines, 1000).key
-            val paid = cashier.pay(session.token, identity, sale.id, key, body)
+            dropResponseFor = "/api/v1/cashier/sales/${sale.id}/payments"
+            assertTrue(runCatching { cashier.pay(session.token, identity, sale.id, key, body) }.isFailure)
+            val paid = BackendCashierRemoteDataSource(realTransport).recover(session.token, identity, sale.id, key, body)
+            assertEquals(paid.id, cashier.pay(session.token, identity, sale.id, key, body).id)
             assertEquals(200L, paid.changeCents)
             assertEquals(paid.id, cashier.recover(session.token, identity, sale.id, key, body).id)
             assertTrue(history.list(session.token, identity, BackendHistoryKind.PAYMENTS).items.any { it.id == paid.id })
