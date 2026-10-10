@@ -19,6 +19,8 @@ import { requireBrowserOrigin } from './browser-origin.js';
 import { createAccountLinks, accountLinkInput, accountLinkPassword } from './auth/account-links.js';
 import { createNewsletter, newsletterInput, newsletterKey } from './newsletter.js';
 import { createPasswordChanger } from './auth/change-password.js';
+import { shortFolioResponse } from './short-folios.js';
+import { createSaleCancellations, cancellationInput } from './sale-cancellations.js';
 
 async function body(request, maxSize = 16384) {
   if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
@@ -46,7 +48,12 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
   const orders = createWebOrders(db);
   const uploadImage = imageStore ? createImageUploader() : null;
   const server = createServer(async (request, response) => {
-    const send = (status, payload) => {
+    const send = async (status, payload) => {
+      if (status < 400 && request.headers['x-vivero-folio-format'] === 'short-v1'
+          && !request.url.startsWith('/api/v1/cashier/refunds/lookup')) {
+        try { payload = await shortFolioResponse(db, payload); }
+        catch { status = 503; payload = { error: 'FOLIO_FORMAT_UNAVAILABLE' }; }
+      }
       response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       response.end(JSON.stringify(payload));
     };
@@ -56,7 +63,7 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
       const method = request.method;
       if (url.pathname === '/health' && method === 'GET') {
         try {
-          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version = '026_payment_attempt_retirement'");
+          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version = '032_pending_sale_cancellations'");
           if (!migrations.length) throw new Error('Migration required');
           if (imageStore) await imageStore.check();
         }
@@ -272,12 +279,32 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         }, { readCommitted: true });
         return send(input && !result.idempotent_replay ? 201 : 200, result);
       }
+      const cancellationRoute = /^\/api\/v1\/cashier\/sales\/([1-9][0-9]*)\/(cancel-options|cancel|cancellation-result)$/.exec(url.pathname);
+      if (cancellationRoute) {
+        if (url.search) throw new ApiError(400, 'INVALID_INPUT');
+        const [, rawId, action] = cancellationRoute, id = positiveId(rawId);
+        if ((action === 'cancel-options' && method !== 'GET') || (action !== 'cancel-options' && method !== 'POST')) throw new ApiError(404, 'NOT_FOUND');
+        const input = method === 'POST' ? await body(request) : null;
+        const required = action === 'cancel-options' ? ['OPERATE_CASHIER'] : ['OPERATE_CASHIER', 'MANAGE_DISCOUNTS'];
+        const result = await auth.withAccess(request, required, (connection, context) => {
+          for (const [header, actual] of [['x-expected-actor-id', context.user.id], ['x-expected-branch-id', context.branch?.id]]) {
+            const expected = request.headers[header];
+            if (expected !== undefined && positiveId(expected) !== actual) throw new ApiError(403, 'CASHIER_IDENTITY_CHANGED');
+          }
+          const service = createSaleCancellations(connection, context);
+          if (action === 'cancel-options') return service.options(id);
+          if (action === 'cancel') return service.cancel(id, cancellationInput(input), request.headers['idempotency-key']);
+          if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ApiError(400, 'INVALID_INPUT');
+          return service.recover(id, request.headers['idempotency-key']);
+        }, { readCommitted: true });
+        return send(action === 'cancel' && !result.idempotent_replay ? 201 : 200, result);
+      }
       const cashierRoute = /^\/api\/v1\/cashier\/sales(?:\/([1-9][0-9]*)(?:\/(claim|release|payments|payment-result|payment-retire))?)?$/.exec(url.pathname);
       if (cashierRoute) {
         bearerToken(request);
         const [, saleId, action] = cashierRoute;
         if (method === 'GET' && !saleId) {
-          const query = cashierQuery(url.searchParams);
+          const query = { ...cashierQuery(url.searchParams), desk: request.headers['x-vivero-cashier-view'] === 'desk-v1' };
           return send(200, await auth.withAccess(request, ['OPERATE_CASHIER'], (db, context) => createCashier(db, context).list(query), { readCommitted: true }));
         }
         const id = saleId ? positiveId(saleId) : null;
@@ -403,10 +430,10 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         if (url.search) throw new ApiError(400, 'INVALID_INPUT');
         if (method === 'GET' && url.pathname === '/api/v1/web-orders/options') return send(200, await orders.options());
         if (method === 'POST' && url.pathname === '/api/v1/web-orders/quote') return send(200, await orders.quote(await body(request)));
-        if (method === 'POST' && url.pathname === '/api/v1/web-orders/recover') {
+        if (method === 'POST' && ['/api/v1/web-orders/recover', '/api/v1/web-orders/ticket'].includes(url.pathname)) {
           const input = await body(request);
           if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ApiError(400, 'INVALID_INPUT');
-          return send(200, await orders.recover(request.headers['idempotency-key']));
+          return send(200, await (url.pathname.endsWith('/ticket') ? orders.ticket(request.headers['idempotency-key']) : orders.recover(request.headers['idempotency-key'])));
         }
         if (method === 'POST' && url.pathname === '/api/v1/web-orders') {
           const result = await orders.submit(await body(request), request.headers['idempotency-key']);

@@ -126,11 +126,17 @@ export function createCashier(db, context) {
       const [[refund]] = await db.execute('SELECT id, amount_cents, method FROM sale_refunds WHERE sale_id = ?', [row.id]);
       return { schema_version: 1, sale: money(row), payment: money(payment), items: items.map(money), branch, refund: refund ? money(refund) : null };
     },
-    async list({ limit, beforeId, operations = false }) {
-      const [rows] = await db.execute(`SELECT id, folio, created_by, status, total_cents, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at FROM sales
-        WHERE branch_id = ? AND status = 'SENT_TO_CASHIER' AND (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?`, [branchId, beforeId, beforeId, limit + 1]);
+    async list({ limit, beforeId, operations = false, folio = null, desk = false }) {
+      const [rows] = await db.execute(`SELECT id, folio, created_by, status, total_cents, ${desk ? 'web_order_id,' : ''} DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at FROM sales
+        WHERE branch_id = ? AND status = 'SENT_TO_CASHIER' AND (? IS NULL OR id < ?)
+        AND (? IS NULL OR BINARY sales.folio = BINARY ? OR id IN (SELECT sale_id FROM sale_folio_aliases WHERE short_folio = BINARY ?))
+        ORDER BY id DESC LIMIT ?`, [branchId, beforeId, beforeId, folio, folio, folio, limit + 1]);
       const items = rows.slice(0, limit).map(money);
-      if (operations) for (const item of items) item.operation = await operation(item.id);
+      if (operations) for (const item of items) {
+        item.operation = await operation(item.id);
+        if (desk) item.operation.origin = item.web_order_id === null ? 'DIRECT_SALE' : 'WEB_ORDER';
+      }
+      if (desk) for (const item of items) delete item.web_order_id;
       return { schema_version: 1, items, next_before_id: rows.length > limit ? rows[limit - 1].id : null };
     },
     async detail(id, operations = false) {

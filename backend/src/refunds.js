@@ -57,9 +57,10 @@ export function createRefunds(db, context) {
   return {
     preview,
     async lookup(folio) {
-      const [[row]] = await db.execute('SELECT id FROM sales WHERE branch_id = ? AND BINARY folio = BINARY ?', [branch, folio]);
+      const [[row]] = await db.execute(`SELECT s.id FROM sales s LEFT JOIN sale_folio_aliases a ON a.sale_id = s.id
+        WHERE s.branch_id = ? AND (BINARY s.folio = BINARY ? OR a.short_folio = BINARY ?)`, [branch, folio, folio]);
       if (!row) fail(404, 'REFUND_SALE_UNAVAILABLE');
-      return preview(row.id);
+      return { ...await preview(row.id), folio }; // Preserve exact lookup echo for existing clients.
     },
     async refund(id, input, key) {
       const keyHash = refundKey(key, actor);

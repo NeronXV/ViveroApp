@@ -1,5 +1,56 @@
 # Pedidos: cotización, recepción y recuperación
 
+Etapa 3 local: [alias cortos y compatibilidad](backend-short-folios.md). El contrato
+anterior permanece por defecto; `X-Vivero-Folio-Format: short-v1` solicita alias
+persistidos, conservando la consulta privada del comprobante de etapa 2.
+
+## Actualización local: comprobante público, 9 de octubre de 2026
+
+API/MariaDB es el backend vigente de estos pedidos. El texto posterior conserva
+el contexto histórico de la migración 009; no describe el estado actual de Web,
+cobro/entrega ni los permisos añadidos por migraciones posteriores.
+
+Se añade `POST /api/v1/web-orders/ticket`, con JSON `{}` y cabecera
+`Idempotency-Key` de 64 caracteres hexadecimales minúsculos. Es una consulta:
+no crea pedidos, ventas, pagos ni movimientos. No admite parámetros en la URL
+ni un ID/folio en el cuerpo. Conserva el control de Origin y `Cache-Control:
+no-store`. Una clave desconocida devuelve 404; una clave/cuerpo inválido, 400.
+La clave secreta autoriza únicamente el pedido cuyo hash coincide.
+
+Respuesta estricta:
+
+```text
+{ schema_version: 1,
+  order: <recibo mínimo existente>,
+  branch: { id, code, name },
+  subtotal_cents, discount_cents,
+  items: [{ product_id, product_name, quantity,
+            list_price_cents, unit_price_cents, line_total_cents }] }
+```
+
+Las partidas y totales proceden de `web_order_items`/`web_orders`, con los nombres
+y precios aceptados al confirmar; no se recotizan ni se leen del catálogo actual.
+La sucursal corresponde al `branch_id` guardado en el pedido; su nombre/código
+se consultan en `branches`. No hay historial de nombres de sucursal: si se
+renombra antes de recuperar el comprobante, aparecerá su nombre vigente.
+No se devuelven datos de contacto, notas, hashes ni la clave. Las respuestas de
+crear/repetir/recuperar permanecen intactas para clientes existentes.
+
+La Web consulta este detalle antes de liberar el intento y guarda una copia
+validada del último comprobante sin clave secreta ni datos de contacto. Fallar
+al consultar/guardar conserva el intento original para recuperar con la misma
+clave. La copia sirve para reimprimir el pedido tal como se registró; no acredita
+pago ni representa el estado actual de Caja. Solo se añade una lectura SQL y
+una ruta; no requiere migraciones ni cambios Android. API debe actualizarse
+antes que Web en un eventual despliegue autorizado.
+
+Validado en ensayo Docker aislado: precios/nombres históricos tras editar el
+catálogo, consultas repetidas sin mutaciones y rechazo de consulta por ID/folio
+o clave ajena. Evidencia Web y PDF: `ViveroWeb/docs/public-order-ticket-stage2.md`.
+Sin despliegue de esta actualización.
+
+## Contexto histórico de la migración 009
+
 La migración `009_web_orders` incorpora recepción de pedidos en la API oficial.
 La [migración 010](backend-web-order-admin.md) amplía este bloque con consulta
 por capacidad/sucursal, revisiones e historial atómico. Los límites PENDING-only

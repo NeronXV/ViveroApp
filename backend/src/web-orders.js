@@ -118,6 +118,26 @@ export function createWebOrders(db) {
       if (!row) fail('WEB_ORDER_NOT_FOUND', 404);
       return receipt(row, true);
     },
+    // The same opaque recovery secret authorizes this read. Never look up a
+    // public receipt by its predictable order number or ID.
+    async ticket(key) {
+      const keyHash = orderKey(key);
+      return transact(async connection => {
+        const [[row]] = await connection.execute(receiptSql, [keyHash]);
+        if (!row) fail('WEB_ORDER_NOT_FOUND', 404);
+        const [[details]] = await connection.execute(`SELECT b.id, b.code, b.name,
+          o.subtotal_cents, o.discount_cents FROM web_orders o
+          JOIN branches b ON b.id = o.branch_id WHERE o.id = ?`, [row.id]);
+        const [items] = await connection.execute(`SELECT product_id, product_name, quantity,
+          list_price_cents, unit_price_cents, line_total_cents
+          FROM web_order_items WHERE order_id = ? ORDER BY id`, [row.id]);
+        return { schema_version: 1, order: receipt(row, true),
+          branch: { id: details.id, code: details.code, name: details.name },
+          subtotal_cents: Number(details.subtotal_cents), discount_cents: Number(details.discount_cents),
+          items: items.map(item => ({ ...item, list_price_cents: Number(item.list_price_cents),
+            unit_price_cents: Number(item.unit_price_cents), line_total_cents: Number(item.line_total_cents) })) };
+      });
+    },
     async submit(input, key) {
       const keyHash = orderKey(key);
       const data = validateOrder(input, true);

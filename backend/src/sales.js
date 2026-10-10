@@ -32,10 +32,12 @@ export function validateSale(input) {
     ...(customer === undefined ? {} : { customer_id: customer === null ? null : positiveId(customer) }) };
 }
 export function saleQuery(params) {
-  if ([...params.keys()].some(key => !['limit', 'before_id'].includes(key) || params.getAll(key).length !== 1)) fail(400, 'SALE_QUERY_INVALID');
+  if ([...params.keys()].some(key => !['limit', 'before_id', 'folio'].includes(key) || params.getAll(key).length !== 1)) fail(400, 'SALE_QUERY_INVALID');
   const limit = params.has('limit') ? positiveId(params.get('limit')) : 50;
   if (limit > 100) fail(400, 'SALE_QUERY_INVALID');
-  return { limit, beforeId: params.has('before_id') ? positiveId(params.get('before_id')) : null };
+  const folio = params.get('folio');
+  if (folio !== null && (!folio.trim() || [...folio].length > 40 || /[\u0000-\u001f\u007f-\u009f]/u.test(folio))) fail(400, 'SALE_QUERY_INVALID');
+  return { limit, beforeId: params.has('before_id') ? positiveId(params.get('before_id')) : null, ...(folio === null ? {} : { folio: folio.trim() }) };
 }
 const columns = `id, folio, branch_id, created_by, status, subtotal_cents, discount_cents, total_cents,
   DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at`;
@@ -108,11 +110,13 @@ export function createSales(db, context) {
       if (!await retired(hash)) await db.execute('INSERT INTO sale_attempt_retirements (actor_id, branch_id, idempotency_hash) VALUES (?, ?, ?)', [context.user.id, branchId, hash]);
       return { schema_version: 1, status: 'RETIRED', sale: null };
     },
-    async list({ limit, beforeId }) {
+    async list({ limit, beforeId, folio = null }) {
       saleScope(context, 'VIEW_OWN_SALES');
       const [rows] = await db.execute(`SELECT ${columns} FROM sales
-        WHERE created_by = ? AND branch_id = ? AND (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?`,
-      [context.user.id, branchId, beforeId, beforeId, limit + 1]);
+        WHERE created_by = ? AND branch_id = ? AND (? IS NULL OR id < ?)
+        AND (? IS NULL OR BINARY sales.folio = BINARY ? OR id IN (SELECT sale_id FROM sale_folio_aliases WHERE short_folio = BINARY ?))
+        ORDER BY id DESC LIMIT ?`,
+      [context.user.id, branchId, beforeId, beforeId, folio, folio, folio, limit + 1]);
       return { schema_version: 1, items: rows.slice(0, limit).map(money), next_before_id: rows.length > limit ? rows[limit - 1].id : null };
     },
     async detail(id) {

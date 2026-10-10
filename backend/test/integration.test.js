@@ -660,6 +660,33 @@ test('web orders quote server prices, serialize retries, recover receipts and ro
     assert.equal(Number(item.unit_price_cents), 94); assert.equal(Number(item.line_total_cents), 282);
     await db.execute('UPDATE branches SET is_active = 0 WHERE id = ?', [branchId]);
     await db.execute('UPDATE products SET price_cents = 900 WHERE id = ?', [productId]);
+    await db.execute('UPDATE products SET common_name = ? WHERE id = ?', ['Nombre posterior', productId]);
+    const beforeTicket = await db.execute(`SELECT
+      (SELECT COUNT(*) FROM web_orders) AS orders,
+      (SELECT COUNT(*) FROM sales) AS sales,
+      (SELECT COUNT(*) FROM cashier_payments) AS payments,
+      (SELECT COUNT(*) FROM inventory_movements) AS movements`);
+    const ticket = await call('/ticket', {}, key);
+    assert.equal(ticket.status, 200);
+    assert.deepEqual(ticket.data.order, { ...receipt, idempotent_replay: true });
+    assert.deepEqual(ticket.data.branch, { id: branchId, code: `WO-${suffix}`, name: 'Sucursal sintetica' });
+    assert.deepEqual(ticket.data.items, [{ product_id: productId, product_name: 'Producto sintetico', quantity: 3,
+      list_price_cents: 105, unit_price_cents: 94, line_total_cents: 282 }]);
+    assert.equal(ticket.data.subtotal_cents, 315); assert.equal(ticket.data.discount_cents, 33);
+    assert.equal(Object.hasOwn(ticket.data, 'customer_email'), false);
+    for (let replay = 0; replay < 3; replay++) assert.deepEqual((await call('/ticket', {}, key)).data, ticket.data);
+    const [afterTicket] = await db.execute(`SELECT
+      (SELECT COUNT(*) FROM web_orders) AS orders,
+      (SELECT COUNT(*) FROM sales) AS sales,
+      (SELECT COUNT(*) FROM cashier_payments) AS payments,
+      (SELECT COUNT(*) FROM inventory_movements) AS movements`);
+    assert.deepEqual(afterTicket, beforeTicket[0]);
+    assert.equal((await call('/ticket', {}, randomBytes(32).toString('hex'))).status, 404);
+    assert.equal((await call('/ticket', {})).status, 400);
+    assert.equal((await call('/ticket', {}, String(receipt.id))).status, 400);
+    assert.equal((await call('/ticket', { id: receipt.id }, key)).status, 400);
+    assert.equal((await request(`/api/v1/web-orders/ticket?id=${receipt.id}`, 'GET', undefined, false)).status, 400);
+    assert.equal((await request(`/api/v1/web-orders/${receipt.id}/ticket`, 'GET', undefined, false)).status, 404);
     assert.equal((await call('', input, key)).data.total_cents, 282);
     assert.deepEqual((await call('/recover', {}, key)).data, { ...receipt, idempotent_replay: true });
     assert.equal((await request(`/api/v1/web-orders/${receipt.id}`, 'GET', undefined, false)).status, 404);
@@ -769,7 +796,7 @@ test('schema enforces foreign keys, money, uniqueness and runtime least privileg
   const runtime = await mysql.createConnection({ ...options, user: 'catalog_api', password: process.env.CATALOG_DB_PASSWORD });
   try {
     const [tables] = await db.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'vivero'");
-    assert.equal(tables.length, 56); // Canonical schema through migration 030.
+    assert.equal(tables.length, 61); // Canonical schema through migration 032.
     const [[migration]] = await db.execute("SELECT COUNT(*) AS n FROM schema_migrations WHERE version='030_purchase_draft_retirement'");
     assert.equal(Number(migration.n), 1);
     await assert.rejects(runtime.execute('DELETE FROM payment_attempt_retirements WHERE id = 0'), { code: 'ER_TABLEACCESS_DENIED_ERROR' });

@@ -58,7 +58,7 @@ services:
   tests:
     profiles: [test]
     build: ../../backend
-    command: ["node", "--test", "--test-concurrency=1", "test/integration.test.js", "test/inventory-integration.test.js", "test/sales-integration.test.js", "test/scan-integration.test.js", "test/cashier-integration.test.js", "test/web-order-checkout-integration.test.js", "test/refunds-integration.test.js", "test/closings-integration.test.js", "test/stock-integration.test.js", "test/customers-integration.test.js", "test/administration-integration.test.js", "test/accounts-integration.test.js", "test/account-links-integration.test.js", "test/newsletter-integration.test.js", "test/purchases-integration.test.js", "test/reports-integration.test.js"]
+    command: ["node", "--test", "--test-concurrency=1", "test/integration.test.js", "test/inventory-integration.test.js", "test/sales-integration.test.js", "test/scan-integration.test.js", "test/cashier-integration.test.js", "test/web-order-checkout-integration.test.js", "test/refunds-integration.test.js", "test/closings-integration.test.js", "test/stock-integration.test.js", "test/customers-integration.test.js", "test/administration-integration.test.js", "test/accounts-integration.test.js", "test/account-links-integration.test.js", "test/newsletter-integration.test.js", "test/purchases-integration.test.js", "test/reports-integration.test.js", "test/short-folios-integration.test.js", "test/sale-cancellations-integration.test.js", "test/cashier-desk-integration.test.js"]
     environment:
       API_URL: http://api:3001
       DB_HOST: db

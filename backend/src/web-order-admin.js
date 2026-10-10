@@ -10,11 +10,14 @@ export function orderScope(context, write = false) {
   return context.branch.id;
 }
 export function orderAdminQuery(params) {
-  const keys = ['limit', 'before_id', 'branch_id', 'status'];
+  const keys = ['limit', 'before_id', 'branch_id', 'status', 'folio'];
   if ([...params.keys()].some(key => !keys.includes(key) || params.getAll(key).length !== 1)) throw new ApiError(400, 'INVALID_INPUT');
   const limit = params.has('limit') ? positiveId(params.get('limit')) : 50;
   if (limit > 100 || (params.has('status') && !statuses.includes(params.get('status')))) throw new ApiError(400, 'INVALID_INPUT');
+  const folio = params.get('folio');
+  if (folio !== null && !/^VW-[0-9]{1,10}$/.test(folio)) throw new ApiError(400, 'INVALID_INPUT');
   return { limit, beforeId: params.has('before_id') ? positiveId(params.get('before_id')) : null,
+    ...(folio === null ? {} : { folio }),
     branchId: params.has('branch_id') ? positiveId(params.get('branch_id')) : null, status: params.get('status') };
 }
 export function validateOrderStatus(input) {
@@ -44,7 +47,8 @@ export function createOrderAdmin(db, context) {
       const branch = scope ?? query.branchId;
       const [rows] = await db.execute(`SELECT ${columns} FROM web_orders
         WHERE (? IS NULL OR branch_id = ?) AND (? IS NULL OR id < ?) AND (? IS NULL OR status = ?)
-        ORDER BY id DESC LIMIT ?`, [branch, branch, query.beforeId, query.beforeId, query.status, query.status, query.limit + 1]);
+        AND (? IS NULL OR CONCAT('VW-', id) = BINARY ? OR id IN (SELECT order_id FROM web_order_folio_aliases WHERE short_folio = BINARY ?))
+        ORDER BY id DESC LIMIT ?`, [branch, branch, query.beforeId, query.beforeId, query.status, query.status, query.folio ?? null, query.folio ?? null, query.folio ?? null, query.limit + 1]);
       const items = rows.slice(0, query.limit).map(money);
       return { schema_version: 1, items, next_before_id: rows.length > query.limit ? items.at(-1).id : null };
     },

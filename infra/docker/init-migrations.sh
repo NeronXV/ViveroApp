@@ -11,11 +11,11 @@ fi
 
 for migration in /database/migrations/[0-9][0-9][0-9]_*.sql; do
     echo "Applying initial migration: $(basename "$migration")"
-    # Compound triggers have BEGIN and a standalone END; in canonical SQL.
-    # Buffer the trigger header until the next line distinguishes simple ones.
+    # Compound triggers/routines have BEGIN and a standalone END in canonical SQL.
+    # Buffer their header until the next line distinguishes simple ones.
     awk '
         { sub(/\r$/, "") }
-        /^CREATE( OR REPLACE)? TRIGGER / { header=$0; next }
+        /^CREATE( OR REPLACE)? (TRIGGER|PROCEDURE) / { header=$0; next }
         header != "" {
             if ($0 == "BEGIN") { print "DELIMITER $$"; compound=1 }
             print header; header=""
