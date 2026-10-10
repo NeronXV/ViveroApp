@@ -1,5 +1,10 @@
 # Pendientes para la entrega operativa de Vivero
 
+Continuación del 9 de octubre: [candidata estable y evidencia nueva](stable-candidate-20261009.md).
+Docker y recorridos HTTP locales ya se validaron; SMTP se evalúa antes de Resend,
+el respaldo externo queda a cargo de Toni y la candidata Android es 1.0.8.
+Las secciones fechadas del día 4 siguientes conservan su evidencia histórica.
+
 Revisión local del 4 de octubre de 2026, America/Mazatlan. Fuente del estado:
 [README](../README.md#estado-actual). Esta guía convierte los pendientes en
 criterios de aceptación; las filas sin evidencia nueva permanecen pendientes.
