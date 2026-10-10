@@ -114,3 +114,39 @@ test('restore refuses occupied or active targets and unsafe archives before impo
     }
   }
 });
+
+test('restore accepts only the pristine migration 031 counter and still rejects operations', async t => {
+  const f = await fixture(t);
+  const directory = await backup(f.options, f.run);
+  for (const scenario of ['pristine', 'allocated', 'missing', 'extra', 'occupied']) {
+    let imported = false;
+    const run = async (args, _output, input) => {
+      if (args[0] === 'context') return JSON.stringify('unix:///var/run/docker.sock');
+      const op = args[args.indexOf('-p') + 2];
+      if (op === 'ps') return 'db';
+      if (op === 'exec' && args.at(-1).includes('information_schema')) return 'users\nsales\nroles\nschema_migrations\nsale_folio_counter\nsale_folio_aliases';
+      if (op === 'exec' && args.at(-1).includes('MIN(last_value)')) {
+        assert.match(args.at(-1), /COUNT\(\*\)=1 AND MIN\(id\)=1 AND MAX\(id\)=1/);
+        assert.match(args.at(-1), /MIN\(last_value\)=0 AND MAX\(last_value\)=0/);
+        return ['pristine', 'occupied'].includes(scenario) ? '1' : '0';
+      }
+      if (op === 'exec' && args.at(-1).startsWith('SELECT ')) {
+        assert.ok(!args.at(-1).includes('FROM sale_folio_counter'));
+        assert.ok(args.at(-1).includes('FROM sale_folio_aliases'));
+        return scenario === 'occupied' ? '1' : '0';
+      }
+      if (args.includes('-tzf')) return './';
+      if (args.includes('-tvzf')) return 'drwx------ 0/0 0 2026-10-02 00:00 ./';
+      if (op === 'exec' && input) imported = true;
+      return '';
+    };
+    const options = {...f.options, directory, acknowledged:true};
+    if (scenario === 'pristine') {
+      assert.deepEqual(await restore(options, run), {restored_files:2});
+      assert.equal(imported, true);
+    } else {
+      await assert.rejects(restore(options, run), /TARGET_CONTAINS_DATA/);
+      assert.equal(imported, false);
+    }
+  }
+});

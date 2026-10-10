@@ -39,6 +39,13 @@ export async function restore(options, run = docker) {
   const tables = (await query("SELECT table_name FROM information_schema.tables WHERE table_schema='vivero' ORDER BY table_name")).trim().split(/\s+/);
   if (!tables.includes('users') || !tables.includes('sales') || tables.some(name => !/^[a-z][a-z0-9_]*$/.test(name))) fail('TARGET_SCHEMA_INVALID');
   const reference = ['roles', 'permissions', 'role_permissions', 'schema_migrations'];
+  // Migration 031 initializes this singleton even on a target with no operations.
+  // An allocated, missing or additional counter row is never an empty target.
+  if (tables.includes('sale_folio_counter')) {
+    const pristine = (await query('SELECT IF(COUNT(*)=1 AND MIN(id)=1 AND MAX(id)=1 AND MIN(last_value)=0 AND MAX(last_value)=0,1,0) FROM sale_folio_counter')).trim();
+    if (pristine !== '1') fail('TARGET_CONTAINS_DATA');
+    reference.push('sale_folio_counter');
+  }
   const operational = tables.filter(name => !reference.includes(name));
   const total = (await query('SELECT ' + operational.map(name => `(SELECT COUNT(*) FROM ${name})`).join('+'))).trim();
   if (total !== '0') fail('TARGET_CONTAINS_DATA');
