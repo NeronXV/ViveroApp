@@ -92,6 +92,7 @@ export function createImages(db) {
       const [result] = await db.execute(`INSERT INTO product_images
         (product_id, storage_key, width, height, byte_size, is_primary) VALUES (?, ?, ?, ?, ?, ?)`,
       [productId, key, info.width, info.height, info.size, Number(count.total) === 0]);
+      await db.execute('UPDATE products SET catalog_revision = catalog_revision WHERE id = ?', [productId]);
       return { id: result.insertId, url: `/api/v1/images/${result.insertId}` };
     },
     async update(productId, id, data, remove = false) {
@@ -105,6 +106,7 @@ export function createImages(db) {
       if (remove && current.is_primary) {
         await db.execute(`UPDATE product_images SET is_primary = 1 WHERE product_id = ? AND is_active = 1 ORDER BY sort_order, id LIMIT 1`, [productId]);
       }
+      await db.execute('UPDATE products SET catalog_revision = catalog_revision WHERE id = ?', [productId]);
       return { id };
     },
   };

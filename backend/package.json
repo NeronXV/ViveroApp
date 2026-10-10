@@ -16,7 +16,10 @@
     "test:source-catalog": "node --test test/source-catalog-integration.test.js",
     "test:history-import": "node --test test/history-import-integration.test.js",
     "test:inventory-import": "node --test test/inventory-import-integration.test.js",
-    "test:inventory-preparation": "node --test --test-concurrency=1 test/inventory-preparation-integration.test.js"
+    "test:inventory-preparation": "node --test --test-concurrency=1 test/inventory-preparation-integration.test.js",
+    "test:cataloging": "node --test test/cataloging.test.js",
+    "test:cataloging-native": "node --test --test-concurrency=1 test/cataloging-integration.test.js",
+    "check:cataloging": "node --check src/cataloging.js && node --check scripts/cataloging-import.js && node --check scripts/import-cataloging-drafts.js && node --check scripts/prepare-cataloging-drafts.js"
   },
   "dependencies": {
     "mysql2": "3.24.5",
