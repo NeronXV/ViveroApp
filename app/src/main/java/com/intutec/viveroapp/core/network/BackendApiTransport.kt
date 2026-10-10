@@ -48,6 +48,7 @@ class KtorBackendApiTransport @Inject constructor(
             this.method = method
             if (token != null) header("Authorization", "Bearer $token")
             header("Content-Type", "application/json")
+            header("X-Vivero-Folio-Format", "short-v1")
             headers.forEach { (name, value) -> header(name, value) }
             header("Cache-Control", "no-store")
             if (body != null) setBody(body)

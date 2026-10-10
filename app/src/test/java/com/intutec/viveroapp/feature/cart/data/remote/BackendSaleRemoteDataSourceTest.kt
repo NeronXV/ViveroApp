@@ -24,6 +24,15 @@ class BackendSaleRemoteDataSourceTest {
             error?.let { throw it }; return response
         }
     }
+    @Test fun shortAliasesPreserveSubmissionAndRecoveryContracts() = runTest {
+        for (folio in listOf("VD-0009", "VD-10000")) {
+            val fake = Fake(BackendApiResponse(201, receipt().replace("VD-AAAAAAAAAAAAAAAAAAAAAAAA", folio)))
+            val source = BackendSaleRemoteDataSource(fake)
+            assertEquals(folio, source.submit(token, attempt()).folio)
+            assertEquals(folio, source.recover(token, attempt()).folio)
+            assertEquals(attempt().key, fake.headers["Idempotency-Key"])
+        }
+    }
     @Test fun exactSubmissionAndRecoveryPreserveIdentityKeyAndPayload() = runTest {
         val fake = Fake(BackendApiResponse(201, receipt())); val source = BackendSaleRemoteDataSource(fake); val saved = attempt()
         assertEquals(9L, source.submit(token, saved).id)

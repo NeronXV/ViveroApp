@@ -12,6 +12,7 @@ import com.intutec.viveroapp.feature.cart.domain.repository.BackendSaleReceipt
 import com.intutec.viveroapp.feature.cart.domain.repository.BackendSaleRetirement
 import com.intutec.viveroapp.feature.cart.domain.repository.MAX_BACKEND_CENTS
 import com.intutec.viveroapp.feature.cart.domain.repository.MAX_BACKEND_ID
+import com.intutec.viveroapp.feature.cart.domain.repository.isBackendSaleFolio
 import java.math.BigInteger
 import java.time.Instant
 import javax.inject.Inject
@@ -98,7 +99,7 @@ class BackendSaleRemoteDataSource @Inject constructor(private val transport: Bac
         check(number(r, "discount_cents") == 0L && number(r, "subtotal_cents", 1) == attempt.expectedTotalCents && number(r, "total_cents", 1) == attempt.expectedTotalCents)
         val status = text(r, "status"); val folio = text(r, "folio"); val date = text(r, "created_at")
         check(status in setOf("SENT_TO_CASHIER", "PAYMENT_PENDING", "PAID", "CANCELLED", "DELIVERED"))
-        check(Regex("^VD-[A-F0-9]{24}$").matches(folio) && Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$").matches(date))
+        check(isBackendSaleFolio(folio) && Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$").matches(date))
         check(Instant.parse(date).toString() == date)
         val replay = r["idempotent_replay"] as JsonPrimitive
         check(!replay.isString && replay.booleanOrNull != null)

@@ -24,7 +24,7 @@ class RoomBackendSaleOutboxStore @Inject constructor(private val dao: BackendSal
         check(header.expectedTotalCents in 1..MAX_BACKEND_CENTS)
         val receipt = if (header.state == "SYNCED") {
             val saleId = checkNotNull(header.serverSaleId); val folio = checkNotNull(header.serverFolio); val status = checkNotNull(header.serverStatus)
-            check(saleId in 1..MAX_BACKEND_ID && Regex("^VD-[A-F0-9]{24}$").matches(folio))
+            check(saleId in 1..MAX_BACKEND_ID && isBackendSaleFolio(folio))
             check(status in setOf("SENT_TO_CASHIER", "PAYMENT_PENDING", "PAID", "CANCELLED", "DELIVERED"))
             BackendStoredSaleReceipt(saleId, folio, status)
         } else { check(header.serverSaleId == null && header.serverFolio == null && header.serverStatus == null); null }

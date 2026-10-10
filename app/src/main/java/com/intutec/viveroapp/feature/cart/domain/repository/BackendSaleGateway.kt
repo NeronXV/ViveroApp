@@ -6,6 +6,13 @@ import java.util.Collections
 const val MAX_BACKEND_CENTS = 9007199254740991L
 const val MAX_BACKEND_ID = 4294967295L
 
+fun isBackendSaleFolio(value: String): Boolean {
+    if (Regex("^VD-[A-F0-9]{24}$").matches(value)) return true
+    if (!Regex("^VD-[0-9]{4,16}$").matches(value)) return false
+    val ordinal = value.substring(3).toLongOrNull() ?: return false
+    return ordinal in 1..MAX_BACKEND_CENTS && value == "VD-${ordinal.toString().padStart(4, '0')}"
+}
+
 data class BackendSaleIdentity(val userId: Long, val branchId: Long) {
     init { require(userId in 1..MAX_BACKEND_ID && branchId in 1..MAX_BACKEND_ID) }
 }
