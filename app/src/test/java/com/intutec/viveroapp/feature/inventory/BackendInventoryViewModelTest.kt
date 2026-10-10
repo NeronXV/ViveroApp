@@ -49,12 +49,13 @@ class BackendInventoryViewModelTest {
         activeBackend(sessions,permissions=emptySet());testScheduler.runCurrent();vm.refresh();testScheduler.runCurrent()
         assertFalse(vm.state.value.enabled);assertTrue(vm.state.value.products.isEmpty());assertEquals(1,remote.reads)
     }
-    @Test fun fractionsAndPendingAttemptsBlockNewMovements()=runTest {
+    @Test fun nativeWritesStayDisabledAndSavedAttemptsArePreserved()=runTest {
         val sessions=SessionStore();activeBackend(sessions,permissions=setOf("MANAGE_INVENTORY"))
         val remote=Remote();val operations=Operations();val vm=BackendInventoryViewModel(sessions,remote,operations)
         testScheduler.runCurrent();vm.start(BackendInventoryAction.COUNT,4,"0.5","Demo");testScheduler.runCurrent()
-        assertEquals(0,operations.writes);assertNotNull(vm.state.value.error)
+        assertEquals(0,operations.writes);assertFalse(vm.state.value.canWrite)
         operations.rows=listOf(BackendInventoryPending(1,4,BackendInventoryAction.COUNT,0,"UNCERTAIN"));vm.refresh();testScheduler.runCurrent()
         vm.start(BackendInventoryAction.RECEPTION,4,"2","");testScheduler.runCurrent();assertEquals(0,operations.writes)
+        assertEquals(operations.rows,vm.state.value.pending)
     }
 }

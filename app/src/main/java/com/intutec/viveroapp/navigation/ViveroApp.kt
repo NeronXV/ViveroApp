@@ -2,6 +2,7 @@ package com.intutec.viveroapp.navigation
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,15 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
     val auth by authViewModel.uiState.collectAsStateWithLifecycle()
     val passwordChange by authViewModel.passwordChange.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val web = remember { runCatching { backendApiOrigin(BuildConfig.BACKEND_WEB_URL, BuildConfig.DEBUG) }.getOrNull() }
+    val openPortal = {
+        web?.let { origin ->
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("$origin/admin"))) }
+                .onFailure { Toast.makeText(context, "No se pudo abrir el portal. Abre el sitio de Vivero Dulcinea en tu navegador.", Toast.LENGTH_LONG).show() }
+        }
+        Unit
+    }
     DisposableEffect(owner, authViewModel) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_START) authViewModel.refresh() }
         owner.lifecycle.addObserver(observer)
@@ -64,8 +74,6 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
             authViewModel::togglePasswordVisibility, authViewModel::signIn, { authViewModel.clearMessages(); navController.navigate(PasswordResetRoute) }) }
         composable<PasswordResetRoute> { PasswordResetScreen(auth, authViewModel::onEmailChanged, authViewModel::sendPasswordReset, { navController.navigateUp() }) }
         composable<HomeRoute> {
-            val context = LocalContext.current
-            val web = remember { runCatching { backendApiOrigin(BuildConfig.BACKEND_WEB_URL, BuildConfig.DEBUG) }.getOrNull() }
             BackendHomeScreen(
                 session = auth.backend,
                 onCatalog = { navController.navigate(CatalogRoute) },
@@ -73,7 +81,7 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
                 onCashier = { navController.navigate(CashierQueueRoute()) },
                 onInventory = { navController.navigate(InventoryRoute()) },
                 onHistory = { navController.navigate(BackendHistoryRoute()) },
-                onWeb = { web?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
+                onWeb = openPortal,
                 webAvailable = web != null,
                 onRefresh = authViewModel::refresh,
                 onSignOut = authViewModel::signOut,
@@ -83,14 +91,14 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
             )
         }
         composable<CatalogRoute> { if (auth.backend.authorizedSession("VIEW_CATALOG") != null) BackendCatalogScreen({ navController.navigateUp() }, { navController.navigate(CartRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
-        composable<CartRoute> { if (auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) { popUpTo<CartRoute> { inclusive = true }; launchSingleTop = true } }, { navController.navigate(BackendHistoryRoute()) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
-        composable<CashierQueueRoute> { if (auth.backend.authorizedSession("OPERATE_CASHIER", true) != null) BackendCashierScreen({ navController.navigateUp() }, { navController.navigate(BackendHistoryRoute("PAYMENTS")) }, { navController.navigate(BackendHistoryRoute("QUEUE", it)) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<CartRoute> { if (BuildConfig.NATIVE_OPERATIONS_ENABLED && auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) { popUpTo<CartRoute> { inclusive = true }; launchSingleTop = true } }, { navController.navigate(BackendHistoryRoute()) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<CashierQueueRoute> { if (BuildConfig.NATIVE_OPERATIONS_ENABLED && auth.backend.authorizedSession("OPERATE_CASHIER", true) != null) BackendCashierScreen({ navController.navigateUp() }, { navController.navigate(BackendHistoryRoute("PAYMENTS")) }, { navController.navigate(BackendHistoryRoute("QUEUE", it)) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
         composable<BackendHistoryRoute> { entry ->
             val route = entry.toRoute<BackendHistoryRoute>()
             val permitted = if (route.kind == "SALES") auth.backend.authorizedSession("VIEW_OWN_SALES", true) != null && auth.backend.authorizedSession("CREATE_SALES", true) != null else auth.backend.authorizedSession("OPERATE_CASHIER", true) != null
             if (permitted) BackendHistoryScreen(onBack = { navController.navigateUp() }) else AccessUnavailable { navController.navigate(HomeRoute) }
         }
-        composable<InventoryRoute> { if (auth.backend.inventorySession() != null) BackendInventoryScreen(onBack = { navController.navigateUp() }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<InventoryRoute> { if (auth.backend.inventorySession() != null) BackendInventoryScreen(onBack = { navController.navigateUp() }, onWeb = if (web != null) openPortal else null) else AccessUnavailable { navController.navigate(HomeRoute) } }
     }
 }
 

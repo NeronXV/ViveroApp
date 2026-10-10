@@ -1,5 +1,7 @@
 package com.intutec.viveroapp.feature.catalog.presentation
 
+import com.intutec.viveroapp.BuildConfig
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intutec.viveroapp.core.session.*
@@ -37,7 +39,7 @@ class BackendCatalogViewModel @Inject constructor(
         val rev = ++generation; val sessionRev = ++sessionGeneration; request?.cancel(); mutation?.cancel()
         val token = current.authorizedSession("VIEW_CATALOG")?.token
         _state.value = BackendCatalogUiState(enabled = token != null, loading = token != null, branchName = current.context?.branch?.name ?: "Sin sucursal",
-            canSell = current.authorizedSession("CREATE_SALES", true) != null,
+            canSell = BuildConfig.NATIVE_OPERATIONS_ENABLED && current.authorizedSession("CREATE_SALES", true) != null,
             canScan = current.authorizedSession("SCAN_PRODUCTS") != null)
         if (token != null) {
             try {

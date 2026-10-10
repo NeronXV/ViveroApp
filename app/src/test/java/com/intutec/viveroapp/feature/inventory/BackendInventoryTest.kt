@@ -22,7 +22,7 @@ class BackendInventoryTest {
         override suspend fun post(path:String,token:String,headers:Map<String,String>,body:String):BackendApiResponse {this.path=path;this.headers=headers;sent=body;return BackendApiResponse(status,this.body)}
     }
     private val item="""{"product_id":4,"product_name":"Demo","product_code":"DEMO","product_unit":"pieza","total_quantity":"0.125","minimum_stock":"1.000","is_low_stock":true,"balance_updated_at":null}"""
-    private fun page(item:String=this.item,branch:Int=3)="""{"schema_version":1,"branch_id":$branch,"items":[$item],"has_more":false,"next_product_id":null}"""
+    private fun page(item:String=this.item,branch:Int=3)="""{"schema_version":1,"branch_id":$branch,"permissions":{"can_record_count":true,"can_receive":false,"can_approve_counts":false},"items":[$item],"has_more":false,"next_product_id":null}"""
     private fun attempt(action:BackendInventoryAction=BackendInventoryAction.COUNT,qty:Long=0)=BackendInventoryAttempt(who,action,4,qty,"Demo","b".repeat(64))
     @Test fun dashboardKeepsExactFractionalBalances()=runTest {
         val source=BackendInventoryRemoteDataSource(Transport(page()))
@@ -36,7 +36,9 @@ class BackendInventoryTest {
     @Test fun zeroCountAcceptsSignedAdjustmentAndRecoversOriginalBodyAndHeaders()=runTest {
         val transport=Transport("""{"schema_version":1,"idempotent_replay":true,"count_id":5,"product_id":4,"previous_quantity":"2.125","counted_quantity":"0.000","adjustment_quantity":"-2.125","total_quantity":"0.000"}""")
         val source=BackendInventoryRemoteDataSource(transport);val a=attempt()
-        assertEquals(-2125L,source.submit(token,a).adjustmentMilli)
+        try { source.submit(token,a); fail("Retired count endpoint must not be called") } catch (_: IllegalStateException) { }
+        assertEquals("",transport.path)
+        assertEquals(-2125L,source.result(token,a).adjustmentMilli)
         val original=transport.sent;source.result(token,a)
         assertEquals(original,transport.sent);assertEquals("/api/v1/inventory/counts/result",transport.path)
         assertEquals(a.key,transport.headers["Idempotency-Key"]);assertEquals("2",transport.headers["X-Expected-Actor-Id"]);assertEquals("3",transport.headers["X-Expected-Branch-Id"])

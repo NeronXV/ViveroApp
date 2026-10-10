@@ -1,5 +1,8 @@
 package com.intutec.viveroapp.feature.inventory.presentation
 
+import com.intutec.viveroapp.BuildConfig
+import com.intutec.viveroapp.core.model.UserRole
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.intutec.viveroapp.core.session.SessionStore
@@ -27,7 +30,7 @@ class BackendInventoryViewModel @Inject constructor(private val sessions:Session
         return session.token to BackendSaleIdentity(session.userId,requireNotNull(current.context?.branch).id)
     }
     init {viewModelScope.launch {sessions.backend.collect {
-        generation++;operation?.cancel();_state.value=BackendInventoryUiState(identity=access()?.second,enabled=access()!=null,canWrite=sessions.backend.value.inventorySession(true)!=null)
+        generation++;operation?.cancel();_state.value=BackendInventoryUiState(identity=access()?.second,enabled=access()!=null,canWrite=BuildConfig.NATIVE_OPERATIONS_ENABLED && sessions.backend.value.context?.role?.name == UserRole.OWNER && sessions.backend.value.inventorySession(true)!=null)
         if(_state.value.enabled)refresh()
     }}}
     fun refresh(more:Boolean=false) {

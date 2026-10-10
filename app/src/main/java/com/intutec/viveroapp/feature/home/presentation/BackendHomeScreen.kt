@@ -1,5 +1,7 @@
 package com.intutec.viveroapp.feature.home.presentation
 
+import com.intutec.viveroapp.BuildConfig
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,28 +21,28 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 
-internal fun backendDashboard(session: BackendSessionState, webAvailable: Boolean): Dashboard? {
+internal fun backendDashboard(session: BackendSessionState, webAvailable: Boolean, operationsEnabled: Boolean = BuildConfig.NATIVE_OPERATIONS_ENABLED): Dashboard? {
     val context = session.context ?: return null
     val identity = session.session ?: return null
     if (session.status != BackendAuthStatus.AUTHENTICATED || session.accessStatus != BackendAccessStatus.READY ||
         identity.expiresAtMillis <= System.currentTimeMillis() || identity.userId != context.user.id ||
         context.accessState != "ACTIVE") return null
     val role = context.role?.name ?: return null
-    val selling = session.authorizedSession("CREATE_SALES", true) != null
+    val selling = operationsEnabled && session.authorizedSession("CREATE_SALES", true) != null
     val modules = buildList {
         if (session.authorizedSession("VIEW_CATALOG") != null)
-            add(DashboardModule("catalog", "Vender", "Busca productos y prepara una venta", true))
+            add(DashboardModule("catalog", if (operationsEnabled) "Vender" else "Catálogo", if (operationsEnabled) "Busca productos y prepara una venta" else "Consulta productos y fotografías", true))
         if (selling) add(DashboardModule("cart", "Carrito", "Continúa tu venta guardada", true))
         if (selling && session.authorizedSession("VIEW_OWN_SALES", true) != null)
             add(DashboardModule("mysales", "Mis ventas", "Folios y seguimiento de tus ventas", true))
-        if (session.authorizedSession("OPERATE_CASHIER", true) != null)
+        if (operationsEnabled && session.authorizedSession("OPERATE_CASHIER", true) != null)
             add(DashboardModule("cashier", "Caja", "Comandas, pagos y comprobantes", true))
         if (session.inventorySession() != null)
             add(DashboardModule("inventory", "Inventario", "Existencias de tu sucursal", true))
         if (webAvailable && session.authorizedSession("VIEW_REPORTS", true) != null)
             add(DashboardModule("reports", "Reportes", "Consulta el portal de administración", true))
         if (webAvailable && session.authorizedSession("MANAGE_PRODUCTS", true) != null)
-            add(DashboardModule("products", "Productos", "Gestiona el catálogo desde el portal", true))
+            add(DashboardModule("products", "Catalogar plantas", "Fichas y fotos en Web · sesión independiente", true))
         if (webAvailable && session.authorizedSession("MANAGE_USERS", true) != null)
             add(DashboardModule("staff", "Equipo", "Accesos y personal en el portal", true))
     }

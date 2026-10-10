@@ -56,8 +56,8 @@ android {
         applicationId = "com.intutec.viveroapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.0.8-vps"
+        versionCode = 12
+        versionName = "1.0.11-vps"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Public origin only; credentials and sessions never belong in BuildConfig.
@@ -66,6 +66,7 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
         buildConfigField("String", "AUTH_REDIRECT_URL", "\"\"")
+        buildConfigField("boolean", "NATIVE_OPERATIONS_ENABLED", "false")
     }
 
     signingConfigs {
@@ -105,6 +106,18 @@ android {
 tasks.matching { it.name == "packageRelease" || it.name == "packageReleaseBundle" }.configureEach {
     dependsOn(verifyReleaseConfiguration)
 }
+
+val verifyOperationalConfiguration = tasks.register("verifyOperationalConfiguration") {
+    group = "verification"
+    doLast {
+        val production = "https://viverodulcinea.bajastack.network"
+        check(localProperties.getProperty("BACKEND_API_URL", "").trimEnd('/') == production &&
+            localProperties.getProperty("BACKEND_WEB_URL", "").trimEnd('/') == production) {
+            "Configura los orígenes HTTPS productivos de API y Web en local.properties."
+        }
+    }
+}
+tasks.matching { it.name == "preDebugBuild" }.configureEach { dependsOn(verifyOperationalConfiguration) }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))

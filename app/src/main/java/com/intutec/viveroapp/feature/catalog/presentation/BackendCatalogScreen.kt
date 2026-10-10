@@ -40,7 +40,7 @@ internal fun BackendCatalogContent(state: BackendCatalogUiState, imageOrigin: St
     if (cameraOpen && state.enabled && state.canScan) CameraCodeDialog({ cameraOpen = false }, {
         cameraOpen = false; code = it; onScan(it)
     })
-    Scaffold(modifier = Modifier.imePadding(), topBar = { ViveroTopAppBar("Vender", onBack, "DULCINEA · ${state.branchName}") {
+    Scaffold(modifier = Modifier.imePadding(), topBar = { ViveroTopAppBar(if (state.canSell) "Vender" else "Catálogo", onBack, "DULCINEA · ${state.branchName}") {
         if (state.canSell) IconButton(onCart) { Icon(Icons.Outlined.ShoppingCart, "Abrir carrito") }
     } }) { padding ->
         LazyVerticalGrid(GridCells.Adaptive(170.dp), Modifier.fillMaxSize().padding(padding),

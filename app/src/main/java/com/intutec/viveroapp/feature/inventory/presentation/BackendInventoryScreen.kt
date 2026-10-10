@@ -17,7 +17,7 @@ import com.intutec.viveroapp.feature.inventory.domain.repository.*
 
 internal fun inventoryQuantity(milli:Long):String = java.math.BigDecimal.valueOf(milli,3).stripTrailingZeros().toPlainString()
 @Composable
-fun BackendInventoryScreen(onBack:()->Unit,viewModel:BackendInventoryViewModel=hiltViewModel()) {
+fun BackendInventoryScreen(onBack:()->Unit,onWeb:(()->Unit)?=null,viewModel:BackendInventoryViewModel=hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var selected by remember {mutableStateOf<BackendInventoryItem?>(null)}
     var action by remember {mutableStateOf(BackendInventoryAction.RECEPTION)}
@@ -28,7 +28,8 @@ fun BackendInventoryScreen(onBack:()->Unit,viewModel:BackendInventoryViewModel=h
     Scaffold(topBar={ViveroTopAppBar(title="Inventario",onBack={if(state.historyProduct!=null)viewModel.closeHistory() else onBack()})}){padding->
         LazyColumn(Modifier.fillMaxSize().padding(padding).padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             item {
-                ViveroSectionIntro("Existencias y movimientos", "Consulta tu sucursal y registra únicamente movimientos reales.", modifier = Modifier.padding(bottom = 16.dp))
+                ViveroSectionIntro("Existencias y movimientos", "Consulta las existencias y el historial de tu sucursal. Los conteos se registran y revisan en el portal Web.", modifier = Modifier.padding(bottom = 16.dp))
+                onWeb?.let { open -> OutlinedButton(open,enabled=state.enabled) { Text("Abrir conteos en Web") } }
                 if(state.loading || state.working)LinearProgressIndicator(Modifier.fillMaxWidth())
                 state.error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
                 state.receipt?.let {r->Text(if(r.action==BackendInventoryAction.RECEPTION) "Recepción ${r.id} confirmada: ${inventoryQuantity(r.quantityMilli)} unidades." else "Conteo ${r.id} confirmado: ${inventoryQuantity(r.quantityMilli)} unidades registradas; diferencia ${inventoryQuantity(requireNotNull(r.adjustmentMilli))}.")}
@@ -62,7 +63,7 @@ fun BackendInventoryScreen(onBack:()->Unit,viewModel:BackendInventoryViewModel=h
                     row.updatedAt?.let {Text("Última actualización: $it")}
                     TextButton({viewModel.history(row)},enabled=!state.loading && !state.working){Text("Ver historial")}
                     if(state.canWrite)Row {
-                        listOf(BackendInventoryAction.RECEPTION to "Recibir",BackendInventoryAction.COUNT to "Conteo físico").forEach {(kind,label)->
+                        listOf(BackendInventoryAction.RECEPTION to "Recibir").forEach {(kind,label)->
                             TextButton({selected=row;action=kind;quantity="";notes=""},enabled=!state.loading && !state.working && state.pending.isEmpty()){Text(label)}
                         }
                     }

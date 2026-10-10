@@ -12,7 +12,10 @@ class BackendInventoryRemoteDataSource @Inject constructor(private val transport
     override suspend fun dashboard(token: String, identity: BackendSaleIdentity, after: Long?): BackendInventoryPage {
         val row = call { transport.get("/api/v1/inventory/dashboard", token, buildMap { put("limit", "20"); after?.let { require(it in 1..4294967295L); put("after_product_id", it.toString()) } }) }
         return checked {
-            exact(row,"schema_version","branch_id","items","has_more","next_product_id"); identity(row,identity)
+            exact(row,"schema_version","branch_id","permissions","items","has_more","next_product_id"); identity(row,identity)
+            val permissions = row["permissions"]!!.jsonObject
+            exact(permissions,"can_record_count","can_receive","can_approve_counts")
+            permissions.keys.forEach { boolean(permissions,it) }
             val items = row["items"]!!.jsonArray.map { raw -> val r=raw.jsonObject
                 exact(r,"product_id","product_name","product_code","product_unit","total_quantity","minimum_stock","is_low_stock","balance_updated_at")
                 val quantity=milli(r,"total_quantity"); val minimum=milli(r,"minimum_stock")
@@ -42,6 +45,9 @@ class BackendInventoryRemoteDataSource @Inject constructor(private val transport
     override suspend fun submit(token: String, attempt: BackendInventoryAttempt) = operation(token,attempt,false)
     override suspend fun result(token: String, attempt: BackendInventoryAttempt) = operation(token,attempt,true)
     private suspend fun operation(token: String, a: BackendInventoryAttempt, recovery: Boolean): BackendInventoryReceipt {
+        check(recovery || a.action != BackendInventoryAction.COUNT) {
+            "Registra el conteo físico en el portal Web; el endpoint nativo anterior está retirado."
+        }
         val body=buildJsonObject { put("product_id",a.productId)
             put(if(a.action==BackendInventoryAction.RECEPTION) "quantity" else "counted_quantity","${a.quantity}.000")
             put(if(a.action==BackendInventoryAction.RECEPTION) "notes" else "reason",a.notes?.let(::JsonPrimitive) ?: JsonNull) }.toString()
