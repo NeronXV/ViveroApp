@@ -441,7 +441,7 @@ private fun PrimarySaleAction(
                     if (hasItems) {
                         "${cart.itemCount} ${if (cart.itemCount == 1) "artículo" else "artículos"}  ·  ${cart.totalCents.asMxn()}"
                     } else {
-                        "Inicia una comanda con el catálogo de la sucursal."
+                        "Busca productos y prepara una venta."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = .88f),

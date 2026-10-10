@@ -29,8 +29,8 @@ internal fun backendDashboard(session: BackendSessionState, webAvailable: Boolea
     val selling = session.authorizedSession("CREATE_SALES", true) != null
     val modules = buildList {
         if (session.authorizedSession("VIEW_CATALOG") != null)
-            add(DashboardModule("catalog", "Catálogo", "Explora nuestra colección botánica", true))
-        if (selling) add(DashboardModule("cart", "Carrito actual", "Retoma tu comanda guardada", true))
+            add(DashboardModule("catalog", "Vender", "Busca productos y prepara una venta", true))
+        if (selling) add(DashboardModule("cart", "Carrito", "Continúa tu venta guardada", true))
         if (selling && session.authorizedSession("VIEW_OWN_SALES", true) != null)
             add(DashboardModule("mysales", "Mis ventas", "Folios y seguimiento de tus ventas", true))
         if (session.authorizedSession("OPERATE_CASHIER", true) != null)

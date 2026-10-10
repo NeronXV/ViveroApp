@@ -1,6 +1,9 @@
 package com.intutec.viveroapp.ui.theme
 
 import android.os.Build
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -8,8 +11,12 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
@@ -68,10 +75,27 @@ fun ViveroAppTheme(
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            view.context.windowActivity()?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = colorScheme.background.luminance() > 0.5f
+                    isAppearanceLightNavigationBars = colorScheme.surface.luminance() > 0.5f
+                }
+            }
+        }
+    }
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
         shapes = ViveroShapes,
         content = content,
     )
+}
+
+private tailrec fun Context.windowActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.windowActivity()
+    else -> null
 }

@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
 data class BackendCatalogUiState(val enabled: Boolean = false, val loading: Boolean = false, val working: Boolean = false,
     val query: String = "", val category: Long? = null, val products: List<BackendCatalogProduct> = emptyList(),
     val categories: List<BackendCategory> = emptyList(), val next: Long? = null, val nextCategory: Long? = null,
-    val canSell: Boolean = false, val canScan: Boolean = false, val error: String? = null, val message: String? = null)
+    val canSell: Boolean = false, val canScan: Boolean = false, val error: String? = null, val message: String? = null,
+    val branchName: String = "Sin sucursal")
 @HiltViewModel
 class BackendCatalogViewModel @Inject constructor(
     private val sessions: SessionStore, private val remote: BackendCatalogGateway,
@@ -35,7 +36,7 @@ class BackendCatalogViewModel @Inject constructor(
     init { viewModelScope.launch { sessions.backend.collectLatest { current ->
         val rev = ++generation; val sessionRev = ++sessionGeneration; request?.cancel(); mutation?.cancel()
         val token = current.authorizedSession("VIEW_CATALOG")?.token
-        _state.value = BackendCatalogUiState(enabled = token != null, loading = token != null,
+        _state.value = BackendCatalogUiState(enabled = token != null, loading = token != null, branchName = current.context?.branch?.name ?: "Sin sucursal",
             canSell = current.authorizedSession("CREATE_SALES", true) != null,
             canScan = current.authorizedSession("SCAN_PRODUCTS") != null)
         if (token != null) {
@@ -97,7 +98,7 @@ class BackendCatalogViewModel @Inject constructor(
         val rev = sessionGeneration
         _state.update { it.copy(working = true, error = null, message = null) }
         mutation = viewModelScope.launch {
-            try { cart.add(product); if (rev == sessionGeneration) _state.update { it.copy(message = "Producto agregado a tu comanda.") } }
+            try { cart.add(product); if (rev == sessionGeneration) _state.update { it.copy(message = "${product.commonName} en tu carrito.") } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { if (rev == sessionGeneration) _state.update { it.copy(error = "No se confirmó la edición del carrito. Revísalo antes de continuar.") } }
             finally { if (rev == sessionGeneration) _state.update { it.copy(working = false) } }

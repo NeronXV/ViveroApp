@@ -1,113 +1,108 @@
 package com.intutec.viveroapp.feature.catalog.presentation
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.LocalFlorist
-import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.intutec.viveroapp.core.common.asMxn
-import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
-import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
-import com.intutec.viveroapp.core.designsystem.StatusPill
+import com.intutec.viveroapp.core.designsystem.*
+import com.intutec.viveroapp.feature.catalog.domain.repository.BackendCatalogProduct
 import com.intutec.viveroapp.feature.scanner.presentation.CameraCodeDialog
 
 @Composable
 fun BackendCatalogScreen(onBack: () -> Unit, onCart: () -> Unit, viewModel: BackendCatalogViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var code by remember { mutableStateOf("") }
+    BackendCatalogContent(state, viewModel.imageOrigin, onBack, onCart, viewModel::search,
+        viewModel::category, viewModel::moreCategories, viewModel::scan, viewModel::add, viewModel::retry, viewModel::more)
+}
+
+@Composable
+internal fun BackendCatalogContent(state: BackendCatalogUiState, imageOrigin: String, onBack: () -> Unit, onCart: () -> Unit,
+    onSearch: (String) -> Unit, onCategory: (Long?) -> Unit, onMoreCategories: () -> Unit, onScan: (String) -> Unit,
+    onAdd: (BackendCatalogProduct) -> Unit, onRetry: () -> Unit, onMore: () -> Unit) {
+    var code by rememberSaveable { mutableStateOf("") }
+    var manualOpen by rememberSaveable { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(state.enabled, state.canScan) {
-        if (!state.enabled || !state.canScan) cameraOpen = false
-    }
-    if (cameraOpen && state.enabled && state.canScan) {
-        CameraCodeDialog(onDismiss = { cameraOpen = false }, onCode = {
-            cameraOpen = false
-            code = it
-            viewModel.scan(it)
-        })
-    }
-    Scaffold(topBar = { ViveroTopAppBar(title = "Catálogo", onBack = onBack, eyebrow = "COLECCIÓN BOTÁNICA") {
-            if (state.canSell) IconButton(onCart) { Icon(Icons.Outlined.ShoppingCart, "Abrir carrito") }
-        } }) { padding ->
-        LazyVerticalGrid(columns = GridCells.Adaptive(260.dp), modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    var detail by remember { mutableStateOf<BackendCatalogProduct?>(null) }
+    LaunchedEffect(state.enabled, state.canScan) { if (!state.enabled || !state.canScan) { cameraOpen = false; manualOpen = false } }
+    if (cameraOpen && state.enabled && state.canScan) CameraCodeDialog({ cameraOpen = false }, {
+        cameraOpen = false; code = it; onScan(it)
+    })
+    Scaffold(modifier = Modifier.imePadding(), topBar = { ViveroTopAppBar("Vender", onBack, "DULCINEA · ${state.branchName}") {
+        if (state.canSell) IconButton(onCart) { Icon(Icons.Outlined.ShoppingCart, "Abrir carrito") }
+    } }) { padding ->
+        LazyVerticalGrid(GridCells.Adaptive(170.dp), Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ViveroSectionIntro("Nuestra colección", "Plantas y productos para dar vida a tu espacio.", Modifier.padding(bottom = 18.dp))
-                OutlinedTextField(state.query, viewModel::search, label = { Text("Buscar por nombre") }, singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = state.enabled)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { FilterChip(state.category == null, { viewModel.category(null) }, label = { Text("Todas") }) }
-                    items(state.categories, key = { it.id }) { category ->
-                        FilterChip(state.category == category.id, { viewModel.category(category.id) }, label = { Text(category.name) })
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(state.query, onSearch, Modifier.fillMaxWidth(), label = { Text("Buscar plantas y productos") },
+                        leadingIcon = { Icon(Icons.Outlined.Search, null) }, singleLine = true, enabled = state.enabled,
+                        trailingIcon = { if (state.canScan) IconButton({ cameraOpen = true }, enabled = state.enabled && !state.loading && !state.working) {
+                            Icon(Icons.Outlined.QrCodeScanner, "Escanear código")
+                        } })
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item { FilterChip(state.category == null, { onCategory(null) }, label = { Text("Todas") }, enabled = state.enabled) }
+                        items(state.categories, key = { it.id }) { category ->
+                            FilterChip(state.category == category.id, { onCategory(category.id) }, label = { Text(category.name) }, enabled = state.enabled)
+                        }
+                        if (state.nextCategory != null) item { TextButton(onMoreCategories, enabled = state.enabled && !state.loading) { Text("Más categorías") } }
                     }
-                    if (state.nextCategory != null) item { TextButton(viewModel::moreCategories, enabled = !state.loading) { Text("Más categorías") } }
-                }
-                OutlinedTextField(code, { if (it.length <= 128) code = it }, label = { Text("Código de barras o código interno") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton({ viewModel.scan(code) }, enabled = state.enabled && state.canScan && !state.loading && code.trim().length >= 2) { Text("Buscar código") }
-                    if (state.canSell) TextButton(onCart) { Text("Abrir carrito") }
-                }
-                OutlinedButton({ cameraOpen = true }, enabled = state.enabled && state.canScan && !state.loading && !state.working, modifier = Modifier.fillMaxWidth()) { Text("Escanear con cámara") }
-                if (state.loading || state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(viewModel::retry) { Text("Reintentar") } }
-                state.message?.let { Text(it) }
-                if (!state.enabled) Text("Actualiza tus permisos para consultar el catálogo.")
-                if (state.enabled && !state.loading && state.products.isEmpty() && state.error == null) Text("No hay productos para esta búsqueda.")
+                    if (state.canScan) TextButton({ manualOpen = true }, enabled = state.enabled && !state.loading) {
+                        Icon(Icons.Outlined.Keyboard, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Ingresar código")
+                    }
+                    if (state.loading || state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    state.error?.let { SalesNotice(it, true) { TextButton(onRetry, enabled = !state.loading) { Text("Volver a intentar") } } }
+                    state.message?.let { SalesNotice(it) }
+                    if (!state.enabled) SalesNotice("Actualiza tu sesión y permisos para consultar productos.", true)
+                    if (state.enabled && !state.loading && state.products.isEmpty() && state.error == null)
+                        SalesEmpty("Sin resultados", "Prueba otro nombre, categoría o código.")
                 }
             }
             items(state.products, key = { it.id }) { product ->
-                var expanded by remember(product.id) { mutableStateOf(false) }
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-                    Box(Modifier.fillMaxWidth().height(184.dp).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                        if (product.image != null) AsyncImage(viewModel.imageOrigin + product.image.path,
-                            product.image.altText.ifBlank { product.commonName }, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                        else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Outlined.LocalFlorist, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text("Fotografía pendiente", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        }
-                        product.promotion?.let { StatusPill("Promoción", Modifier.align(Alignment.TopStart).padding(12.dp)) }
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), elevation = CardDefaults.cardElevation(1.dp)) {
+                    Box {
+                        ProductPhoto(product.image?.let { imageOrigin + it.path }, product.commonName, Modifier.fillMaxWidth().aspectRatio(1.35f))
+                        if (product.promotion != null) StatusPill("Promoción", Modifier.align(Alignment.TopStart).padding(8.dp))
                     }
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(state.categories.firstOrNull { it.id == product.categoryId }?.name?.uppercase().orEmpty(),
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                    Text(product.commonName, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(product.internalCode, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${product.effectivePriceCents.asMxn()} / ${product.unit}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    product.promotion?.let { Text("${it.name} · precio anterior ${product.priceCents.asMxn()}") }
-                    TextButton({ expanded = !expanded }) { Text(if (expanded) "Ocultar detalle" else "Ver detalle") }
-                    if (expanded) {
-                        product.scientificName?.let { Text(it) }
-                        Text(product.description)
-                        Text("Riego: ${product.wateringAdvice}\nLuz: ${product.lightType}\nClima: ${product.recommendedClimate}")
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(product.commonName, style = MaterialTheme.typography.titleMedium)
+                        Text(product.effectivePriceCents.asMxn(), style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Por ${product.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (state.canSell) Button({ onAdd(product) }, enabled = state.enabled && !state.working,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Agregar") }
+                        TextButton({ detail = product }, Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Ver detalle") }
                     }
-                    if (state.canSell) Button({ viewModel.add(product) }, enabled = !state.working, modifier = Modifier.fillMaxWidth(), shape = CircleShape) { Text("Agregar al carrito") }
-                } }
-            }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Column {
-                if (state.next != null) OutlinedButton(viewModel::more, enabled = !state.loading) { Text("Cargar más productos") }
-                Spacer(Modifier.height(20.dp))
                 }
+            }
+            if (state.next != null) item(span = { GridItemSpan(maxLineSpan) }) {
+                OutlinedButton(onMore, enabled = state.enabled && !state.loading, modifier = Modifier.fillMaxWidth()) { Text("Más productos") }
             }
         }
     }
+    if (manualOpen) AlertDialog(onDismissRequest = { manualOpen = false }, title = { Text("Buscar por código") },
+        text = { OutlinedTextField(code, { if (it.length <= 128) code = it }, label = { Text("Código de barras o interno") }, singleLine = true) },
+        confirmButton = { TextButton({ manualOpen = false; onScan(code) }, enabled = state.enabled && state.canScan && code.trim().length >= 2) { Text("Buscar") } },
+        dismissButton = { TextButton({ manualOpen = false }) { Text("Volver") } })
+    detail?.let { product -> AlertDialog(onDismissRequest = { detail = null }, title = { Text(product.commonName) },
+        text = { androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Text("Código: ${product.internalCode}"); product.scientificName?.let { Text(it) }; Text(product.description)
+                Text("Riego: ${product.wateringAdvice}\nLuz: ${product.lightType}\nClima: ${product.recommendedClimate}")
+                product.promotion?.let { Text("${it.name} · precio anterior ${product.priceCents.asMxn()}") }
+            }
+        } }, confirmButton = { TextButton({ detail = null }) { Text("Cerrar") } }) }
 }

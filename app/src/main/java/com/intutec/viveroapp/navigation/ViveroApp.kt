@@ -83,7 +83,7 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
             )
         }
         composable<CatalogRoute> { if (auth.backend.authorizedSession("VIEW_CATALOG") != null) BackendCatalogScreen({ navController.navigateUp() }, { navController.navigate(CartRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
-        composable<CartRoute> { if (auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
+        composable<CartRoute> { if (auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) { popUpTo<CartRoute> { inclusive = true }; launchSingleTop = true } }, { navController.navigate(BackendHistoryRoute()) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
         composable<CashierQueueRoute> { if (auth.backend.authorizedSession("OPERATE_CASHIER", true) != null) BackendCashierScreen({ navController.navigateUp() }, { navController.navigate(BackendHistoryRoute("PAYMENTS")) }, { navController.navigate(BackendHistoryRoute("QUEUE", it)) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
         composable<BackendHistoryRoute> { entry ->
             val route = entry.toRoute<BackendHistoryRoute>()

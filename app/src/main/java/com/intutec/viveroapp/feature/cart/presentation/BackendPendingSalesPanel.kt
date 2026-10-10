@@ -12,19 +12,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
 
 @Composable
-fun BackendPendingSalesPanel(viewModel: BackendPendingSalesViewModel = hiltViewModel()) {
+fun BackendPendingSalesPanel(viewModel: BackendPendingSalesViewModel = hiltViewModel(), onJournalChanged: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var open by remember { mutableStateOf(false) }
     var retryId by remember { mutableStateOf<Long?>(null) }
     var retireId by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(state.entries) {
+        onJournalChanged()
         if (state.entries.none { it.localId == retryId && it.state in setOf("PENDING", "UNCERTAIN") }) retryId = null
         if (state.entries.none { it.localId == retireId && it.state in setOf("PENDING", "UNCERTAIN") }) retireId = null
     }
     LaunchedEffect(state.enabled) { if (!state.enabled) { open = false; retryId = null; retireId = null } }
     if (!state.enabled) { return }
     OutlinedButton(onClick = { open = true; viewModel.refresh() }, modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-        Text("Ventas guardadas de esta sesión")
+        Text("Ventas guardadas y pendientes")
     }
     if (open) {
         AlertDialog(
@@ -49,7 +50,7 @@ fun BackendPendingSalesPanel(viewModel: BackendPendingSalesViewModel = hiltViewM
                                 "SYNCED" -> "Confirmada"
                                 else -> "Requiere revisión"
                             }
-                            Text("Intento ${row.localId} · $label", style = MaterialTheme.typography.titleSmall)
+                            Text("${row.receipt?.folio ?: "Envío guardado"} · $label", style = MaterialTheme.typography.titleSmall)
                             Text("${row.items.sumOf { it.quantity.toLong() }} unidades · ${row.totalCents.asMxn()}")
                             row.lastError?.let { Text(it) }
                             row.receipt?.let {
@@ -79,7 +80,7 @@ fun BackendPendingSalesPanel(viewModel: BackendPendingSalesViewModel = hiltViewM
     }
     retryId?.let { id ->
         AlertDialog(onDismissRequest = { retryId = null }, title = { Text("¿Reintentar esta venta?") },
-            text = { Text("Se conservarán los productos, total y clave originales. Si su resultado es incierto, se consultará primero; solo si no existe se reenviará. Si cambió el precio, el intento se conservará para revisión.") },
+            text = { Text("Se conservarán los productos y total originales. Primero comprobaremos si la venta ya existe; solo si no existe se reenviará. Si cambió el precio, se conservará para revisión.") },
             confirmButton = { TextButton(onClick = { retryId = null; viewModel.retry(id) }) { Text("Reintentar") } },
             dismissButton = { TextButton(onClick = { retryId = null }) { Text("Conservar sin enviar") } })
     }

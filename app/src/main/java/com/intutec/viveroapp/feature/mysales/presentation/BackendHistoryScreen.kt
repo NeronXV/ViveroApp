@@ -13,7 +13,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.common.asMxn
 import com.intutec.viveroapp.core.designsystem.ViveroTopAppBar
 import com.intutec.viveroapp.core.designsystem.ViveroCard
-import com.intutec.viveroapp.core.designsystem.ViveroSectionIntro
+import com.intutec.viveroapp.core.designsystem.SalesNotice
+import com.intutec.viveroapp.core.designsystem.StatusPill
 import com.intutec.viveroapp.feature.mysales.domain.repository.*
 
 internal fun historyLabel(value: String) = when (value) {
@@ -29,10 +30,9 @@ fun BackendHistoryScreen(onBack: () -> Unit, viewModel: BackendHistoryViewModel 
     Scaffold(topBar = { ViveroTopAppBar(title = if (state.kind == BackendHistoryKind.SALES) "Mis ventas" else if (state.kind == BackendHistoryKind.PAYMENTS) "Mis comprobantes" else "Detalle de comanda", onBack = back) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                ViveroSectionIntro("Cada operación, a detalle", "Consulta el estado confirmado de tus ventas y comprobantes.", modifier = Modifier.padding(bottom = 16.dp))
                 if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (!state.enabled) Text("Tus permisos no permiten consultar este historial.")
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.error?.let { SalesNotice(it, true) }
                 OutlinedButton(viewModel::retry, enabled = state.enabled && !state.loading) { Text("Actualizar") }
                 if (state.document == null && state.hasList) Text("Registros de tu cuenta y sucursal actual. Los importes corresponden a lo guardado en cada operación.")
             }
@@ -52,8 +52,10 @@ fun BackendHistoryScreen(onBack: () -> Unit, viewModel: BackendHistoryViewModel 
                 items(doc.events) { event -> Text("${event.createdAt}\n${historyLabel(event.status)} · ${event.observation}") }
             } ?: run {
                 items(state.entries, key = { it.id }) { entry -> ViveroCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) {
-                    Text(entry.folio, style = MaterialTheme.typography.titleMedium)
-                    Text("${historyLabel(entry.label)} · ${entry.totalCents.asMxn()}\n${entry.createdAt}")
+                    Text(entry.folio, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                    StatusPill(historyLabel(entry.label))
+                    Text(entry.totalCents.asMxn(), style = MaterialTheme.typography.titleLarge)
+                    Text(entry.createdAt, style = MaterialTheme.typography.bodySmall)
                     TextButton({ viewModel.detail(entry.id) }, enabled = !state.loading) { Text("Ver detalle") }
                 } } }
                 item {
