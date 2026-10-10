@@ -2,20 +2,27 @@
 
 ## Estado actual
 
-Revisión local del 4 de octubre de 2026 sobre `main`, HEAD
-`3369bbb95179ec62daa4d369efd61b5cef3d5097`, con cambios locales. El destino
+Revisión del 9 de octubre de 2026 sobre `main`, HEAD
+`a58fd614b28920d7b39fee7cef2b67f1c16b0531`, con cambios locales. El destino
 operativo oficial es Backend API + MariaDB + Docker. El código Android local
-prepara **1.0.7-vps, código 8**, con cámara QR/EAN/Code 128 desde catálogo,
+prepara **1.0.8-vps, código 9**, candidata debug compatible con la 1.0.7,
+con cámara QR/EAN/Code 128 desde catálogo,
 consulta por la API y confirmación manual para agregar al carrito. Conserva
 Room 6 y los contratos de venta, caja e inventario. El 4 de octubre se actualizó
 el Samsung A22 conectado de 1.0.6 a **1.0.7-vps** mediante APK debug compatible:
 respaldo privado previo, siete archivos persistentes idénticos después de instalar,
 15 ventas históricas y Room 6 íntegros. No es todavía una entrega release firmada.
 
-La evidencia del 3 de octubre registra la Web/API en
-`https://viverodulcinea.bajastack.network`, MATRIZ con descuento de stock activo,
-CENTRO inactivo, datos importados y restauración aislada correcta. Es evidencia
-anterior, no una inspección nueva del servidor.
+La consulta de solo lectura del 9 de octubre confirma seis cuentas activas,
+cinco sin contraseña, MATRIZ con descuento de stock activo y CENTRO con
+is_active=1/inventory_enabled=0. Se conservó esa configuración. La Web/API usan
+`https://viverodulcinea.bajastack.network`; el ensayo nuevo usa MariaDB/API locales
+aisladas. No se desplegó: producción aún no tiene la migración 030 de compras.
+
+Pruebas nuevas: backend 87 unitarias/25 SQL-HTTP; Web 479 y recorrido HTTP real;
+Android build/unitarias/lint y recorrido Kotlin HTTP real con respuestas perdidas.
+La conciliación confirma una venta/pago/salida de stock por ensayo.
+Evidencia, APK y límites: [candidata estable](docs/stable-candidate-20261009.md).
 
 Pedro confirmó en este chat que las dos ventas UUID antiguas fallidas eran
 **pruebas** y que la distribución será por **APK directo**. Sus registros se
@@ -29,10 +36,12 @@ restauración y firma compatible. No existe `key.properties` local. El APK relea
 antiguo y el debug actual tienen certificados distintos: no intercambiarlos para
 actualizar una instalación sin comprobar su certificado.
 
-Guía vigente de cierre: [pendientes y aceptación](docs/release-readiness.md).
+Guía vigente de cierre: [candidata y aceptación pendiente](docs/stable-candidate-20261009.md).
+Toni: [evaluación SMTP](docs/smtp-evaluation.md) y [guía de respaldos](docs/toni-backup-handoff.md).
+La guía [pendientes del bloque anterior](docs/release-readiness.md) conserva evidencia histórica.
 Preparación de APK: [firma y distribución](docs/production-release.md).
 Supabase se conserva para revisión histórica. AppCliente requiere un alcance aparte;
-no se verificó su repositorio ni el de Web en esta revisión. La exportación de
+Web se validó localmente y AppCliente quedó fuera de esta revisión. La exportación de
 [seguimiento n8n](docs/automation/project-status.json) conserva su fecha anterior;
 su contenido se actualizará al cerrar la sesión con la evidencia nueva y nunca
 se interpreta como certificación del código actual.
