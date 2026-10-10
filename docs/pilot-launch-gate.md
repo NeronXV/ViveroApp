@@ -28,4 +28,4 @@ Herramientas de cifrado y evidencia sanitizada: `tmp/delivery-functional/pilot-c
 
 ## Decisión
 
-**GO para solicitar autorización de actualización; despliegue todavía no ejecutado.** Falta la autorización explícita de Pedro para migraciones/API/Web y, por separado, la instalación Samsung. No se repitieron suites, no se crearon ventas ficticias en producción ni se realizaron pruebas físicas. APK principal código 10 existente permanece igual. Después del despliegue: humo mínimo, instalación paralela autorizada, venta/cobro/ticket/inventario/cancelación presencial y aceptación antes de comenzar ventas reales con Sebastián y Dulce.
+**GO para solicitar autorización de actualización; despliegue todavía no ejecutado.** Falta la autorización explícita de Pedro para migraciones/API/Web y, por separado, la instalación Samsung. No se repitieron suites, no se crearon ventas ficticias en producción ni se realizaron pruebas físicas. APK principal código 10 existente permanece igual. Después del despliegue: humo mínimo, instalación paralela autorizada, venta/cobro/ticket/inventario/cancelación presencial y aceptación antes de comenzar ventas reales con el equipo operativo.

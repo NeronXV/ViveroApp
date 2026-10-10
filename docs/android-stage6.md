@@ -116,7 +116,7 @@ Antes de editar se guardaron diff y estado de ambos repositorios en `tmp/android
 
 HEAD/rama conservados: App `main` / `a58fd614b28920d7b39fee7cef2b67f1c16b0531`; Web `main` / `5f9c4853e42cace586cdaeec13998668b3d204aa`.
 
-Antes de aceptar presencialmente: revisar el diseño, restablecer un API aislado para repetir el recorrido Android completo (incluyendo precio cambiado, cero existencias y respuesta perdida), probar cierre/reapertura real con ese envío, escaneo físico, TalkBack, tablet y teléfono de gama económica. Confirmar la firma instalada antes de cualquier actualización física. La automatización actual comprueba funciones y persistencia por partes; no sustituye ese recorrido completo ni la aceptación de Sebastián y Dulce.
+Antes de aceptar presencialmente: revisar el diseño, restablecer un API aislado para repetir el recorrido Android completo (incluyendo precio cambiado, cero existencias y respuesta perdida), probar cierre/reapertura real con ese envío, escaneo físico, TalkBack, tablet y teléfono de gama económica. Confirmar la firma instalada antes de cualquier actualización física. La automatización actual comprueba funciones y persistencia por partes; no sustituye ese recorrido completo ni la aceptación del equipo operativo.
 
 El historial y Home recibieron ajustes puntuales; no se ejecutó una revisión visual instrumentada completa de todas las pantallas gerenciales. Se conserva su implementación y permisos. Las fotos del carrito son enriquecimiento opcional de red y pueden mostrar la alternativa; nunca bloquean cotización o envío. Las advertencias existentes de lint quedan documentadas en `app/build/reports/lint-results-debug.html`.
 
