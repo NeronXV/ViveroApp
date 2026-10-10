@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { ApiError } from './catalog.js';
 import { requireCapabilities } from './auth/service.js';
+import { sellableProductSql } from './product-preparation.js';
 
 export function checkoutScope(context) {
   if (context.access_state !== 'ACTIVE' || !context.capabilities.some(name => ['OPERATE_CASHIER', 'VIEW_BRANCH_SALES', 'VIEW_ALL_SALES'].includes(name))) throw new ApiError(403, 'FORBIDDEN');
@@ -21,10 +22,11 @@ export async function sendOrderToCashier(db, context, id) {
   const previous = await existing();
   if (previous) return receipt(previous, true);
   if (!['CONFIRMED', 'READY'].includes(order.status)) fail('WEB_ORDER_STATUS_INVALID');
-  const [items] = await db.execute(`SELECT i.*, p.is_active AS product_active, c.is_active AS category_active
+  const [items] = await db.execute(`SELECT i.*, p.is_active AS product_active, c.is_active AS category_active,
+    (${sellableProductSql('?')}) AS commercially_ready
     FROM web_order_items i JOIN products p ON p.id = i.product_id JOIN categories c ON c.id = p.category_id
-    WHERE i.order_id = ? ORDER BY i.product_id LOCK IN SHARE MODE`, [id]);
-  if (!items.length || items.some(item => !item.product_active || !item.category_active)) fail('WEB_ORDER_ITEMS_UNAVAILABLE');
+    WHERE i.order_id = ? ORDER BY i.product_id LOCK IN SHARE MODE`, [branch, id]);
+  if (!items.length || items.some(item => !item.product_active || !item.category_active || !item.commercially_ready)) fail('WEB_ORDER_ITEMS_UNAVAILABLE');
   let list = 0n, effective = 0n;
   for (const item of items) {
     list += BigInt(item.list_price_cents) * BigInt(item.quantity);

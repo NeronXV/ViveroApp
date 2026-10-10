@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError, positiveId } from './catalog.js';
 import { requireCapabilities } from './auth/service.js';
+import { requireInventoryOwner, inventoryPermissions } from './inventory-policy.js';
 
 const fail = (status, code) => { throw new ApiError(status, code); };
 const maxMilli = 99999999999999n;
@@ -15,24 +16,24 @@ export function inventoryScope(context, write = false) {
 }
 
 // Exact decimal strings keep DECIMAL(14,3) quantities out of binary floats.
-function parseMilli(value, { zero = false, integer = false } = {}) {
+export function parseMilli(value, { zero = false, integer = false } = {}) {
   if (typeof value !== 'string' || !/^(?:0|[1-9][0-9]{0,10})(?:\.[0-9]{1,3})?$/.test(value)) fail(400, 'INVENTORY_QUANTITY_INVALID');
   const [whole, fraction = ''] = value.split('.');
   const milli = BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'));
   if (milli > maxMilli || (!zero && milli === 0n) || (integer && milli % 1000n !== 0n)) fail(400, 'INVENTORY_QUANTITY_INVALID');
   return milli;
 }
-const formatMilli = value => {
+export const formatMilli = value => {
   const milli = BigInt(value);
   const absolute = milli < 0n ? -milli : milli;
   return `${milli < 0n ? '-' : ''}${absolute / 1000n}.${(absolute % 1000n).toString().padStart(3, '0')}`;
 };
-const milliFromDb = value => {
+export const milliFromDb = value => {
   const text = String(value);
   const [whole, fraction = ''] = text.replace(/^-/, '').split('.');
   return (text.startsWith('-') ? -1n : 1n) * (BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0')));
 };
-function requestKey(value, operation) {
+export function requestKey(value, operation) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{16,128}$/.test(value)) fail(400, 'INVENTORY_IDEMPOTENCY_KEY_REQUIRED');
   return createHash('sha256').update(`${operation}\0`).update(value).digest();
 }
@@ -98,6 +99,7 @@ export function createInventoryActivation(db, context) {
   return {
     state,
     async activate() {
+      requireInventoryOwner(context);
       const before = await state();
       if (!before.enabled) await db.execute('UPDATE branches SET inventory_enabled = 1, inventory_activated_at = UTC_TIMESTAMP(6), inventory_activated_by = ? WHERE id = ?', [context.user.id, branchId]);
       return { ...await state(), idempotent_replay: before.enabled };
@@ -134,11 +136,11 @@ export function createInventory(db, context) {
         COALESCE(i.quantity, 0) AS total_quantity, COALESCE(i.minimum_stock, 0) AS minimum_stock, i.updated_at AS balance_updated_at
         FROM products p JOIN categories c ON c.id = p.category_id
         LEFT JOIN inventory i ON i.product_id = p.id AND i.branch_id = ?
-        WHERE p.is_active = 1 AND c.is_active = 1 AND p.id > ? ORDER BY p.id LIMIT ?`, [branchId, afterProductId, limit + 1]);
+        WHERE c.is_active = 1 AND p.id > ? ORDER BY p.id LIMIT ?`, [branchId, afterProductId, limit + 1]);
       const items = rows.slice(0, limit).map(row => ({ product_id: row.product_id, product_name: row.product_name, product_code: row.product_code,
         product_unit: row.product_unit, total_quantity: formatMilli(milliFromDb(row.total_quantity)), minimum_stock: formatMilli(milliFromDb(row.minimum_stock)),
         is_low_stock: milliFromDb(row.total_quantity) <= milliFromDb(row.minimum_stock), balance_updated_at: row.balance_updated_at }));
-      return { schema_version: 1, branch_id: branchId, items, has_more: rows.length > limit, next_product_id: rows.length > limit ? items.at(-1).product_id : null };
+      return { schema_version: 1, branch_id: branchId, permissions: inventoryPermissions(context), items, has_more: rows.length > limit, next_product_id: rows.length > limit ? items.at(-1).product_id : null };
     },
     async history({ limit, beforeId, productId }) {
       const [rows] = await db.execute(`SELECT m.id, m.product_id, p.common_name AS product_name, p.internal_code AS product_code,
@@ -152,6 +154,7 @@ export function createInventory(db, context) {
     },
     async reception(request) {
       inventoryScope(context, true);
+      requireInventoryOwner(context);
       await lockBalance(request.productId);
       const [[previous]] = await db.execute('SELECT id, branch_id, product_id, movement_type, quantity, notes, created_by FROM inventory_movements WHERE idempotency_hash = ? FOR UPDATE', [request.idempotencyHash]);
       if (previous) {
@@ -166,7 +169,7 @@ export function createInventory(db, context) {
     },
     async reconcile(request) {
       inventoryScope(context, true);
-      const balance = await lockBalance(request.productId);
+      await lockBalance(request.productId);
       const [[previous]] = await db.execute(`SELECT c.id, c.branch_id, c.product_id, c.previous_quantity, c.counted_quantity, c.adjustment_quantity, c.reason, c.counted_by
         FROM inventory_counts c WHERE c.idempotency_hash = ? FOR UPDATE`, [request.idempotencyHash]);
       if (previous) {
@@ -176,21 +179,9 @@ export function createInventory(db, context) {
           previous_quantity: formatMilli(milliFromDb(previous.previous_quantity)), counted_quantity: request.quantity,
           adjustment_quantity: formatMilli(milliFromDb(previous.adjustment_quantity)), total_quantity: request.quantity };
       }
-      const previousMilli = milliFromDb(balance.quantity), adjustment = request.quantityMilli - previousMilli;
-      if (adjustment !== 0n) {
-        const amount = formatMilli(adjustment < 0n ? -adjustment : adjustment);
-        const [movement] = await db.execute(`INSERT INTO inventory_movements
-          (branch_id, product_id, movement_type, quantity, idempotency_hash, notes, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`, [branchId, request.productId, adjustment > 0n ? 'ADJUSTMENT_ADD' : 'ADJUSTMENT_SUB',
-          adjustment > 0n ? amount : `-${amount}`, request.idempotencyHash, request.reason, context.user.id]);
-        request.movementId = movement.insertId;
-      }
-      const [created] = await db.execute(`INSERT INTO inventory_counts
-        (movement_id, idempotency_hash, branch_id, product_id, previous_quantity, counted_quantity, adjustment_quantity, reason, counted_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [request.movementId ?? null, request.idempotencyHash, branchId, request.productId,
-        balance.quantity, request.quantity, adjustment === 0n ? '0.000' : adjustment > 0n ? formatMilli(adjustment) : `-${formatMilli(-adjustment)}`, request.reason, context.user.id]);
-      return { schema_version: 1, idempotent_replay: false, count_id: created.insertId, product_id: request.productId,
-        previous_quantity: formatMilli(previousMilli), counted_quantity: request.quantity, adjustment_quantity: formatMilli(adjustment), total_quantity: request.quantity };
+      // Preserve recovery of completed historic requests, but do not interpret an
+      // old client count as a newly approved adjustment without a snapshot.
+      fail(409, 'INVENTORY_OBSERVATION_REQUIRED');
     },
   };
   async function currentQuantity(productId) {

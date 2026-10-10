@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError, positiveId } from './catalog.js';
 import { inventoryScope, lockInventoryRow } from './inventory.js';
+import { requireInventoryOwner } from './inventory-policy.js';
 
 const fail = (status, code) => { throw new ApiError(status, code); };
 const hash = value => createHash('sha256').update(value).digest();
@@ -176,6 +177,7 @@ export function createPurchases(db, context) {
         if (!doc.confirmation_hash.equals(key)) fail(409, 'PURCHASE_CONFIRMATION_CONFLICT');
         return { ...await detail(id), idempotent_replay: true };
       }
+      requireInventoryOwner(context);
       const [items] = await db.execute('SELECT * FROM supplier_purchase_items WHERE purchase_id=? ORDER BY product_id,line_number FOR UPDATE', [id]);
       if (doc.status !== 'DRAFT' || items.some(i => i.resolution_status === 'UNMATCHED') || !items.some(i => i.product_id !== null)) fail(409, 'PURCHASE_NOT_READY');
       for (const item of items.filter(i => i.product_id !== null)) {

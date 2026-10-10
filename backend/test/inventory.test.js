@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInventory, inventoryBody, inventoryQuery, inventoryScope, activationInput } from '../src/inventory.js';
 
-const context = { access_state: 'ACTIVE', user: { id: 7 }, branch: { id: 2, is_active: true }, capabilities: ['MANAGE_INVENTORY'] };
+const context = { access_state: 'ACTIVE', role: { name: 'OWNER' }, user: { id: 7 }, branch: { id: 2, is_active: true }, capabilities: ['MANAGE_INVENTORY'] };
 const key = 'inventory-synthetic-key-0001';
 
 test('inventory writes require capabilities and an active assigned branch', () => {
@@ -49,14 +49,10 @@ function fakeDatabase({ quantity = '10.500', count = null, movement = null } = {
   };
 }
 
-test('a physical count below a fractional balance records an exact negative adjustment', async () => {
+test('legacy direct count cannot create an adjustment without an observation', async () => {
   const db = fakeDatabase();
-  const result = await createInventory(db, context).reconcile(inventoryBody('count', { product_id: 3, counted_quantity: '8', reason: 'Conteo demo' }, key));
-  assert.equal(result.previous_quantity, '10.500');
-  assert.equal(result.adjustment_quantity, '-2.500');
-  const movement = db.calls.find(call => call.sql.includes('INSERT INTO inventory_movements'));
-  assert.equal(movement.params[2], 'ADJUSTMENT_SUB');
-  assert.equal(movement.params[3], '-2.500');
+  await assert.rejects(createInventory(db, context).reconcile(inventoryBody('count', { product_id: 3, counted_quantity: '8', reason: 'Conteo demo' }, key)), { code: 'INVENTORY_OBSERVATION_REQUIRED' });
+  assert.equal(db.calls.some(call => call.sql.includes('INSERT INTO inventory_movements')), false);
   assert.equal(db.calls.filter(call => call.sql.startsWith('SELECT quantity, minimum_stock')).length, 1);
 });
 
@@ -65,12 +61,11 @@ test('inventory activation requires an explicit initial physical count acknowled
   for (const input of [{}, { initial_count_confirmed: false }, { initial_count_confirmed: 1 }, { initial_count_confirmed: true, branch_id: 1 }]) assert.throws(() => activationInput(input));
 });
 
-test('zero difference stores the count without inserting a movement', async () => {
+test('legacy zero difference also requires the observation contract', async () => {
   const db = fakeDatabase({ quantity: '8.000' });
-  const result = await createInventory(db, context).reconcile(inventoryBody('count', { product_id: 3, counted_quantity: '8', reason: 'Conteo demo' }, key));
-  assert.equal(result.adjustment_quantity, '0.000');
+  await assert.rejects(createInventory(db, context).reconcile(inventoryBody('count', { product_id: 3, counted_quantity: '8', reason: 'Conteo demo' }, key)), { code: 'INVENTORY_OBSERVATION_REQUIRED' });
   assert.equal(db.calls.some(call => call.sql.includes('INSERT INTO inventory_movements')), false);
-  assert.equal(db.calls.find(call => call.sql.includes('INSERT INTO inventory_counts')).params[0], null);
+  assert.equal(db.calls.some(call => call.sql.includes('INSERT INTO inventory_counts')), false);
 });
 
 test('count replay uses the saved adjustment and a current locking read', async () => {

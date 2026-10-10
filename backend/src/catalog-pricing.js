@@ -1,11 +1,14 @@
+import { sellableProductSql } from './product-preparation.js';
+
 // Single statement/snapshot and server clock for the entire page.
 // Decimal arithmetic prevents BIGINT overflow and floating-point rounding errors.
 export function pricedCatalogQuery(columns, all) {
   return priceCatalogPage(`
     SELECT ${columns} FROM products p LEFT JOIN product_images i ON i.primary_product_id = p.id
-    WHERE p.id > ? ${all ? '' : 'AND p.is_active = 1 AND EXISTS (SELECT 1 FROM categories c WHERE c.id = p.category_id AND c.is_active = 1)'}
+    WHERE p.id > ? ${all ? '' : `AND p.is_active = 1 AND EXISTS (SELECT 1 FROM categories c WHERE c.id = p.category_id AND c.is_active = 1) AND ${sellableProductSql()}`}
     AND (? IS NULL OR p.category_id = ?)
-    AND (? = '' OR LOCATE(?, p.common_name) > 0 OR LOCATE(?, COALESCE(p.scientific_name, '')) > 0)
+    AND (? = '' OR LOCATE(?, p.common_name) > 0 OR LOCATE(?, COALESCE(p.scientific_name, '')) > 0
+      OR LOCATE(?, p.internal_code) > 0 OR LOCATE(?, COALESCE(p.barcode, '')) > 0)
     ORDER BY p.id LIMIT ?`);
 }
 

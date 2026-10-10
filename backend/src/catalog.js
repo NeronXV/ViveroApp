@@ -1,6 +1,7 @@
 import { pricedCatalogQuery } from './catalog-pricing.js';
 import { priceCatalogPage } from './catalog-pricing.js';
 import { lockInventoryRow } from './inventory.js';
+import { sellableProductSql } from './product-preparation.js';
 
 export class ApiError extends Error {
   constructor(status, code) {
@@ -147,7 +148,7 @@ export function createCatalog(db, context = null) {
         p.watering_advice, p.light_type, p.recommended_climate, c.is_active AS category_active,
         i.id AS image_id, i.alt_text AS image_alt FROM products p JOIN categories c ON c.id=p.category_id
         LEFT JOIN product_images i ON i.primary_product_id=p.id
-        WHERE p.is_active=1 AND (LOWER(TRIM(p.internal_code)) COLLATE utf8mb4_bin=LOWER(?) COLLATE utf8mb4_bin
+        WHERE p.is_active=1 AND ${sellableProductSql()} AND (LOWER(TRIM(p.internal_code)) COLLATE utf8mb4_bin=LOWER(?) COLLATE utf8mb4_bin
           OR LOWER(TRIM(p.barcode)) COLLATE utf8mb4_bin=LOWER(?) COLLATE utf8mb4_bin)
         ORDER BY p.id LIMIT 2`), [code, code]);
       if (rows.length > 1) throw new ApiError(409, 'PRODUCT_SCAN_CODE_AMBIGUOUS');
@@ -166,7 +167,7 @@ export function createCatalog(db, context = null) {
       const [rows] = await db.execute(
         table === 'products' ? pricedCatalogQuery(columns, all)
           : `SELECT ${columns} FROM ${table} p WHERE p.id > ? ${all ? '' : `AND ${active}`} ORDER BY p.id LIMIT ?`,
-        table === 'products' ? [...(all ? [branchId] : []), afterId, categoryId, categoryId, search, search, search, limit + 1] : [afterId, limit + 1],
+        table === 'products' ? [...(all ? [branchId] : []), afterId, categoryId, categoryId, search, search, search, search, search, limit + 1] : [afterId, limit + 1],
       );
       const items = rows.slice(0, limit).map(serialize);
       return { items, next_after_id: rows.length > limit ? items.at(-1).id : null };
@@ -180,6 +181,12 @@ export function createCatalog(db, context = null) {
         Object.values(stored),
       );
       await minimum(result.insertId, minimum_stock);
+      if (table === 'products' && stored.is_active === false && context?.user) {
+        await db.execute('UPDATE products SET commercial_disabled_at = UTC_TIMESTAMP(6), commercial_disabled_by = ? WHERE id = ?', [context.user.id, result.insertId]);
+      }
+      if (table === 'products' && stored.price_cents > 0 && context?.capabilities.includes('MANAGE_PRICES')) {
+        await db.execute('UPDATE products SET price_confirmed_at = UTC_TIMESTAMP(6), price_confirmed_by = ? WHERE id = ?', [context.user.id, result.insertId]);
+      }
       return { id: result.insertId };
     },
     async update(id, data, resource = 'products') {
@@ -196,6 +203,17 @@ export function createCatalog(db, context = null) {
         [...Object.values(stored), id],
       );
       if (!result.affectedRows) throw new ApiError(404, 'NOT_FOUND');
+      if (table === 'products' && Object.hasOwn(data, 'is_active') && context?.user) {
+        await db.execute('UPDATE products SET commercial_disabled_at = IF(? = 0, UTC_TIMESTAMP(6), NULL), commercial_disabled_by = ? WHERE id = ?',
+          [data.is_active, data.is_active ? null : context.user.id, id]);
+      }
+      if (table === 'products' && Object.hasOwn(data, 'price_cents') && context?.capabilities.includes('MANAGE_PRICES')) {
+        await db.execute('UPDATE products SET price_confirmed_at = IF(? > 0, UTC_TIMESTAMP(6), NULL), price_confirmed_by = ? WHERE id = ?',
+          [data.price_cents, data.price_cents > 0 ? context.user.id : null, id]);
+      }
+      if (table === 'products' && (data.price_cents === 0 || data.is_active === false)) {
+        await db.execute('UPDATE product_branch_preparation SET activated_at = NULL, activated_by = NULL WHERE product_id = ?', [id]);
+      }
       return { id };
     },
   };

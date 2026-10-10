@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ApiError, positiveId } from './catalog.js';
 import { priceCatalogPage } from './catalog-pricing.js';
+import { sellableProductSql } from './product-preparation.js';
 
 const fail = (code = 'WEB_ORDER_INVALID', status = 400) => { throw new ApiError(status, code); };
 const digest = value => createHash('sha256').update(value).digest();
@@ -55,8 +56,8 @@ export async function quoteOrderProducts(connection, input) {
     ORDER BY p.id FOR UPDATE`, [ids]);
   const [rows] = await connection.execute(priceCatalogPage(`SELECT p.id, p.common_name, p.internal_code, p.price_cents, p.is_active
     FROM products p JOIN categories c ON c.id = p.category_id
-    WHERE p.is_active = 1 AND c.is_active = 1
-    AND p.id IN (SELECT value FROM JSON_TABLE(?, '$[*]' COLUMNS (value BIGINT PATH '$')) j)`), [ids]);
+    WHERE p.is_active = 1 AND c.is_active = 1 AND ${sellableProductSql('?')}
+    AND p.id IN (SELECT value FROM JSON_TABLE(?, '$[*]' COLUMNS (value BIGINT PATH '$')) j)`), [input.branch_id, ids]);
   if (rows.length !== input.items.length) fail('WEB_ORDER_ITEMS_UNAVAILABLE', 409);
   let subtotal = 0n, total = 0n;
   const items = rows.map(row => {

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source_key": "plantas_sinteticas_ejemplo",
+  "items": [
+    {
+      "entry_id": "follaje-001",
+      "original_name": "Planta de ejemplo sintetica",
+      "category": "Follaje",
+      "scientific_name": null,
+      "presentation": null,
+      "size": null,
+      "internal_code": null,
+      "barcode": null
+    }
+  ]
+}

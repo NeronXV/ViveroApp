@@ -6,6 +6,9 @@ import { createPromotions, validatePromotion } from './promotions.js';
 import { createWebOrders } from './web-orders.js';
 import { createOrderAdmin, orderAdminQuery, orderScope, validateOrderStatus } from './web-order-admin.js';
 import { createInventory, inventoryBody, inventoryQuery, createInventoryActivation, activationInput } from './inventory.js';
+import { createInventoryObservations, observationInput, decisionInput, observationQuery } from './inventory-observations.js';
+import { createProductPreparation } from './product-preparation.js';
+import { inventoryPermissions } from './inventory-policy.js';
 import { createSales, saleQuery } from './sales.js';
 import { createCashier, cashierQuery, claimInput, paymentInput } from './cashier.js';
 import { sendOrderToCashier } from './web-order-checkout.js';
@@ -63,7 +66,7 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
       const method = request.method;
       if (url.pathname === '/health' && method === 'GET') {
         try {
-          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version = '032_pending_sale_cancellations'");
+          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version = '033_inventory_preparation'");
           if (!migrations.length) throw new Error('Migration required');
           if (imageStore) await imageStore.check();
         }
@@ -387,11 +390,63 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
           throw new ApiError(404, 'NOT_FOUND');
           }, { readCommitted: true }));
       }
+      if (url.pathname === '/api/v1/inventory/permissions' && method === 'GET') {
+        if (url.search) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
+        return send(200, await auth.withAccess(request, ['MANAGE_INVENTORY'], (_db, context) =>
+          ({ schema_version: 1, branch_id: context.branch?.id, permissions: inventoryPermissions(context) })));
+      }
+      if (url.pathname === '/api/v1/inventory/count-baseline' && method === 'GET') {
+        if ([...url.searchParams.keys()].length !== 1 || !url.searchParams.has('product_id')) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
+        const id = positiveId(url.searchParams.get('product_id'));
+        return send(200, await auth.withAccess(request, ['MANAGE_INVENTORY'], (db, context) =>
+          createInventoryObservations(db, context).baseline(id), { readCommitted: true }));
+      }
+      const observations = /^\/api\/v1\/inventory\/count-observations(?:\/(result|[1-9][0-9]*)\/?)?$/.exec(url.pathname);
+      if (observations) {
+        bearerToken(request);
+        const operation = observations[1];
+        if (method !== 'GET' && url.search) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
+        if (method === 'GET' && operation) throw new ApiError(404, 'NOT_FOUND');
+        const query = method === 'GET' ? observationQuery(url.searchParams) : null;
+        const input = method === 'POST' ? (operation && operation !== 'result'
+          ? decisionInput(await body(request), request.headers['idempotency-key'])
+          : observationInput(await body(request), request.headers['idempotency-key'])) : null;
+        if (!['GET', 'POST'].includes(method)) throw new ApiError(404, 'NOT_FOUND');
+        const result = await auth.withAccess(request, ['MANAGE_INVENTORY'], (db, context) => {
+          for (const [header, actual] of [['x-expected-actor-id', context.user.id], ['x-expected-branch-id', context.branch?.id]]) {
+            if (request.headers[header] !== undefined && positiveId(request.headers[header]) !== actual) throw new ApiError(403, 'INVENTORY_IDENTITY_CHANGED');
+          }
+          const service = createInventoryObservations(db, context);
+          if (query) return service.list(query);
+          if (operation === 'result') return service.result(input);
+          return operation ? service.decide(positiveId(operation), input) : service.observe(input);
+        }, { readCommitted: true });
+        return send(method === 'GET' || result.idempotent_replay ? 200 : 201, result);
+      }
+      const preparation = /^\/api\/v1\/products\/([1-9][0-9]*)\/preparation(?:\/(activate))?$/.exec(url.pathname);
+      if (preparation) {
+        bearerToken(request);
+        if (url.search || (preparation[2] ? method !== 'POST' : method !== 'GET')) throw new ApiError(404, 'NOT_FOUND');
+        if (method === 'POST') {
+          const input = await body(request);
+          if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ApiError(400, 'INVALID_INPUT');
+        }
+        return send(200, await auth.withAccess(request, ['MANAGE_PRODUCTS'], (db, context) => {
+          for (const [header, actual] of [['x-expected-actor-id', context.user.id], ['x-expected-branch-id', context.branch?.id]]) {
+            if (request.headers[header] !== undefined && positiveId(request.headers[header]) !== actual) throw new ApiError(403, 'INVENTORY_IDENTITY_CHANGED');
+          }
+          const service = createProductPreparation(db, context);
+          return preparation[2] ? service.activate(positiveId(preparation[1])) : service.state(positiveId(preparation[1]));
+        }, { readCommitted: true }));
+      }
       if (url.pathname === '/api/v1/inventory/activation' && ['GET', 'POST'].includes(method)) {
         bearerToken(request);
         if (url.search) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
         if (method === 'POST') activationInput(await body(request));
         return send(200, await auth.withAccess(request, ['MANAGE_INVENTORY'], (db, context) => {
+          for (const [header, actual] of [['x-expected-actor-id', context.user.id], ['x-expected-branch-id', context.branch?.id]]) {
+            if (request.headers[header] !== undefined && positiveId(request.headers[header]) !== actual) throw new ApiError(403, 'INVENTORY_IDENTITY_CHANGED');
+          }
           const service = createInventoryActivation(db, context);
           return method === 'POST' ? service.activate() : service.state();
         }, { readCommitted: true }));
