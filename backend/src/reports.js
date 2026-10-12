@@ -36,12 +36,15 @@ export function createReports(db, context) {
   return {
     async daily(query) {
       const branch = reportScope(context, query.branch_id);
+      // Direct sales store an effective-price subtotal; Web sales store a list-
+      // price subtotal with line discounts already included in the header.
+      // Only the list-price reduction outside that subtotal is additional.
       const [rows] = await db.execute(`SELECT s.branch_id, b.name AS branch_name,
         DATE_FORMAT(p.created_at,'%Y-%m-%d') AS day, COUNT(*) AS sales_count,
         SUM(p.amount_due_cents) AS revenue_cents,
-        SUM(s.discount_cents + COALESCE(d.item_discount,0)) AS discount_cents
+        SUM(s.discount_cents + GREATEST(COALESCE(d.list_subtotal,s.subtotal_cents)-s.subtotal_cents,0)) AS discount_cents
         FROM cashier_payments p JOIN sales s ON s.id=p.sale_id JOIN branches b ON b.id=s.branch_id
-        LEFT JOIN (SELECT sale_id, SUM((COALESCE(list_price_cents,unit_price_cents)-unit_price_cents)*quantity) AS item_discount FROM sale_items GROUP BY sale_id) d ON d.sale_id=s.id
+        LEFT JOIN (SELECT sale_id, SUM(COALESCE(list_price_cents,unit_price_cents)*quantity) AS list_subtotal FROM sale_items GROUP BY sale_id) d ON d.sale_id=s.id
         WHERE (? IS NULL OR s.branch_id=?) AND p.created_at>=? AND p.created_at<?
         GROUP BY s.branch_id,b.name,DATE_FORMAT(p.created_at,'%Y-%m-%d')
         ORDER BY day DESC,branch_name ASC,s.branch_id ASC LIMIT ?`, [branch, branch, query.start, query.end, query.limit + 1]);

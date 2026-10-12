@@ -32,9 +32,15 @@ revenue_cents y discount_cents. Usa fecha y amount_due_cents de cashier_payments
 sin filtrar el estado actual de venta, conforme al RPC vigente tras promociones.
 No usa efectivo entregado ni resta cambio: ingreso es el importe cobrado.
 Incluye el cobro histórico aunque luego haya devolución; no es ingreso neto.
-Descuento = descuento de cabecera + suma por línea de
-(list_price_cents - unit_price_cents) * quantity. Para líneas históricas sin
-precio de lista se usa unit_price_cents. No consulta precios/promociones actuales.
+Descuento = descuento de cabecera + MAX(0, total de lista de partidas - subtotal
+guardado). El total de lista suma COALESCE(list_price_cents, unit_price_cents) *
+quantity. Las ventas directas guardan subtotal efectivo; los pedidos Web guardan
+subtotal de lista y sus descuentos por partida ya están en la cabecera. Esta
+fórmula evita duplicarlos y conserva descuentos generales independientes, sin
+depender de web_order_id. Para líneas históricas sin precio de lista se usa
+unit_price_cents; sin partidas se conserva solo el descuento de cabecera.
+No consulta precios/promociones actuales ni modifica transacciones. Se mantienen
+centavos exactos y el rechazo de agregados fraccionarios o fuera del rango JSON.
 
 Top devuelve product_id, product_name, product_code, total_quantity,
 total_revenue_cents. Conserva el RPC anterior: solo ventas PAID, cantidades y
