@@ -11,9 +11,11 @@ import { createImageStore } from '../src/images.js';
 import { hashPassword } from '../src/auth/password.js';
 import { importCatalogingDrafts } from '../scripts/cataloging-import.js';
 
-if(process.env.TEST_SCOPE!=='cataloging-native-synthetic' || process.env.DB_HOST!=='127.0.0.1' || !['43387','43388'].includes(process.env.DB_PORT))throw new Error('Dedicated native synthetic database required');
+if(process.env.TEST_SCOPE!=='cataloging-native-synthetic' || process.env.DB_HOST!=='127.0.0.1' || !['43387','43388','43389'].includes(process.env.DB_PORT))throw new Error('Dedicated native synthetic database required');
 const port=Number(process.env.DB_PORT);
-const root=resolve(import.meta.dirname,'../..'), output=resolve(root,'tmp/cataloging-mobile-20261010',port===43388 ? 'mariadb114' : '.');
+const root=resolve(import.meta.dirname,'../..');
+if(port===43389 && !/^plants-contract-[a-f0-9]{32}$/.test(process.env.CATALOGING_TEST_RUN ?? ''))throw new Error('Fresh synthetic run directory required');
+const output=port===43389 ? resolve(root,'tmp',process.env.CATALOGING_TEST_RUN) : resolve(root,'tmp/cataloging-mobile-20261010',port===43388 ? 'mariadb114' : '.');
 let admin,pool,server,origin,people,category,product;
 const password='Synthetic-cataloging-password-034';
 const key=()=>randomBytes(24).toString('hex');
@@ -27,7 +29,7 @@ const fields=()=>({approved_name:'Planta sintética',presentation:'M06',internal
 const create=async()=>call('cataloging','POST',{original_name:'Original literal sintético',fields:{}});
 const edit=(d,action,f={},person='manager',k=key(),extra={})=>call(`cataloging/${d.id}`,'PATCH',{revision:d.revision,action,fields:f,...extra},person,k);
 before(async()=>{
-  const config=JSON.parse(await readFile(resolve(output,'native-db.private.json'),'utf8'));
+  const config=JSON.parse((await readFile(resolve(output,'native-db.private.json'),'utf8')).replace(/^\uFEFF/,''));
   admin=await mysql.createConnection({host:'127.0.0.1',port,user:'root',password:config.password,multipleStatements:true,supportBigNumbers:true,bigNumberStrings:true});
   const [[existing]]=await admin.query("SELECT COUNT(*) n FROM information_schema.schemata WHERE schema_name='vivero'");
   assert.equal(Number(existing.n),0,'Refuses an existing database');
@@ -38,16 +40,18 @@ before(async()=>{
   await admin.query(await readFile(resolve(root,'database/mysql/seed.sql'),'utf8'));
   await admin.query(await readFile(resolve(root,'database/mysql/grants.sql'),'utf8'));
   const migrations=(await readdir(resolve(root,'database/mysql/migrations'))).filter(n=>/^\d{3}_.*\.sql$/.test(n)).sort();
-  for(const file of migrations.filter(n=>!n.startsWith('034_')))await admin.query(await readFile(resolve(root,'database/mysql/migrations',file),'utf8'));
+  for(const file of migrations.filter(n=>n<'034_'))await admin.query(await readFile(resolve(root,'database/mysql/migrations',file),'utf8'));
   const [beforeProducts]=await admin.query('SELECT * FROM products ORDER BY id');
   const [beforeInventory]=await admin.query('SELECT * FROM inventory ORDER BY id');
   await admin.query(await readFile(resolve(root,'database/mysql/migrations/034_cataloging_drafts.sql'),'utf8'));
   const [afterProducts]=await admin.query('SELECT * FROM products ORDER BY id');
   assert.deepEqual(afterProducts.map(({catalog_revision,...p})=>p),beforeProducts);
   assert.deepEqual((await admin.query('SELECT * FROM inventory ORDER BY id'))[0],beforeInventory);
+  for(const file of migrations.filter(n=>n>'034_zz'))await admin.query(await readFile(resolve(root,'database/mysql/migrations',file),'utf8'));
   people={};
+  await admin.query("INSERT INTO branches(id,code,name,is_active) VALUES(2,'SYNTHETIC-SECOND','Sucursal sintética de pruebas',1)");
   const hashed=await hashPassword(password);
-  for(const role of ['owner','manager','inventory','cashier']){
+  for(const role of ['owner','admin','manager','inventory','cashier']){
     const [u]=await admin.execute('INSERT INTO users(email,full_name,password_hash,role_id,branch_id,is_active) VALUES(?,?,?,(SELECT id FROM roles WHERE name=?),1,1)',
       [`${role}-034@example.invalid`,`${role} sintético`,hashed,role.toUpperCase()]);people[role]={id:u.insertId};
   }
@@ -69,6 +73,14 @@ test('actual permissions, login and identity guards isolate cataloging',async()=
   assert.equal((await call('cataloging','POST',{original_name:'Synthetic',fields:{}},'cashier')).status,403);
   assert.equal((await call('cataloging','POST',{original_name:'Synthetic',fields:{}},'manager',key(),{'X-Expected-Actor-Id':'999'})).status,409);
   const [[n]]=await admin.query('SELECT COUNT(*) n FROM inventory');assert.equal(Number(n.n),2);
+});
+
+test('health requires both cataloging migrations, not just one matching row',async()=>{
+  assert.equal((await fetch(origin+'/health')).status,200);
+  await admin.query("UPDATE schema_migrations SET version='synthetic_hidden_035' WHERE version='035_cataloging_publish'");
+  try { assert.equal((await fetch(origin+'/health')).status,503); }
+  finally { await admin.query("UPDATE schema_migrations SET version='035_cataloging_publish' WHERE version='synthetic_hidden_035'"); }
+  assert.equal((await fetch(origin+'/health')).status,200);
 });
 test('same attempt recovers create/update; two users cannot silently overwrite',async()=>{
   const k=key(),body={original_name:'Replay original',fields:{}};
@@ -132,4 +144,306 @@ test('Caja still quotes and charges legacy products once; pending products canno
   const replay=await call(`cashier/sales/${id}/payments`,'POST',body,'cashier',paymentKey);assert.equal(replay.status,200);assert.equal(replay.data.payment.id,paid.data.payment.id);
   const [[n]]=await admin.execute('SELECT COUNT(*) n FROM cashier_payments WHERE sale_id=?',[id]);assert.equal(Number(n.n),1);
   const [[balance]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);assert.equal(balance.quantity,'10.000');
+});
+
+const publish=(d,body={},person='manager',k=key())=>call(`cataloging/${d.id}/publish`,'POST',{
+  revision:d.revision,fields:{...fields(),internal_code:''},price_cents:12500,initial_quantity:7,...body,
+},person,k);
+test('unified confirmation publishes a ficha once without creating inventory or movements',async()=>{
+  const draft=(await create()).data,k=key();
+  const body={target:'draft',id:draft.id,revision:draft.revision,fields:{...fields(),internal_code:''},price_cents:12900};
+  const first=await call('plants/confirm','POST',body,'manager',k);
+  assert.equal(first.status,200,JSON.stringify(first.data));
+  assert.equal(first.data.publication.ready,false);
+  assert.equal(first.data.publication.needs_initial_count,true);
+  const replay=await call('plants/confirm','POST',body,'manager',k);
+  assert.deepEqual(replay.data,first.data);
+  assert.equal((await call('plants/confirm','POST',body)).status,409);
+  const id=first.data.product_id;
+  for(const table of ['inventory','inventory_movements','inventory_counts']){
+    const [[n]]=await admin.execute(`SELECT COUNT(*) n FROM ${table} WHERE product_id=?`,[id]);
+    assert.equal(Number(n.n),0,table);
+  }
+  const [[p]]=await admin.execute('SELECT is_active,price_confirmed_at FROM products WHERE id=?',[id]);
+  assert.equal(p.is_active,0);assert.ok(p.price_confirmed_at);
+});
+test('unified confirmation activates only after a previously confirmed initial count',async()=>{
+  const draft=(await create()).data;
+  const created=await call('plants/confirm','POST',{target:'draft',id:draft.id,revision:draft.revision,
+    fields:{...fields(),internal_code:''},price_cents:12500});
+  assert.equal(created.status,200,JSON.stringify(created.data));
+  const id=created.data.product_id;
+  await admin.execute('INSERT INTO product_branch_preparation(product_id,branch_id,initial_count_confirmed_at,initial_count_confirmed_by) VALUES(?,1,UTC_TIMESTAMP(6),?)',[id,people.manager.id]);
+  const revision=(await call(`products/${id}/edit-version`)).data.revision;
+  const body={target:'product',id,revision,fields:{common_name:'Planta sintética · M06',category_id:category,
+    description:'Ficha completa',light_type:'Indirecta',watering_advice:'Cada semana'},price_cents:12500};
+  const k=key(),first=await call('plants/confirm','POST',body,'manager',k);
+  assert.equal(first.status,200,JSON.stringify(first.data));assert.equal(first.data.ready,true);
+  assert.deepEqual((await call('plants/confirm','POST',body,'manager',k)).data,first.data);
+  const [[p]]=await admin.execute('SELECT is_active FROM products WHERE id=?',[id]);assert.equal(p.is_active,1);
+  for(const table of ['inventory_movements','inventory_counts']){
+    const [[n]]=await admin.execute(`SELECT COUNT(*) n FROM ${table} WHERE product_id=?`,[id]);assert.equal(Number(n.n),0,table);
+  }
+});
+test('unified link reuses a catalog product and its price without adding inventory',async()=>{
+  const draft=(await create()).data,k=key();
+  const [[beforeProduct]]=await admin.execute('SELECT price_cents FROM products WHERE id=?',[product]);
+  const [[beforeStock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  const [[beforeMovements]]=await admin.execute('SELECT COUNT(*) n FROM inventory_movements WHERE branch_id=1 AND product_id=?',[product]);
+  const body={target:'draft',id:draft.id,revision:draft.revision,fields:{...fields(),internal_code:''},price_cents:0,product_id:product};
+  const first=await call('plants/confirm','POST',body,'manager',k);
+  assert.equal(first.status,200,JSON.stringify(first.data));assert.equal(first.data.product_id,product);
+  assert.equal(first.data.status,'LINKED');
+  assert.equal(first.data.publication.price_cents,Number(beforeProduct.price_cents));
+  assert.deepEqual((await call('plants/confirm','POST',body,'manager',k)).data,first.data);
+  const [[afterStock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  const [[afterMovements]]=await admin.execute('SELECT COUNT(*) n FROM inventory_movements WHERE branch_id=1 AND product_id=?',[product]);
+  assert.equal(afterStock.quantity,beforeStock.quantity);assert.equal(afterMovements.n,beforeMovements.n);
+});
+async function assertSinglePublication(result,quantity=7) {
+  const id=result.product_id;
+  assert.ok(id);
+  const [[p]]=await admin.execute('SELECT is_active,price_cents FROM products WHERE id=?',[id]);
+  assert.equal(p.is_active,1);assert.equal(Number(p.price_cents),12500);
+  const [[stock]]=await admin.execute('SELECT quantity FROM inventory WHERE product_id=? AND branch_id=1',[id]);
+  assert.equal(stock.quantity,`${quantity}.000`);
+  for(const table of ['inventory_movements','inventory_counts','product_branch_preparation']) {
+    const [[n]]=await admin.execute(`SELECT COUNT(*) n FROM ${table} WHERE product_id=?`,[id]);assert.equal(Number(n.n),1,table);
+  }
+}
+test('publish response loss, concurrent same-key retries and different-key retries create one product and one stock operation',async()=>{
+  const d=(await create()).data,k=key();
+  const results=await Promise.all([publish(d,{},'manager',k),publish(d,{},'manager',k)]);
+  for(const r of results)assert.equal(r.status,200,JSON.stringify(r.data));
+  assert.deepEqual(results[0].data,results[1].data);
+  const replay=await publish(d,{},'manager',k);assert.deepEqual(replay.data,results[0].data);
+  assert.equal((await publish(d)).status,409);
+  assert.equal((await publish(d,{initial_quantity:8},'manager',k)).data.error,'CATALOGING_KEY_CONFLICT');
+  assert.deepEqual(replay.data.publication,{branch_id:1,price_cents:12500,initial_quantity:7,ready:true});
+  await assertSinglePublication(replay.data);
+  const current=(await call(`cataloging/${d.id}`)).data;
+  assert.equal(current.status,'PREPARED');assert.equal(current.revision,2);
+  assert.equal((await publish(current)).data.error,'CATALOGING_CLOSED');
+});
+test('two authorized actors publishing the same revision cannot create duplicate products',async()=>{
+  const d=(await create()).data;
+  const results=await Promise.all([publish(d),publish(d,{},'owner')]);
+  assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+  await assertSinglePublication(results.find(r=>r.status===200).data);
+});
+test('existing publisher capabilities complete REVIEW, preserve omitted fields and publish; workers cannot publish or link',async()=>{
+  for(const actor of ['manager','admin','owner']) {
+    const d=(await create()).data;
+    const submitted=await edit(d,'SUBMIT',{...fields(),internal_code:'',suggested_price_cents:12500,initial_quantity:7},'inventory');
+    assert.equal(submitted.status,200);
+    assert.equal((await edit(submitted.data,'SAVE',{description:'Denied'},'inventory')).data.error,'CATALOGING_IN_REVIEW');
+    assert.equal((await edit(submitted.data,'SUBMIT',{description:'Cannot bypass review with submit'},'inventory')).data.error,'CATALOGING_IN_REVIEW');
+    const saved=await edit(submitted.data,'SAVE',{description:'Conserva precio y existencia'},actor);
+    assert.equal(saved.status,200);assert.equal(saved.data.status,'REVIEW');
+    assert.equal(saved.data.fields.suggested_price_cents,12500);assert.equal(saved.data.fields.initial_quantity,7);
+    assert.equal((await publish(saved.data,{},'inventory')).status,403);
+    assert.equal((await edit(saved.data,'LINK',{},'inventory',key(),{product_id:product})).status,403);
+    const published=await publish(saved.data,{},actor);assert.equal(published.status,200,JSON.stringify(published.data));
+    await assertSinglePublication(published.data);
+  }
+});
+test('publisher links DRAFT and REVIEW without changing product, movements or stock',async()=>{
+  const [productsBefore]=await admin.query('SELECT * FROM products ORDER BY id');
+  const [stockBefore]=await admin.query('SELECT * FROM inventory ORDER BY id');
+  const [[movementsBefore]]=await admin.query('SELECT COUNT(*) n FROM inventory_movements');
+  for(const status of ['DRAFT','REVIEW']) {
+    let d=(await create()).data;if(status==='REVIEW')d=(await edit(d,'SUBMIT')).data;
+    const k=key(),r=await edit(d,'LINK',{},'manager',k,{product_id:product});assert.equal(r.status,200);
+    assert.equal(r.data.status,'LINKED');
+    assert.deepEqual((await edit(d,'LINK',{},'manager',k,{product_id:product})).data,r.data);
+    assert.equal((await publish(r.data)).data.error,'CATALOGING_CLOSED');
+  }
+  assert.deepEqual((await admin.query('SELECT * FROM products ORDER BY id'))[0],productsBefore);
+  assert.deepEqual((await admin.query('SELECT * FROM inventory ORDER BY id'))[0],stockBefore);
+  assert.deepEqual((await admin.query('SELECT COUNT(*) n FROM inventory_movements'))[0][0],movementsBefore);
+});
+test('autogenerated SKU still checks barcode collision and failed publication leaves no partial effects',async()=>{
+  const d=(await create()).data;
+  const [[existing]]=await admin.execute('SELECT internal_code FROM products WHERE id=?',[product]);
+  const [[before]]=await admin.query('SELECT COUNT(*) n FROM products');
+  const failed=await publish(d,{fields:{...fields(),internal_code:'',barcode:existing.internal_code}});
+  assert.equal(failed.status,409);assert.equal(failed.data.error,'CATALOGING_PRODUCT_EXISTS');
+  assert.deepEqual((await admin.query('SELECT COUNT(*) n FROM products'))[0][0],before);
+  assert.deepEqual((await call(`cataloging/${d.id}`)).data,d);
+});
+test('transaction rollback after product and stock writes permits a clean retry with the same key',async()=>{
+  const d=(await create()).data,k=key();
+  const [[before]]=await admin.query('SELECT COUNT(*) n FROM products');
+  await admin.query("CREATE TRIGGER synthetic_reject_cataloging_event BEFORE INSERT ON cataloging_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Synthetic transaction failure'");
+  try { assert.equal((await publish(d,{},'manager',k)).status,503); }
+  finally { await admin.query('DROP TRIGGER synthetic_reject_cataloging_event'); }
+  assert.deepEqual((await admin.query('SELECT COUNT(*) n FROM products'))[0][0],before);
+  assert.deepEqual((await call(`cataloging/${d.id}`)).data,d);
+  const result=await publish(d,{},'manager',k);assert.equal(result.status,200);await assertSinglePublication(result.data);
+});
+test('publication without price or positive count creates an inactive product without invented stock',async()=>{
+  for(const body of [{price_cents:null,initial_quantity:null},{price_cents:12500,initial_quantity:0},{price_cents:null,initial_quantity:7}]) {
+    const d=(await create()).data,r=await publish(d,body);assert.equal(r.status,200);
+    assert.equal(r.data.publication.ready,false);
+    const [[p]]=await admin.execute('SELECT is_active FROM products WHERE id=?',[r.data.product_id]);assert.equal(p.is_active,0);
+    const [[n]]=await admin.execute('SELECT COUNT(*) n FROM inventory_movements WHERE product_id=?',[r.data.product_id]);
+    assert.equal(Number(n.n),body.initial_quantity>0?1:0);
+  }
+});
+test('photo on REVIEW is allowed to publisher and replays after publication without duplicate images',async()=>{
+  const d=(await edit((await create()).data,'SUBMIT')).data,k=key();
+  const png=await sharp({create:{width:4,height:4,channels:3,background:'#376b45'}}).png().toBuffer();
+  const upload=(person='manager')=>fetch(`${origin}/api/v1/cataloging/${d.id}/photo`,{method:'PUT',headers:{Authorization:`Bearer ${people[person].token}`,'Content-Type':'image/png',
+    'X-Expected-Actor-Id':String(people[person].id),'X-Expected-Branch-Id':'1','Idempotency-Key':k,'X-Cataloging-Revision':String(d.revision)},body:png});
+  assert.equal((await upload('inventory')).status,409);
+  const response=await upload();assert.equal(response.status,200);const saved=await response.json();
+  const published=await publish(saved);assert.equal(published.status,200);
+  assert.deepEqual(await (await upload()).json(),saved);
+  const [[n]]=await admin.execute('SELECT COUNT(*) n FROM product_images WHERE product_id=?',[published.data.product_id]);assert.equal(Number(n.n),1);
+});
+
+test('publication recovery is tied to the original branch, including legacy receipts',async()=>{
+  const d=(await create()).data,k=key(),body={revision:d.revision,fields:{...fields(),internal_code:''},price_cents:12500,initial_quantity:7};
+  const first=await call(`cataloging/${d.id}/publish`,'POST',body,'manager',k);assert.equal(first.status,200);
+  for(const legacy of [false,true]) {
+    if(legacy) await admin.execute("UPDATE cataloging_events SET result=JSON_REMOVE(result,'$.publication') WHERE draft_id=? AND JSON_UNQUOTE(JSON_EXTRACT(result,'$.status'))='PREPARED'",[d.id]);
+    await admin.execute('UPDATE users SET branch_id=2 WHERE id=?',[people.manager.id]);
+    try {
+      const result=await call(`cataloging/${d.id}/publish`,'POST',body,'manager',k,{'X-Expected-Branch-Id':'2'});
+      assert.equal(result.status,409);assert.equal(result.data.error,'CATALOGING_SESSION_CHANGED');
+    } finally { await admin.execute('UPDATE users SET branch_id=1 WHERE id=?',[people.manager.id]); }
+    const recovered=await call(`cataloging/${d.id}/publish`,'POST',body,'manager',k);assert.equal(recovered.status,200);
+    assert.equal(recovered.data.product_id,first.data.product_id);
+  }
+  await assertSinglePublication(first.data);
+});
+
+test('retry after capability revocation never bypasses current authorization',async()=>{
+  const d=(await create()).data,k=key();const first=await publish(d,{},'manager',k);assert.equal(first.status,200);
+  await admin.execute("UPDATE users SET role_id=(SELECT id FROM roles WHERE name='INVENTORY') WHERE id=?",[people.manager.id]);
+  try { assert.equal((await publish(d,{},'manager',k)).status,403); }
+  finally { await admin.execute("UPDATE users SET role_id=(SELECT id FROM roles WHERE name='MANAGER') WHERE id=?",[people.manager.id]); }
+  assert.deepEqual((await publish(d,{},'manager',k)).data,first.data);
+  await assertSinglePublication(first.data);
+});
+
+async function arrival(reference=key(),quantities=[10,10,10]) {
+  const supplier=await call('suppliers','POST',{code:`S-${key().slice(0,12)}`,name:'Proveedor sintético',is_active:true});
+  assert.equal(supplier.status,201,JSON.stringify(supplier.data));
+  const input={supplier_id:supplier.data.supplier.id,document_date:'2026-10-15',external_reference:reference,payment_terms:'OTHER',expected_total_cents:quantities.reduce((sum,quantity)=>sum+quantity*100,0),source_file_name:'synthetic.pdf',items:[1,2,3].map(n=>({line_number:n,raw_description:`Sintética ${n}`,container_code:'M6',suggested_common_name:null,suggested_presentation:null,quantity:quantities[n-1],unit_cost_cents:100}))};
+  const d=await call('supplier-purchases','POST',input);assert.equal(d.status,201,JSON.stringify(d.data));
+  return {d:d.data.purchase,input};
+}
+test('arrival binds new plants and adds actual quantities once; completing the same product does not add stock',async()=>{
+  const {d,input}=await arrival();
+  const [[before]]=await admin.execute('SELECT quantity FROM inventory WHERE product_id=? AND branch_id=1',[product]);
+  const newPlant={name:'Planta nueva del camión',presentation:'Maceta 6',category_id:category};
+  const edit={revision:d.revision,items:d.items.map((i,n)=>({id:i.id,quantity:n===0?4:3,product_id:n===0?product:null,new_product:n===0?null:newPlant}))};
+  const revised=await call(`supplier-purchases/${d.id}`,'PATCH',edit);assert.equal(revised.status,200,JSON.stringify(revised.data));
+  const again=await call(`supplier-purchases/${d.id}`,'PATCH',edit);assert.deepEqual(again.data,revised.data);
+  assert.equal((await call(`supplier-purchases/${d.id}`,'PATCH',{...edit,items:edit.items.map(i=>({...i,quantity:5}))})).status,409);
+  const body={revision:revised.data.purchase.revision},k=key();
+  const results=await Promise.all([call(`supplier-purchases/${d.id}/confirm`,'POST',body,'manager',k),call(`supplier-purchases/${d.id}/confirm`,'POST',body,'manager',k)]);
+  for(const r of results)assert.ok([200,201].includes(r.status),JSON.stringify(r.data));
+  const receipt=results[0].data.purchase;
+  assert.equal(receipt.items[1].product_id,receipt.items[2].product_id);
+  const pid=receipt.items[1].product_id;
+  const [[stock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[pid]);assert.equal(stock.quantity,'6.000');
+  const [[existing]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);assert.equal(Number(existing.quantity),Number(before.quantity)+4);
+  const [[p]]=await admin.execute('SELECT is_active,price_cents FROM products WHERE id=?',[pid]);assert.equal(p.is_active,0);assert.equal(Number(p.price_cents),0);
+  const rev=(await call(`products/${pid}/edit-version`)).data.revision,editKey=key(),patch={price_cents:2500,description:'Información completada desde el celular'};
+  const saved=await call(`products/${pid}`,'PATCH',patch,'manager',editKey,{'If-Match':`"${rev}"`});assert.equal(saved.status,200,JSON.stringify(saved.data));
+  assert.deepEqual((await call(`products/${pid}`,'PATCH',patch,'manager',editKey,{'If-Match':`"${rev}"`})).data,saved.data);
+  assert.equal((await call(`products/${pid}/preparation/activate`,'POST',{})).status,200);
+  assert.deepEqual((await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[pid]))[0][0],stock);
+  assert.equal((await call('supplier-purchases','POST',input)).status,409);
+  assert.equal((await call(`supplier-purchases/${d.id}/confirm`,'POST',{revision:1},'manager',k)).status,409);
+});
+
+test('arrival keeps zero lines and stages unclassified stock until a manager confirms its draft once',async()=>{
+  const {d}=await arrival();
+  const [[before]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  const edit={revision:d.revision,items:d.items.map((i,n)=>({id:i.id,quantity:n===0?0:n===1?4:3,
+    product_id:n===1?product:null,new_product:n===2?{name:'Nueva sin clasificar',presentation:null,category_id:null}:null}))};
+  const revised=await call(`supplier-purchases/${d.id}`,'PATCH',edit);assert.equal(revised.status,200,JSON.stringify(revised.data));
+  const confirmBody={revision:revised.data.purchase.revision},confirmKey=key();
+  await admin.query("CREATE TRIGGER synthetic_pending_arrival_failure BEFORE UPDATE ON supplier_purchase_documents FOR EACH ROW BEGIN IF NEW.status='RECEIVED' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Synthetic pending failure'; END IF; END");
+  try {assert.equal((await call(`supplier-purchases/${d.id}/confirm`,'POST',confirmBody,'manager',confirmKey)).status,503)}
+  finally {await admin.query('DROP TRIGGER synthetic_pending_arrival_failure')}
+  const [[rolledBack]]=await admin.execute("SELECT COUNT(*) AS n FROM cataloging_drafts WHERE source_key='supplier_purchase_item' AND source_id=?",[String(d.items[2].id)]);
+  assert.equal(Number(rolledBack.n),0);
+  const first=await call(`supplier-purchases/${d.id}/confirm`,'POST',confirmBody,'manager',confirmKey);
+  assert.equal(first.status,201,JSON.stringify(first.data));
+  const replay=await call(`supplier-purchases/${d.id}/confirm`,'POST',confirmBody,'manager',confirmKey);
+  assert.deepEqual(replay.data.purchase,first.data.purchase);
+  const [[ignored]]=await admin.execute('SELECT quantity,product_id,movement_id,resolution_status FROM supplier_purchase_items WHERE id=?',[d.items[0].id]);
+  assert.equal(ignored.quantity,0);assert.equal(ignored.product_id,null);assert.equal(ignored.movement_id,null);assert.equal(ignored.resolution_status,'IGNORED');
+  const [[pending]]=await admin.execute("SELECT id,fields FROM cataloging_drafts WHERE source_key='supplier_purchase_item' AND source_id=?",[String(d.items[2].id)]);
+  assert.ok(pending);assert.equal(JSON.parse(pending.fields).initial_quantity,3);
+  assert.equal((await call(`cataloging/${pending.id}`,'PATCH',{revision:1,action:'SAVE',fields:{initial_quantity:999}})).status,409);
+  const [[unclassified]]=await admin.execute('SELECT product_id,movement_id FROM supplier_purchase_items WHERE id=?',[d.items[2].id]);
+  assert.equal(unclassified.product_id,null);assert.equal(unclassified.movement_id,null);
+  const [[known]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  assert.equal(Number(known.quantity),Number(before.quantity)+4);
+  const publication={target:'draft',id:pending.id,revision:1,fields:{presentation:'Maceta 6',category_id:category},price_cents:2400};
+  const publicationKey=key(),published=await call('plants/confirm','POST',publication,'manager',publicationKey);
+  assert.equal(published.status,200,JSON.stringify(published.data));
+  assert.deepEqual((await call('plants/confirm','POST',publication,'manager',publicationKey)).data,published.data);
+  const [[stock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[published.data.product_id]);
+  assert.equal(stock.quantity,'3.000');
+  const [[movements]]=await admin.execute('SELECT COUNT(*) AS n FROM inventory_movements WHERE branch_id=1 AND product_id=?',[published.data.product_id]);
+  assert.equal(Number(movements.n),1);
+  const [[linked]]=await admin.execute('SELECT product_id,movement_id,resolution_status FROM supplier_purchase_items WHERE id=?',[d.items[2].id]);
+  assert.equal(linked.product_id,published.data.product_id);assert.ok(linked.movement_id);assert.equal(linked.resolution_status,'MATCHED');
+});
+
+test('a document with only zero quantities stays intact and confirms without stock or plant drafts',async()=>{
+  const {d}=await arrival(key(),[0,0,0]);
+  assert.ok(d.items.every(i=>i.quantity===0&&i.resolution_status==='IGNORED'));
+  const [[beforeMovements]]=await admin.execute('SELECT COUNT(*) AS n FROM inventory_movements');
+  const [[beforeDrafts]]=await admin.execute("SELECT COUNT(*) AS n FROM cataloging_drafts WHERE source_key='supplier_purchase_item'");
+  const first=await call(`supplier-purchases/${d.id}/confirm`,'POST',{revision:d.revision},'manager',key());
+  assert.equal(first.status,201,JSON.stringify(first.data));
+  assert.equal(first.data.purchase.status,'RECEIVED');
+  assert.deepEqual((await admin.execute('SELECT COUNT(*) AS n FROM inventory_movements'))[0][0],beforeMovements);
+  assert.deepEqual((await admin.execute("SELECT COUNT(*) AS n FROM cataloging_drafts WHERE source_key='supplier_purchase_item'"))[0][0],beforeDrafts);
+});
+
+test('a received draft can link an existing plant and transfer its quantity once',async()=>{
+  const {d}=await arrival();
+  const edit={revision:d.revision,items:d.items.map((i,n)=>({id:i.id,quantity:n===0?2:0,product_id:null,
+    new_product:n===0?{name:'Planta por vincular',presentation:null,category_id:null}:null}))};
+  const revised=await call(`supplier-purchases/${d.id}`,'PATCH',edit);assert.equal(revised.status,200,JSON.stringify(revised.data));
+  const confirmed=await call(`supplier-purchases/${d.id}/confirm`,'POST',{revision:revised.data.purchase.revision});
+  assert.equal(confirmed.status,201,JSON.stringify(confirmed.data));
+  const [[pending]]=await admin.execute("SELECT id FROM cataloging_drafts WHERE source_key='supplier_purchase_item' AND source_id=?",[String(d.items[0].id)]);
+  const [[before]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  const body={target:'draft',id:pending.id,revision:1,fields:{presentation:'Maceta 6',category_id:category},price_cents:0,product_id:product};
+  const k=key(),first=await call('plants/confirm','POST',body,'manager',k);
+  assert.equal(first.status,200,JSON.stringify(first.data));
+  assert.deepEqual((await call('plants/confirm','POST',body,'manager',k)).data,first.data);
+  const [[afterStock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[product]);
+  assert.equal(Number(afterStock.quantity),Number(before.quantity)+2);
+  const [[item]]=await admin.execute('SELECT product_id,movement_id FROM supplier_purchase_items WHERE id=?',[d.items[0].id]);
+  assert.equal(item.product_id,product);assert.ok(item.movement_id);
+});
+
+test('arrival failure rolls back new products and all movements, then original key recovers',async()=>{
+  const {d}=await arrival();
+  const revised=await call(`supplier-purchases/${d.id}`,'PATCH',{revision:d.revision,items:d.items.map(i=>({id:i.id,quantity:2,product_id:null,new_product:{name:'Fallida',presentation:'M6',category_id:category}}))});
+  assert.equal(revised.status,200,JSON.stringify(revised.data));
+  const k=key(),body={revision:revised.data.purchase.revision};
+  const [[before]]=await admin.query('SELECT COUNT(*) n FROM products');
+  await admin.query("CREATE TRIGGER synthetic_receipt_failure BEFORE UPDATE ON supplier_purchase_documents FOR EACH ROW BEGIN IF NEW.status='RECEIVED' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Synthetic failure'; END IF; END");
+  try {assert.equal((await call(`supplier-purchases/${d.id}/confirm`,'POST',body,'manager',k)).status,503)}finally{await admin.query('DROP TRIGGER synthetic_receipt_failure')}
+  assert.deepEqual((await admin.query('SELECT COUNT(*) n FROM products'))[0][0],before);
+  assert.equal((await call(`supplier-purchases/${d.id}/confirm`,'POST',body,'manager',k)).status,201);
+});
+
+test('product photo replays the exact receipt after response loss',async()=>{
+  const rev=(await call(`products/${product}/edit-version`)).data.revision,k=key();
+  const png=await sharp({create:{width:4,height:4,channels:3,background:'#376b45'}}).png().toBuffer();
+  const upload=()=>fetch(`${origin}/api/v1/products/${product}/catalog-photo`,{method:'PUT',headers:{Authorization:`Bearer ${people.manager.token}`,'Content-Type':'image/png','X-Expected-Actor-Id':String(people.manager.id),'X-Expected-Branch-Id':'1','Idempotency-Key':k,'If-Match':`"${rev}"`},body:png});
+  const first=await upload();assert.equal(first.status,200);const receipt=await first.json();
+  const replay=await upload();assert.equal(replay.status,200);assert.deepEqual(await replay.json(),receipt);
 });

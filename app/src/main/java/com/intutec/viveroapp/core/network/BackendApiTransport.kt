@@ -3,6 +3,7 @@ package com.intutec.viveroapp.core.network
 import com.intutec.viveroapp.BuildConfig
 
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.request
 import io.ktor.http.HttpMethod
 import io.ktor.client.request.header
@@ -26,12 +27,24 @@ data class BackendApiResponse(val status: Int, val body: String)
 
 // Native commercial and inventory writes stay disabled until their flows are approved.
 internal fun backendNativeRequestAllowed(path: String, method: HttpMethod, operationsEnabled: Boolean): Boolean =
-    operationsEnabled || method == HttpMethod.Get || (method == HttpMethod.Post && path in setOf(
+    operationsEnabled || nativePlantRequest(path,method) || method == HttpMethod.Get || (method == HttpMethod.Post && path in setOf(
         "/api/v1/auth/login", "/api/v1/auth/recovery", "/api/v1/auth/logout",
         "/api/v1/auth/change-password", "/api/v1/products/scan",
         "/api/v1/inventory/counts/result", "/api/v1/inventory/receptions/result",
     ))
+internal fun nativePlantRequest(path:String,method:HttpMethod):Boolean =
+    (path=="/api/v1/plants/confirm" && method==HttpMethod.Post) ||
+    (path=="/api/v1/cataloging" && method==HttpMethod.Post) ||
+    (Regex("^/api/v1/cataloging/[1-9][0-9]*$").matches(path) && method==HttpMethod.Patch) ||
+    (Regex("^/api/v1/cataloging/[1-9][0-9]*/publish$").matches(path) && method==HttpMethod.Post) ||
+    (Regex("^/api/v1/cataloging/[1-9][0-9]*/photo$").matches(path) && method==HttpMethod.Put) ||
+    (Regex("^/api/v1/products/[1-9][0-9]*$").matches(path) && method==HttpMethod.Patch) ||
+    (Regex("^/api/v1/products/[1-9][0-9]*/catalog-photo$").matches(path) && method==HttpMethod.Put) ||
+    (Regex("^/api/v1/products/[1-9][0-9]*/preparation/activate$").matches(path) && method==HttpMethod.Post)
 interface BackendApiTransport {
+    suspend fun plantImage(imageId:Long,token:String):ByteArray? = null
+    suspend fun plantRead(path:String,token:String,headers:Map<String,String>,query:Map<String,String>):BackendApiResponse = throw UnsupportedOperationException()
+    suspend fun plantWrite(path:String,method:String,token:String,headers:Map<String,String>,body:ByteArray):BackendApiResponse = throw UnsupportedOperationException()
     suspend fun login(body: String): BackendApiResponse = throw UnsupportedOperationException()
     suspend fun recovery(body: String): BackendApiResponse = throw UnsupportedOperationException()
     suspend fun get(path: String, token: String): BackendApiResponse = throw UnsupportedOperationException()
@@ -43,6 +56,24 @@ class KtorBackendApiTransport @Inject constructor(
     @param:Named("backendApi") private val client: HttpClient,
     @param:Named("backendApiOrigin") private val origin: String,
 ) : BackendApiTransport {
+    override suspend fun plantImage(imageId:Long,token:String):ByteArray? {
+        require(imageId>0 && Regex("^[A-Za-z0-9_-]{43}$").matches(token))
+        val response=client.request("$origin/api/v1/images/$imageId") {
+            url { parameters.append("status","all") }
+            method=HttpMethod.Get
+            header("Authorization","Bearer $token")
+            header("Cache-Control","no-store")
+        }
+        if(response.status.value!=200)return null
+        val bytes=response.body<ByteArray>()
+        return bytes.takeIf{it.size in 1..1048576}
+    }
+    override suspend fun plantRead(path:String,token:String,headers:Map<String,String>,query:Map<String,String>):BackendApiResponse =
+        execute(path,HttpMethod.Get,token,headers,null,query)
+    override suspend fun plantWrite(path:String,method:String,token:String,headers:Map<String,String>,body:ByteArray):BackendApiResponse {
+        require(nativePlantRequest(path,HttpMethod.parse(method)))
+        return execute(path,HttpMethod.parse(method),token,headers,body)
+    }
     override suspend fun login(body: String): BackendApiResponse = execute("/api/v1/auth/login", HttpMethod.Post, null, emptyMap(), body)
     override suspend fun recovery(body: String): BackendApiResponse = execute("/api/v1/auth/recovery", HttpMethod.Post, null, emptyMap(), body)
     override suspend fun get(path: String, token: String): BackendApiResponse = execute(path, HttpMethod.Get, token, emptyMap(), null)
@@ -50,7 +81,7 @@ class KtorBackendApiTransport @Inject constructor(
         execute(path, HttpMethod.Get, token, emptyMap(), null, query)
     override suspend fun post(path: String, token: String, headers: Map<String, String>, body: String): BackendApiResponse =
         execute(path, HttpMethod.Post, token, headers, body)
-    private suspend fun execute(path: String, method: HttpMethod, token: String?, headers: Map<String, String>, body: String?, query: Map<String, String> = emptyMap()): BackendApiResponse {
+    private suspend fun execute(path: String, method: HttpMethod, token: String?, headers: Map<String, String>, body: Any?, query: Map<String, String> = emptyMap()): BackendApiResponse {
         check(backendNativeRequestAllowed(path, method, BuildConfig.NATIVE_OPERATIONS_ENABLED)) {
             "Esta operación se realiza desde el portal Web autorizado."
         }
@@ -60,7 +91,7 @@ class KtorBackendApiTransport @Inject constructor(
             url { query.forEach { (name, value) -> parameters.append(name, value) } }
             this.method = method
             if (token != null) header("Authorization", "Bearer $token")
-            header("Content-Type", "application/json")
+            if ("Content-Type" !in headers) header("Content-Type", "application/json")
             header("X-Vivero-Folio-Format", "short-v1")
             headers.forEach { (name, value) -> header(name, value) }
             header("Cache-Control", "no-store")

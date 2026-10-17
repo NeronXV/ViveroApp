@@ -24,6 +24,8 @@ data class BackendSaleJournalEntry(val localId: Long, val state: String, val tot
 interface BackendSaleEmitter {
     suspend fun quote(items: List<BackendSaleLine>): PreparedBackendSale
     suspend fun quoteCart(cart: BackendCartSnapshot): PreparedBackendSale
+    suspend fun quoteCart(cart: BackendCartSnapshot, patioNote: String?): PreparedBackendSale =
+        if (patioNote.isNullOrBlank()) quoteCart(cart) else throw UnsupportedOperationException("La nota de patio no está disponible.")
     suspend fun send(prepared: PreparedBackendSale): BackendSaleEmission
     suspend fun resume(localId: Long): BackendSaleEmission
     suspend fun pending(): List<Long>

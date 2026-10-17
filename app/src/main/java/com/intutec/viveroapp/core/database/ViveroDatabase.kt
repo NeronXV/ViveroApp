@@ -1,6 +1,8 @@
 package com.intutec.viveroapp.core.database
 
 import androidx.room.Database
+import com.intutec.viveroapp.feature.plants.data.local.PlantWorkEntity
+import com.intutec.viveroapp.feature.plants.data.local.PlantWorkDao
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -25,6 +27,7 @@ import com.intutec.viveroapp.feature.inventory.data.local.BackendInventoryAttemp
 
 @Database(
     entities = [
+        PlantWorkEntity::class,
         CartHeaderEntity::class,
         CartItemEntity::class,
         SaleEntity::class,
@@ -38,10 +41,11 @@ import com.intutec.viveroapp.feature.inventory.data.local.BackendInventoryAttemp
         BackendPaymentAttemptEntity::class,
         BackendInventoryAttemptEntity::class,
     ],
-    version = 6,
+    version = 8,
     exportSchema = false,
 )
 abstract class ViveroDatabase : RoomDatabase() {
+    abstract fun plantWorkDao(): PlantWorkDao
     abstract fun cartDao(): CartDao
     abstract fun backendSaleAttemptDao(): BackendSaleAttemptDao
     abstract fun backendCartDao(): BackendCartDao
@@ -50,6 +54,16 @@ abstract class ViveroDatabase : RoomDatabase() {
     abstract fun cashierPaymentAttemptDao(): CashierPaymentAttemptDao
 
     companion object {
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE backend_sale_attempts ADD COLUMN patio_note TEXT")
+            }
+        }
+        val MIGRATION_6_7 = object : Migration(6,7) {
+            override fun migrate(db:SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS plant_work (actorId INTEGER NOT NULL, branchId INTEGER NOT NULL, form TEXT, attempt TEXT, PRIMARY KEY(actorId,branchId))")
+            }
+        }
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""

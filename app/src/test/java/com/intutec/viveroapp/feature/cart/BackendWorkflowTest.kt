@@ -86,13 +86,13 @@ class BackendWorkflowTest {
         store.clearBackend(); testScheduler.runCurrent(); gate.complete(Unit); testScheduler.runCurrent()
         assertFalse(vm.state.value.enabled); assertTrue(vm.state.value.products.isEmpty())
     }
-    @Test fun consultationModeBlocksCartEditsAndRemovingCapabilitiesClearsCatalog() = runTest(main.testDispatcher) {
+    @Test fun nativeSalesRequireCapabilityAndRemovingItClearsCatalog() = runTest(main.testDispatcher) {
         val store = SessionStore(); activeBackend(store); val remote = Catalog(); val cart = Cart()
         val vm = BackendCatalogViewModel(store, remote, cart, "https://api.example.invalid"); testScheduler.runCurrent()
-        assertEquals(listOf(product), vm.state.value.products); assertFalse(vm.state.value.canSell)
-        vm.add(product); testScheduler.runCurrent(); assertEquals(0, cart.adds)
+        assertEquals(listOf(product), vm.state.value.products); assertTrue(vm.state.value.canSell)
+        vm.add(product); testScheduler.runCurrent(); assertEquals(1, cart.adds)
         activeBackend(store, permissions = emptySet()); testScheduler.runCurrent(); vm.add(product); testScheduler.runCurrent()
-        assertFalse(vm.state.value.enabled); assertTrue(vm.state.value.products.isEmpty()); assertEquals(0, cart.adds)
+        assertFalse(vm.state.value.enabled); assertTrue(vm.state.value.products.isEmpty()); assertEquals(1, cart.adds)
     }
     @Test fun accessGateRejectsExpiredWrongContextAndMissingBranch() {
         val store = SessionStore(); activeBackend(store)

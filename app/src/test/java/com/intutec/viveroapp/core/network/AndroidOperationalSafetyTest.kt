@@ -12,11 +12,14 @@ class AndroidOperationalSafetyTest {
     @Test fun disabledNativeOperationsCannotSendCommercialOrInventoryMutations() {
         for (path in listOf("/api/v1/inventory/counts", "/api/v1/inventory/receptions",
             "/api/v1/inventory/count-observations", "/api/v1/inventory/activation",
-            "/api/v1/sales", "/api/v1/sales/submissions", "/api/v1/cashier/payments", "/api/v1/cataloging")) {
+            "/api/v1/sales", "/api/v1/sales/submissions", "/api/v1/cashier/payments")) {
             assertFalse(path, backendNativeRequestAllowed(path, HttpMethod.Post, false))
         }
-        assertFalse(backendNativeRequestAllowed("/api/v1/products/1", HttpMethod.Patch, false))
-        assertFalse(backendNativeRequestAllowed("/api/v1/cataloging/1/photo", HttpMethod.Put, false))
+        assertTrue(backendNativeRequestAllowed("/api/v1/products/1", HttpMethod.Patch, false))
+        assertTrue(backendNativeRequestAllowed("/api/v1/cataloging/1/photo", HttpMethod.Put, false))
+        assertTrue(backendNativeRequestAllowed("/api/v1/cataloging", HttpMethod.Post, false))
+        assertFalse(backendNativeRequestAllowed("/api/v1/products/1", HttpMethod.Delete, false))
+        assertFalse(backendNativeRequestAllowed("/api/v1/cataloging/1/photo/extra", HttpMethod.Put, false))
     }
 
     @Test fun mainAppKeepsLoginReadOnlyLookupAndHistoricInventoryResultRecovery() {
@@ -31,7 +34,7 @@ class AndroidOperationalSafetyTest {
     @Test fun defaultDashboardHidesSalesAndCashierWithoutChangingServerPermissions() {
         val store=SessionStore()
         activeBackend(store, permissions=setOf("VIEW_CATALOG","CREATE_SALES","OPERATE_CASHIER","MANAGE_PRODUCTS","MANAGE_INVENTORY"))
-        val dashboard=requireNotNull(backendDashboard(store.backend.value,true))
+        val dashboard=requireNotNull(backendDashboard(store.backend.value,true, false))
         assertFalse(dashboard.canCreateSales)
         assertEquals(setOf("catalog","products","inventory"),dashboard.modules.map { it.id }.toSet())
         assertEquals("Catálogo",dashboard.modules.first { it.id=="catalog" }.title)
@@ -39,7 +42,7 @@ class AndroidOperationalSafetyTest {
     }
 
     @Test fun normalBuildRequiresProductionHttpsAndHasNoSupabaseCredentials() {
-        assertFalse(BuildConfig.NATIVE_OPERATIONS_ENABLED)
+        assertTrue(BuildConfig.NATIVE_OPERATIONS_ENABLED)
         assertTrue(BuildConfig.BUILD_TYPE in setOf("debug","release"))
         assertEquals("https://viverodulcinea.bajastack.network",backendApiOrigin(BuildConfig.BACKEND_API_URL,false))
         assertEquals(BuildConfig.BACKEND_API_URL,BuildConfig.BACKEND_WEB_URL)

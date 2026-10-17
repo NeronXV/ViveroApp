@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogingFields, catalogingInput, catalogingKey, catalogingScope, checkProductEditVersion } from '../src/cataloging.js';
+import { catalogingFields, catalogingInput, catalogingPublishInput, generateSku, catalogingKey, catalogingScope, checkProductEditVersion } from '../src/cataloging.js';
 import { prepareCatalogingDrafts, parseCsv } from '../scripts/prepare-cataloging-drafts.js';
 import { validateDraftManifest } from '../scripts/cataloging-import.js';
 
@@ -12,11 +12,38 @@ test('draft fields cannot inject price, stock, activation or provenance approval
   assert.throws(()=>catalogingInput({revision:1,action:'SAVE',fields:{},product_id:3}));
   assert.throws(()=>catalogingKey('short'));
 });
+test('publish input validates revision, price_cents, initial_quantity and fields',()=>{
+  const valid = catalogingPublishInput({ revision: 2, fields: { approved_name: 'Ficus' }, price_cents: 15000, initial_quantity: '5' });
+  assert.equal(valid.revision, 2);
+  assert.equal(valid.fields.approved_name, 'Ficus');
+  assert.equal(valid.price_cents, 15000);
+  assert.equal(valid.initial_quantity, 5);
+
+  assert.throws(() => catalogingPublishInput({ revision: 0 }), { status: 400 });
+  assert.throws(() => catalogingPublishInput({ revision: 1, price_cents: -10 }), { status: 400 });
+  assert.throws(() => catalogingPublishInput({ revision: 1, initial_quantity: 'invalid' }), { status: 400 });
+  assert.throws(() => catalogingPublishInput({ revision: 1, unknown_prop: 123 }), { status: 400 });
+});
+test('generateSku creates clean sequential SKU avoiding collisions', async () => {
+  let callCount = 0;
+  const db = {
+    execute: async () => {
+      callCount++;
+      return callCount === 1 ? [[{ id: 99 }]] : [[]];
+    },
+  };
+  const sku = await generateSku(db, 42);
+  assert.equal(sku, 'PLN-00042-2');
+});
 test('effective permissions and expected identity are enforced',()=>{
   const request={headers:{'x-expected-actor-id':'1','x-expected-branch-id':'2'}};
   catalogingScope(context,request);
   assert.throws(()=>catalogingScope({...context,capabilities:[]},request),{status:403});
   assert.throws(()=>catalogingScope(context,{headers:{...request.headers,'x-expected-actor-id':'3'}}),{status:409});
+
+  const publishContext = { ...context, capabilities: ['PUBLISH_CATALOGING'] };
+  catalogingScope(publishContext, request, 'PUBLISH_CATALOGING');
+  assert.throws(() => catalogingScope(context, request, 'PUBLISH_CATALOGING'), { status: 403 });
 });
 test('product compare-and-save refuses stale versions, older callers retain contract',async()=>{
   const db={execute:async()=>[[{catalog_revision:4}]]};

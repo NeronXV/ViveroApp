@@ -42,6 +42,8 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object BackendNetworkModule {
+    @Provides @Singleton
+    fun plants(value:com.intutec.viveroapp.feature.plants.data.PlantRepository):com.intutec.viveroapp.feature.plants.domain.PlantGateway=value
     @Provides @Singleton @Named("backendApi")
     fun client(): HttpClient = HttpClient(OkHttp) {
         engine { config { retryOnConnectionFailure(false) } }

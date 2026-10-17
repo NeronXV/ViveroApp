@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 data class BackendCartUiState(val enabled: Boolean = false, val loading: Boolean = false, val working: Boolean = false,
     val cart: BackendCartSnapshot? = null, val quote: BackendSaleQuote? = null, val message: String? = null, val error: String? = null,
     val branchName: String = "Sin sucursal", val canViewHistory: Boolean = false,
+    val patioNote: String = "",
     val journalReady: Boolean = false, val journal: List<BackendSaleJournalEntry> = emptyList(),
     val sent: BackendSaleJournalEntry? = null, val photos: Map<Long, String> = emptyMap(), val pendingIds: List<Long> = emptyList()) {
     val unresolved: List<BackendSaleJournalEntry> get() = journal.filter { it.state in setOf("PENDING", "UNCERTAIN", "SYNCING") }
@@ -57,12 +58,16 @@ class BackendCartViewModel @Inject constructor(private val sessions: SessionStor
     fun quantity(id: Long, value: Int) = act { carts.quantity(id, value) }
     fun remove(id: Long) = act { carts.remove(id) }
     fun clear() = act { carts.clear() }
+    fun patioNote(value: String) {
+        if (_state.value.working || _state.value.quote != null || value.codePointCount(0, value.length) > 120) return
+        _state.update { it.copy(patioNote = value) }
+    }
     fun dismissQuote() { if (!_state.value.working) { prepared = null; _state.update { it.copy(quote = null) } } }
     fun quote() {
         val snapshot = _state.value.cart ?: return
         if (snapshot.items.isEmpty() || !_state.value.journalReady || _state.value.hasUnresolved) return
         act { current ->
-            val result = emitter.quoteCart(snapshot)
+            val result = emitter.quoteCart(snapshot, _state.value.patioNote)
             if (current()) { prepared = result; _state.update { it.copy(quote = result.quote) } }
         }
     }
@@ -82,7 +87,7 @@ class BackendCartViewModel @Inject constructor(private val sessions: SessionStor
                 if (current()) {
                     loadJournal(revision)
                     if (current() && result.outcome == BackendSaleEmissionOutcome.Synced) _state.update {
-                        it.copy(sent = it.journal.firstOrNull { row -> row.localId == result.localId && row.receipt != null })
+                        it.copy(sent = it.journal.firstOrNull { row -> row.localId == result.localId && row.receipt != null }, patioNote = "")
                     }
                 }
             } finally { if (current()) { prepared = null; _state.update { it.copy(quote = null) } } }

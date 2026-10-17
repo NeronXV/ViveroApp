@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { requireInventoryOwner, inventoryPermissions } from '../src/inventory-policy.js';
+import { requireInventoryOwner, requireInventoryReception, inventoryPermissions } from '../src/inventory-policy.js';
 import { observationInput, decisionInput, observationQuery } from '../src/inventory-observations.js';
 import { preparePlantLists } from '../scripts/plant-list-preparation.js';
 
@@ -10,8 +10,13 @@ test('owner policy also requires capability and active assigned branch; names do
   for (const context of [manager, { ...manager, role: { name: 'ADMIN' } }, { ...manager, role: { name: 'OWNER' }, capabilities: [] },
     { ...manager, role: { name: 'OWNER' }, branch: null }, { ...manager, role: { name: 'OWNER' }, access_state: 'NO_ROLE' }]) assert.throws(() => requireInventoryOwner(context));
   assert.doesNotThrow(() => requireInventoryOwner({ ...manager, role: { name: 'OWNER' } }));
+  assert.doesNotThrow(() => requireInventoryReception(manager));
+  assert.doesNotThrow(() => requireInventoryReception({ ...manager, role: { name: 'ADMIN' } }));
+  assert.doesNotThrow(() => requireInventoryReception({ ...manager, role: { name: 'OWNER' } }));
+  assert.throws(() => requireInventoryReception({ ...manager, role: { name: 'CASHIER' } }));
   assert.equal(inventoryPermissions(manager).can_record_count, true);
-  assert.equal(inventoryPermissions(manager).can_receive, false);
+  assert.equal(inventoryPermissions(manager).can_receive, true);
+  assert.equal(inventoryPermissions({ ...manager, role: { name: 'CASHIER' } }).can_receive, false);
 });
 test('count contracts reject extra scope, malformed keys, decisions and quantities', () => {
   const body = { product_id: 3, counted_quantity: '0', reason: 'Conteo inicial', baseline_quantity: '0.000', baseline_movement_id: 0 }, key = 'synthetic-key-for-count-001';

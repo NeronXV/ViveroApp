@@ -19,7 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackendFolioNegotiationTest {
-    @Test fun readTransportNegotiatesFoliosWhileNativeSalesStayBlocked() = runBlocking {
+    @Test fun transportNegotiatesFoliosForNativeSalesAndReads() = runBlocking {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         var responseFolio = "VD-0009"
         val formats = mutableListOf<String>()
@@ -37,15 +37,14 @@ class BackendFolioNegotiationTest {
             val transport = KtorBackendApiTransport(client, "http://127.0.0.1:${server.address.port}")
             val source = BackendSaleRemoteDataSource(transport)
             val attempt = BackendSaleAttempt.restore(BackendSaleIdentity(2, 3), "b".repeat(64), listOf(BackendSaleLine(4, 2)), 900)
-            assertThrows(BackendSaleException::class.java) { runBlocking { source.submit("a".repeat(43), attempt) } }
-            assertThrows(BackendSaleException::class.java) { runBlocking { source.recover("a".repeat(43), attempt) } }
-            assertTrue(formats.isEmpty())
+            assertEquals("VD-0009", source.submit("a".repeat(43), attempt).folio)
+            assertEquals("VD-0009", source.recover("a".repeat(43), attempt).folio)
             val short = Json.parseToJsonElement(transport.get("/api/v1/sales", "a".repeat(43)).body).jsonObject["folio"]!!.jsonPrimitive.content
             assertEquals("VD-0009", short); assertTrue(isBackendSaleFolio(short))
             responseFolio = "VD-" + "A".repeat(24)
             val legacy = Json.parseToJsonElement(transport.get("/api/v1/sales", "a".repeat(43)).body).jsonObject["folio"]!!.jsonPrimitive.content
             assertEquals(responseFolio, legacy); assertTrue(isBackendSaleFolio(legacy))
-            assertEquals(listOf("short-v1", "short-v1"), formats)
+            assertEquals(listOf("short-v1", "short-v1", "short-v1", "short-v1"), formats)
         } finally { client.close(); server.stop(0) }
     }
 }

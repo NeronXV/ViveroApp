@@ -24,18 +24,26 @@ class BackendSaleAttempt private constructor(
     val key: String,
     val items: List<BackendSaleLine>,
     val expectedTotalCents: Long,
+    val patioNote: String?,
 ) {
     companion object {
-        fun create(identity: BackendSaleIdentity, items: List<BackendSaleLine>, expectedTotalCents: Long): BackendSaleAttempt {
+        fun create(identity: BackendSaleIdentity, items: List<BackendSaleLine>, expectedTotalCents: Long, patioNote: String? = null): BackendSaleAttempt {
             val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
-            return restore(identity, bytes.joinToString("") { "%02x".format(it.toInt() and 255) }, items, expectedTotalCents)
+            return restore(identity, bytes.joinToString("") { "%02x".format(it.toInt() and 255) }, items, expectedTotalCents, patioNote)
         }
         // Restore only the original persisted key and payload after interruption.
-        fun restore(identity: BackendSaleIdentity, key: String, items: List<BackendSaleLine>, expectedTotalCents: Long): BackendSaleAttempt {
+        fun restore(identity: BackendSaleIdentity, key: String, items: List<BackendSaleLine>, expectedTotalCents: Long, patioNote: String? = null): BackendSaleAttempt {
             require(Regex("^[a-f0-9]{64}$").matches(key))
             require(items.size in 1..25 && items.map { it.productId }.distinct().size == items.size)
             require(expectedTotalCents in 1..MAX_BACKEND_CENTS)
-            return BackendSaleAttempt(identity, key, Collections.unmodifiableList(items.sortedBy { it.productId }), expectedTotalCents)
+            require(patioNote == null || (patioNote.none { it.code < 32 || it.code in 127..159 } &&
+                patioNote.indices.all { index ->
+                    val char = patioNote[index]
+                    !Character.isHighSurrogate(char) || (index + 1 < patioNote.length && Character.isLowSurrogate(patioNote[index + 1]))
+                } && patioNote.indices.all { index ->
+                    !Character.isLowSurrogate(patioNote[index]) || (index > 0 && Character.isHighSurrogate(patioNote[index - 1]))
+                } && patioNote.trim().codePointCount(0, patioNote.trim().length) <= 120))
+            return BackendSaleAttempt(identity, key, Collections.unmodifiableList(items.sortedBy { it.productId }), expectedTotalCents, patioNote?.trim()?.ifBlank { null })
         }
     }
 }

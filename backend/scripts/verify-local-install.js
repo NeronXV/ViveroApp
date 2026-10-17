@@ -11,10 +11,10 @@ async function request(path, options = {}) {
 try {
   db = await openAdminDb();
   const [[schema]] = await db.execute("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema='vivero'");
-  assert.equal(schema.n, 65);
+  assert.equal(schema.n, 66);
   const [versions] = await db.execute('SELECT version FROM schema_migrations ORDER BY version');
-  assert.equal(versions.length, 33);
-  assert.equal(versions.at(-1).version, '034_cataloging_drafts');
+  assert.equal(versions.length, 38);
+  assert.equal(versions.at(-1).version, '039_sale_patio_note');
   const [[branch]] = await db.execute("SELECT id,inventory_enabled FROM branches WHERE code='DEMO'");
   assert.equal(branch.inventory_enabled, 0);
   const [[products]] = await db.execute("SELECT COUNT(*) AS n FROM products WHERE internal_code IN ('DEMO-MONSTERA','DEMO-ECHEVERIA')");

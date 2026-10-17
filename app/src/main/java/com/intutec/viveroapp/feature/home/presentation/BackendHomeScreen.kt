@@ -41,8 +41,8 @@ internal fun backendDashboard(session: BackendSessionState, webAvailable: Boolea
             add(DashboardModule("inventory", "Inventario", "Existencias de tu sucursal", true))
         if (webAvailable && session.authorizedSession("VIEW_REPORTS", true) != null)
             add(DashboardModule("reports", "Reportes", "Consulta el portal de administración", true))
-        if (webAvailable && session.authorizedSession("MANAGE_PRODUCTS", true) != null)
-            add(DashboardModule("products", "Catalogar plantas", "Fichas y fotos en Web · sesión independiente", true))
+        if (session.authorizedSession("MANAGE_PRODUCTS", true) != null)
+            add(DashboardModule("products", "Completar plantas", "Añadir plantas, fotografías y datos pendientes", true))
         if (webAvailable && session.authorizedSession("MANAGE_USERS", true) != null)
             add(DashboardModule("staff", "Equipo", "Accesos y personal en el portal", true))
     }
@@ -53,6 +53,7 @@ internal fun backendDashboard(session: BackendSessionState, webAvailable: Boolea
 @Composable
 fun BackendHomeScreen(
     session: BackendSessionState,
+    onPlants: () -> Unit,
     onCatalog: () -> Unit, onCart: () -> Unit, onCashier: () -> Unit,
     onInventory: () -> Unit, onHistory: () -> Unit, onWeb: () -> Unit,
     webAvailable: Boolean, onRefresh: () -> Unit, onSignOut: () -> Unit,
@@ -75,7 +76,7 @@ fun BackendHomeScreen(
         HomeDashboard(dashboard, HomeCartSummary(lines.sumOf { it.quantity },
             lines.fold(0L) { total, item -> Math.addExact(total, Math.multiplyExact(item.priceCents, item.quantity.toLong())) }),
             onCatalog, onCart, onCashier, onInventory, onWeb, onHistory,
-            { profile = true }, onWeb, onWeb)
+            { profile = true }, onPlants, onWeb)
     } else {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Tu espacio de trabajo", style = MaterialTheme.typography.headlineMedium)

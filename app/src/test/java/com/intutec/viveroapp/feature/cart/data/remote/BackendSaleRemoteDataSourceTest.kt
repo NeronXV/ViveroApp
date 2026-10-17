@@ -46,6 +46,17 @@ class BackendSaleRemoteDataSourceTest {
         assertEquals("/api/v1/sales/recover", fake.path); assertEquals("{}", fake.body)
         assertEquals(saved.key, fake.headers["Idempotency-Key"])
     }
+    @Test fun patioNoteIsNormalizedAndSentOnlyWhenPresent() = runTest {
+        val fake = Fake(BackendApiResponse(201, receipt()))
+        val source = BackendSaleRemoteDataSource(fake)
+        val saved = BackendSaleAttempt.restore(identity, "c".repeat(64), lines, 900, "  Cliente del patio 🌿  ")
+        assertEquals("Cliente del patio 🌿", saved.patioNote)
+        source.submit(token, saved)
+        assertEquals("Cliente del patio 🌿", Json.parseToJsonElement(fake.body).jsonObject["patio_note"]?.jsonPrimitive?.content)
+        assertThrows(IllegalArgumentException::class.java) { BackendSaleAttempt.create(identity, lines, 900, "x".repeat(121)) }
+        assertThrows(IllegalArgumentException::class.java) { BackendSaleAttempt.create(identity, lines, 900, "Línea\nextra") }
+        assertThrows(IllegalArgumentException::class.java) { BackendSaleAttempt.create(identity, lines, 900, "\uD800") }
+    }
     @Test fun rejectsWrongIdentityUnsafeMoneyAndUnknownFieldsAfterWriteAsUncertain() = runTest {
         for (body in listOf(receipt().replace("\"created_by\":2", "\"created_by\":8"), receipt().replace("\"total_cents\":900", "\"total_cents\":901"), receipt().replace("\"id\":9", "\"id\":\"9\""), receipt().dropLast(1) + ",\"extra\":1}")) {
             val source = BackendSaleRemoteDataSource(Fake(BackendApiResponse(201, body)))

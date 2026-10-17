@@ -72,6 +72,7 @@ class BackendSaleRemoteDataSource @Inject constructor(private val transport: Bac
     override suspend fun submit(token: String, attempt: BackendSaleAttempt): BackendSaleReceipt {
         val result = call(token, attempt.identity, "/api/v1/sales", buildJsonObject {
             put("items", lines(attempt.items)); put("expected_total_cents", attempt.expectedTotalCents)
+            attempt.patioNote?.let { put("patio_note", it) }
         }, attempt.key)
         return checked(true) { receipt(result, attempt) }
     }

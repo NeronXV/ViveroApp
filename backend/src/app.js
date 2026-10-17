@@ -8,6 +8,9 @@ import { createOrderAdmin, orderAdminQuery, orderScope, validateOrderStatus } fr
 import { createInventory, inventoryBody, inventoryQuery, createInventoryActivation, activationInput } from './inventory.js';
 import { createInventoryObservations, observationInput, decisionInput, observationQuery } from './inventory-observations.js';
 import { createProductPreparation } from './product-preparation.js';
+import { receptionInput, confirmationInput } from './purchase-reception.js';
+import { plantEdit } from './plant-edits.js';
+import { createHash } from 'node:crypto';
 import { inventoryPermissions } from './inventory-policy.js';
 import { createSales, saleQuery } from './sales.js';
 import { createCashier, cashierQuery, claimInput, paymentInput } from './cashier.js';
@@ -24,7 +27,7 @@ import { createNewsletter, newsletterInput, newsletterKey } from './newsletter.j
 import { createPasswordChanger } from './auth/change-password.js';
 import { shortFolioResponse } from './short-folios.js';
 import { createSaleCancellations, cancellationInput } from './sale-cancellations.js';
-import { createCataloging, catalogingInput, catalogingKey, catalogingScope, catalogingQuery, productEditVersion, checkProductEditVersion } from './cataloging.js';
+import { createCataloging, catalogingInput, catalogingPublishInput, plantConfirmationInput, catalogingKey, catalogingScope, catalogingQuery, productEditVersion, checkProductEditVersion } from './cataloging.js';
 
 async function body(request, maxSize = 16384) {
   if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
@@ -67,8 +70,8 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
       const method = request.method;
       if (url.pathname === '/health' && method === 'GET') {
         try {
-          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version = '034_cataloging_drafts'");
-          if (!migrations.length) throw new Error('Migration required');
+          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version IN ('034_cataloging_drafts', '035_cataloging_publish', '037_receiving_pending_plants', '038_zero_received_purchase_lines', '039_sale_patio_note')");
+          if (migrations.length !== 5) throw new Error('Migration required');
           if (imageStore) await imageStore.check();
         }
         catch { throw new ApiError(503, 'DATABASE_UNAVAILABLE'); }
@@ -164,12 +167,12 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
             }
             if (method === 'GET' && !id) return service.list(purchaseQuery(url.searchParams));
             if (method === 'GET' && id && !action) return service.detail(id);
+            if (method === 'PATCH' && id && !action) return service.revise(id,receptionInput(await body(request)));
             if (method === 'POST' && !id) return service.draft(draftInput(await body(request)), purchaseKey(request.headers['idempotency-key'], 'draft'));
             if (method === 'PATCH' && id && action === 'items' && rawItemId) return service.resolve(id, positiveId(rawItemId), resolutionInput(await body(request)));
             if (method === 'POST' && id && action === 'confirm' && !rawItemId) {
               const input = await body(request);
-              if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new ApiError(400, 'PURCHASE_INPUT_INVALID');
-              return service.confirm(id, purchaseKey(request.headers['idempotency-key'], 'confirmation'));
+              return service.confirm(id, purchaseKey(request.headers['idempotency-key'], 'confirmation'),confirmationInput(input));
             }
           }
           throw new ApiError(404, 'NOT_FOUND');
@@ -314,8 +317,15 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         const id = saleId ? positiveId(saleId) : null;
         if (method === 'GET' && id && !action) {
           if ([...url.searchParams.keys()].some(key => key !== 'view')) throw new ApiError(400, 'INVALID_INPUT');
-          const { operations } = cashierQuery(url.searchParams);
-          return send(200, await auth.withAccess(request, ['OPERATE_CASHIER'], (db, context) => createCashier(db, context).detail(id, operations), { readCommitted: true }));
+          const patioView = url.searchParams.get('view') === 'patio';
+          if (patioView && url.searchParams.getAll('view').length !== 1) throw new ApiError(400, 'INVALID_INPUT');
+          const { operations } = patioView ? { operations: false } : cashierQuery(url.searchParams);
+          return send(200, await auth.withAccess(request, ['OPERATE_CASHIER'], async (db, context) => {
+            const detail = await createCashier(db, context).detail(id, operations);
+            if (!patioView) return detail;
+            const [[row]] = await db.execute('SELECT patio_note FROM sales WHERE id = ? AND branch_id = ?', [id, context.branch.id]);
+            return { ...detail, patio_note: row?.patio_note ?? null };
+          }, { readCommitted: true }));
         }
         if (url.search) throw new ApiError(400, 'INVALID_INPUT');
         if (method === 'POST' && id && action) {
@@ -530,37 +540,64 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         }
         throw new ApiError(404, 'NOT_FOUND');
       }
-      const draftRoute = /^\/api\/v1\/cataloging(?:\/([1-9][0-9]*)(?:\/(photo))?)?$/.exec(url.pathname);
+      if (url.pathname === '/api/v1/plants/confirm') {
+        if(method!=='POST')throw new ApiError(404,'NOT_FOUND');
+        if(url.search)throw new ApiError(400,'CATALOGING_INPUT_INVALID');
+        bearerToken(request);
+        const key=catalogingKey(request.headers['idempotency-key']);
+        const input=plantConfirmationInput(await body(request));
+        return send(200,await auth.withAccess(request,['MANAGE_PRODUCTS','PUBLISH_CATALOGING','MANAGE_PRICES'],async(connection,context)=>{
+          catalogingScope(context,request,'PUBLISH_CATALOGING');
+          if(input.target==='draft')return createCataloging(connection,context).confirm(input.id,input,key);
+          await connection.execute('SELECT id FROM branches WHERE id=? FOR UPDATE',[context.branch.id]);
+          return plantEdit(connection,context,request,input.id,['confirm',input,context.branch.id],async()=>{
+            await checkProductEditVersion(connection,input.id,`"${input.revision}"`);
+            await createCatalog(connection,context).update(input.id,{...input.fields,price_cents:input.price_cents});
+            const preparation=createProductPreparation(connection,context);
+            const before=await preparation.state(input.id);
+            const final=before.initial_count_confirmed && input.price_cents>0 && !before.reasons.some(r=>['DISABLED','CATEGORY_INACTIVE'].includes(r))
+              ? await preparation.activate(input.id) : before;
+            return {...final,id:input.id,needs_initial_count:!final.initial_count_confirmed};
+          });
+        }));
+      }
+      const draftRoute = /^\/api\/v1\/cataloging(?:\/([1-9][0-9]*)(?:\/(photo|publish))?)?$/.exec(url.pathname);
       if (draftRoute) {
         bearerToken(request);
         const id = draftRoute[1] ? positiveId(draftRoute[1]) : null;
-        const action = fn => auth.withAccess(request, ['MANAGE_PRODUCTS'], (connection, context) => {
-          catalogingScope(context, request);
-          return fn(createCataloging(connection,context));
+        const action = (fn, cap = 'MANAGE_PRODUCTS') => auth.withAccess(request, [cap], (connection, context) => {
+          catalogingScope(context, request, cap);
+          return fn(createCataloging(connection, context), context);
         });
-        if (!id && method === 'GET') return send(200,await action(service => service.list(catalogingQuery(url.searchParams))));
-        if (url.search) throw new ApiError(400,'CATALOGING_INPUT_INVALID');
-        if (id && draftRoute[2]) {
-          if (!imageStore) throw new ApiError(503,'IMAGE_STORAGE_UNAVAILABLE');
+        if (!id && method === 'GET') return send(200, await action(service => service.list(catalogingQuery(url.searchParams))));
+        if (url.search) throw new ApiError(400, 'CATALOGING_INPUT_INVALID');
+        if (id && draftRoute[2] === 'publish') {
+          if (method !== 'POST') throw new ApiError(404, 'NOT_FOUND');
+          const key = catalogingKey(request.headers['idempotency-key']);
+          const input = catalogingPublishInput(await body(request));
+          return send(200, await action((service, ctx) => service.publish(id, input, key, ctx.branch.id), 'PUBLISH_CATALOGING'));
+        }
+        if (id && draftRoute[2] === 'photo') {
+          if (!imageStore) throw new ApiError(503, 'IMAGE_STORAGE_UNAVAILABLE');
           if (method === 'GET') {
-            const key=await action(service=>service.photoKey(id)), bytes=await imageStore.get(key);
-            response.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+            const key = await action(service => service.photoKey(id)), bytes = await imageStore.get(key);
+            response.writeHead(200, { 'Content-Type': 'image/webp', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
             return response.end(bytes);
           }
           if (method === 'PUT') {
-            const revision=positiveId(request.headers['x-cataloging-revision']);
-            const key=catalogingKey(request.headers['idempotency-key']);
-            await action(service=>service.detail(id));
-            const uploaded=await uploadImage(request);
-            return send(200,await action(service=>service.photo(id,revision,key,imageStore,uploaded)));
+            const revision = positiveId(request.headers['x-cataloging-revision']);
+            const key = catalogingKey(request.headers['idempotency-key']);
+            await action(service => service.detail(id));
+            const uploaded = await uploadImage(request);
+            return send(200, await action(service => service.photo(id, revision, key, imageStore, uploaded)));
           }
         }
-        if (id && method === 'GET') return send(200,await action(service=>service.detail(id)));
-        if ((!id && method==='POST') || (id && method==='PATCH')) {
-          const key=catalogingKey(request.headers['idempotency-key']), input=catalogingInput(await body(request),!id);
-          return send(id ? 200 : 201,await action(service=>id ? service.update(id,input,key) : service.create(input,key)));
+        if (id && method === 'GET') return send(200, await action(service => service.detail(id)));
+        if ((!id && method === 'POST') || (id && method === 'PATCH')) {
+          const key = catalogingKey(request.headers['idempotency-key']), input = catalogingInput(await body(request), !id);
+          return send(id ? 200 : 201, await action(service => id ? service.update(id, input, key) : service.create(input, key)));
         }
-        throw new ApiError(404,'NOT_FOUND');
+        throw new ApiError(404, 'NOT_FOUND');
       }
       const editVersion = /^\/api\/v1\/products\/([1-9][0-9]*)\/edit-version$/.exec(url.pathname);
       if (editVersion && method==='GET') {
@@ -572,14 +609,14 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         if(!imageStore)throw new ApiError(503,'IMAGE_STORAGE_UNAVAILABLE');
         if(!request.headers['if-match'])throw new ApiError(428,'CATALOGING_VERSION_REQUIRED');
         const id=positiveId(guardedPhoto[1]);
-        await auth.withAccess(request,['MANAGE_PRODUCTS'],connection=>checkProductEditVersion(connection,id,request.headers['if-match']));
+        await auth.withAccess(request,['MANAGE_PRODUCTS'],connection=>request.headers['idempotency-key']?productEditVersion(connection,id):checkProductEditVersion(connection,id,request.headers['if-match']));
         const uploaded=await uploadImage(request);
-        return send(200,await auth.withAccess(request,['MANAGE_PRODUCTS'],async connection=>{
+        return send(200,await auth.withAccess(request,['MANAGE_PRODUCTS'],async (connection,context)=>plantEdit(connection,context,request,id,['photo',request.headers['if-match'],createHash('sha256').update(uploaded.data).digest('hex')],async()=>{
           await checkProductEditVersion(connection,id,request.headers['if-match']);
           const images=createImages(connection), result=await images.add(id,imageStore,uploaded.data,uploaded.info);
           await images.update(id,result.id,{is_primary:true});
           return result;
-        }));
+        })));
       }
       const imageCollection = /^\/api\/v1\/products\/([^/]+)\/images$/.exec(url.pathname);
       const imageItem = /^\/api\/v1\/products\/([^/]+)\/images\/([^/]+)$/.exec(url.pathname);
@@ -650,7 +687,7 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
         bearerToken(request);
         const id = positiveId(product[1]);
         const data = method === 'DELETE' ? { is_active: false } : validateProduct(await body(request), true);
-        return send(200, await auth.withAccess(request, ['MANAGE_PRODUCTS'], async (connection, context) => {
+        return send(200, await auth.withAccess(request, ['MANAGE_PRODUCTS'], async (connection, context) => plantEdit(connection,context,request,id,[method,request.headers['if-match'],data],async()=>{
           await checkProductEditVersion(connection,id,request.headers['if-match']);
           // INVENTORY can save unchanged prices, as in the existing Supabase RPC.
           if (Object.hasOwn(data, 'price_cents') || Object.hasOwn(data, 'wholesale_price_cents')) {
@@ -662,7 +699,7 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
             }
           }
           return createCatalog(connection, context).update(id, data);
-        }));
+        })));
       }
       throw new ApiError(404, 'NOT_FOUND');
     } catch (error) {

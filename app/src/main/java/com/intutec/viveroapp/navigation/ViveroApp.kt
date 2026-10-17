@@ -77,6 +77,7 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
             BackendHomeScreen(
                 session = auth.backend,
                 onCatalog = { navController.navigate(CatalogRoute) },
+                onPlants = { navController.navigate(PlantsRoute) },
                 onCart = { navController.navigate(CartRoute) },
                 onCashier = { navController.navigate(CashierQueueRoute()) },
                 onInventory = { navController.navigate(InventoryRoute()) },
@@ -90,6 +91,7 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
                 onClearPasswordChange = authViewModel::clearPasswordChange,
             )
         }
+        composable<PlantsRoute> { if(auth.backend.authorizedSession("MANAGE_PRODUCTS",true)!=null) com.intutec.viveroapp.feature.plants.presentation.PlantScreen({navController.navigateUp()}) else AccessUnavailable {navController.navigate(HomeRoute)} }
         composable<CatalogRoute> { if (auth.backend.authorizedSession("VIEW_CATALOG") != null) BackendCatalogScreen({ navController.navigateUp() }, { navController.navigate(CartRoute) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
         composable<CartRoute> { if (BuildConfig.NATIVE_OPERATIONS_ENABLED && auth.backend.authorizedSession("CREATE_SALES", true) != null) BackendCartScreen({ navController.navigateUp() }, { navController.navigate(CatalogRoute) { popUpTo<CartRoute> { inclusive = true }; launchSingleTop = true } }, { navController.navigate(BackendHistoryRoute()) }) else AccessUnavailable { navController.navigate(HomeRoute) } }
         composable<CashierQueueRoute> { if (BuildConfig.NATIVE_OPERATIONS_ENABLED && auth.backend.authorizedSession("OPERATE_CASHIER", true) != null) BackendCashierScreen({ navController.navigateUp() }, { navController.navigate(BackendHistoryRoute("PAYMENTS")) }, { navController.navigate(BackendHistoryRoute("QUEUE", it)) }) else AccessUnavailable { navController.navigate(HomeRoute) } }

@@ -11,6 +11,7 @@ const port = Number(process.env.PORT ?? 3001);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const db = mysql.createPool({
   host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT ?? 3306),
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,

@@ -16,7 +16,7 @@ export function saleKey(value, actorId) {
 }
 export function validateSale(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)
-    || Object.keys(input).some(k => !['items', 'expected_total_cents', 'customer_id'].includes(k)) || !Object.hasOwn(input, 'items') || !Object.hasOwn(input, 'expected_total_cents')
+    || Object.keys(input).some(k => !['items', 'expected_total_cents', 'customer_id', 'patio_note'].includes(k)) || !Object.hasOwn(input, 'items') || !Object.hasOwn(input, 'expected_total_cents')
     || !Number.isSafeInteger(input.expected_total_cents) || input.expected_total_cents < 1
     || !Array.isArray(input.items) || input.items.length < 1 || input.items.length > 25) fail(400, 'SALE_INPUT_INVALID');
   const items = input.items.map(row => {
@@ -28,8 +28,12 @@ export function validateSale(input) {
   if (new Set(items.map(row => row.product_id)).size !== items.length) fail(400, 'SALE_ITEMS_INVALID');
   const customer = Object.hasOwn(input, 'customer_id') ? input.customer_id : undefined;
   if (customer !== undefined && customer !== null && typeof customer !== 'number') fail(400, 'SALE_INPUT_INVALID');
+  const note = Object.hasOwn(input, 'patio_note') ? input.patio_note : undefined;
+  if (note !== undefined && note !== null && (typeof note !== 'string' || !note.isWellFormed()
+    || /[\u0000-\u001f\u007f-\u009f]/u.test(note) || [...note.trim()].length > 120)) fail(400, 'SALE_INPUT_INVALID');
   return { items, expected_total_cents: input.expected_total_cents,
-    ...(customer === undefined ? {} : { customer_id: customer === null ? null : positiveId(customer) }) };
+    ...(customer === undefined ? {} : { customer_id: customer === null ? null : positiveId(customer) }),
+    ...(note === undefined ? {} : { patio_note: note === null ? null : note.trim() || null }) };
 }
 export function saleQuery(params) {
   if ([...params.keys()].some(key => !['limit', 'before_id', 'folio'].includes(key) || params.getAll(key).length !== 1)) fail(400, 'SALE_QUERY_INVALID');
@@ -85,9 +89,9 @@ export function createSales(db, context) {
       if (priced.total_cents !== data.expected_total_cents) fail(409, 'SALE_PRICE_CHANGED');
       // Match Supabase: subtotal is the effective-priced sum, discount is zero.
       const [sale] = await db.execute(`INSERT INTO sales
-        (folio, branch_id, created_by, status, subtotal_cents, discount_cents, total_cents, idempotency_hash, request_hash, customer_id)
-        VALUES (?, ?, ?, 'SENT_TO_CASHIER', ?, 0, ?, ?, ?, ?)`,
-      [`VD-${randomBytes(12).toString('hex').toUpperCase()}`, branchId, context.user.id, priced.total_cents, priced.total_cents, hash, requestHash, data.customer_id ?? null]);
+        (folio, branch_id, created_by, status, subtotal_cents, discount_cents, total_cents, idempotency_hash, request_hash, customer_id, patio_note)
+        VALUES (?, ?, ?, 'SENT_TO_CASHIER', ?, 0, ?, ?, ?, ?, ?)`,
+      [`VD-${randomBytes(12).toString('hex').toUpperCase()}`, branchId, context.user.id, priced.total_cents, priced.total_cents, hash, requestHash, data.customer_id ?? null, data.patio_note ?? null]);
       for (const item of priced.items) {
         await db.execute(`INSERT INTO sale_items
           (sale_id, product_id, product_name, internal_code, quantity, list_price_cents, unit_price_cents, line_total_cents, promotion_id, promotion_name)

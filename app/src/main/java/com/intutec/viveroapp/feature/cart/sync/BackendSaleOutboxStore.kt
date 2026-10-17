@@ -32,20 +32,20 @@ class RoomBackendSaleOutboxStore @Inject constructor(private val dao: BackendSal
             java.util.Collections.unmodifiableList(row.items.sortedBy { it.productId }.map { BackendSaleLine(it.productId, it.quantity) }), header.lastError, receipt)
     }
     override suspend fun enqueue(attempt: BackendSaleAttempt): Long = dao.insert(
-        BackendSaleAttemptEntity(key = attempt.key, actorId = attempt.identity.userId, branchId = attempt.identity.branchId, expectedTotalCents = attempt.expectedTotalCents),
+        BackendSaleAttemptEntity(key = attempt.key, actorId = attempt.identity.userId, branchId = attempt.identity.branchId, expectedTotalCents = attempt.expectedTotalCents, patioNote = attempt.patioNote),
         attempt.items.map { it.productId to it.quantity },
     )
     override suspend fun enqueueFromCart(attempt: BackendSaleAttempt, cart: BackendCartSnapshot): Long {
         check(cart.identity == attempt.identity && cart.saleLines().sortedBy { it.productId } == attempt.items)
         return dao.insertFromCart(
-            BackendSaleAttemptEntity(key = attempt.key, actorId = attempt.identity.userId, branchId = attempt.identity.branchId, expectedTotalCents = attempt.expectedTotalCents),
+            BackendSaleAttemptEntity(key = attempt.key, actorId = attempt.identity.userId, branchId = attempt.identity.branchId, expectedTotalCents = attempt.expectedTotalCents, patioNote = attempt.patioNote),
             attempt.items.map { it.productId to it.quantity }, cart.id, cart.revision,
         )
     }
     override suspend fun load(id: Long): StoredBackendSaleAttempt? = dao.load(id)?.let { row ->
         StoredBackendSaleAttempt(row.attempt.id, BackendSaleAttempt.restore(
             BackendSaleIdentity(row.attempt.actorId, row.attempt.branchId), row.attempt.key,
-            row.items.map { BackendSaleLine(it.productId, it.quantity) }, row.attempt.expectedTotalCents,
+            row.items.map { BackendSaleLine(it.productId, it.quantity) }, row.attempt.expectedTotalCents, row.attempt.patioNote,
         ), row.attempt.state)
     }
     override suspend fun pending(identity: BackendSaleIdentity): List<Long> = dao.pending(identity.userId, identity.branchId)

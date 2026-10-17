@@ -24,7 +24,7 @@ import com.intutec.viveroapp.feature.cart.domain.repository.BackendCartLine
 fun BackendCartScreen(onBack: () -> Unit, onCatalog: () -> Unit, onHistory: () -> Unit = {}, viewModel: BackendCartViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     BackendCartContent(state, onBack, onCatalog, onHistory, viewModel::quantity, viewModel::remove,
-        viewModel::clear, viewModel::quote, viewModel::send, viewModel::dismissQuote,
+        viewModel::clear, viewModel::patioNote, viewModel::quote, viewModel::send, viewModel::dismissQuote,
         { viewModel.newSale(); onCatalog() }, viewModel::checkResult, viewModel::refreshJournal) {
         BackendPendingSalesPanel(onJournalChanged = viewModel::refreshJournal)
     }
@@ -32,7 +32,7 @@ fun BackendCartScreen(onBack: () -> Unit, onCatalog: () -> Unit, onHistory: () -
 
 @Composable
 internal fun BackendCartContent(state: BackendCartUiState, onBack: () -> Unit, onCatalog: () -> Unit, onHistory: () -> Unit,
-    onQuantity: (Long, Int) -> Unit, onRemove: (Long) -> Unit, onClear: () -> Unit, onQuote: () -> Unit,
+    onQuantity: (Long, Int) -> Unit, onRemove: (Long) -> Unit, onClear: () -> Unit, onPatioNote: (String) -> Unit, onQuote: () -> Unit,
     onSend: () -> Unit, onDismissQuote: () -> Unit, onNewSale: () -> Unit, onCheck: (Long) -> Unit,
     onRefresh: () -> Unit, pendingContent: @Composable () -> Unit = {}) {
     var menu by remember { mutableStateOf(false) }
@@ -100,6 +100,12 @@ internal fun BackendCartContent(state: BackendCartUiState, onBack: () -> Unit, o
                 if (rows.isEmpty() && !state.loading) item {
                     SalesEmpty("Tu carrito está vacío", "Encuentra la planta perfecta para tu cliente.") { Button(onCatalog, enabled = state.enabled) { Text("Buscar productos") } }
                 }
+                if (rows.isNotEmpty()) item {
+                    OutlinedTextField(value = state.patioNote, onValueChange = onPatioNote,
+                        label = { Text("Referencia de patio (opcional)") },
+                        supportingText = { Text("Para identificar al cliente en Caja; máximo 120 caracteres.") },
+                        singleLine = true, enabled = editable, modifier = Modifier.fillMaxWidth())
+                }
                 items(rows, key = { it.productId }) { row ->
                     ViveroCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -127,6 +133,7 @@ internal fun BackendCartContent(state: BackendCartUiState, onBack: () -> Unit, o
     state.quote?.let { quote -> AlertDialog(onDismissRequest = { if (!state.working) onDismissQuote() }, title = { Text("Confirmar envío a Caja", style = MaterialTheme.typography.titleLarge) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${state.branchName} · Precios confirmados por el vivero", style = MaterialTheme.typography.bodySmall)
+            state.patioNote.trim().takeIf { it.isNotEmpty() }?.let { Text("Referencia de patio: $it") }
             if (quote.totalCents != estimated) Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
                 Text("El importe se actualizó. Revisa los precios antes de confirmar.",
                     Modifier.padding(8.dp).semantics { liveRegion = LiveRegionMode.Polite },

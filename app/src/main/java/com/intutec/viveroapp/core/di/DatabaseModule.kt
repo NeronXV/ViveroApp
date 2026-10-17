@@ -25,7 +25,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): ViveroDatabase =
         Room.databaseBuilder(context, ViveroDatabase::class.java, "vivero.db")
-            .addMigrations(ViveroDatabase.MIGRATION_1_2, ViveroDatabase.MIGRATION_2_3, ViveroDatabase.MIGRATION_3_4, ViveroDatabase.MIGRATION_4_5, ViveroDatabase.MIGRATION_5_6)
+            .addMigrations(ViveroDatabase.MIGRATION_1_2, ViveroDatabase.MIGRATION_2_3, ViveroDatabase.MIGRATION_3_4, ViveroDatabase.MIGRATION_4_5, ViveroDatabase.MIGRATION_5_6, ViveroDatabase.MIGRATION_6_7, ViveroDatabase.MIGRATION_7_8)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {

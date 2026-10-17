@@ -14,6 +14,7 @@ data class BackendSaleAttemptEntity(
     @ColumnInfo("server_folio") val serverFolio: String? = null,
     @ColumnInfo("server_status") val serverStatus: String? = null,
     @ColumnInfo("last_error") val lastError: String? = null,
+    @ColumnInfo("patio_note") val patioNote: String? = null,
 )
 
 @Entity(tableName = "backend_sale_attempt_items", primaryKeys = ["attempt_id", "product_id"], foreignKeys = [

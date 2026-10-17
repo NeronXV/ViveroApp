@@ -164,4 +164,16 @@ class BackendSaleEmitterTest {
         assertEquals(BackendSaleEmissionOutcome.AlreadyClaimed, emitter.send(current).outcome)
         assertEquals(1, remote.submits)
     }
+    @Test fun patioNoteStaysOnSavedAttemptAndRetry() = runTest {
+        val store = Store(); val remote = Remote(store); val session = sessions()
+        val cart = BackendCartSnapshot(1, 1, identity, listOf(BackendCartLine(4, "Demo", "pieza", 450, 2)))
+        val prepared = emitter(store, remote, session).quoteCart(cart, "  Cliente junto a caja  ")
+        remote.error = BackendSaleException(0, "CONNECTION_FAILED", true)
+        val sent = emitter(store, remote, session).send(prepared)
+        assertTrue(sent.outcome is BackendSaleEmissionOutcome.Pending)
+        assertEquals("Cliente junto a caja", store.rows.getValue(sent.localId).attempt.patioNote)
+        assertEquals(BackendSaleEmissionOutcome.Synced, emitter(store, remote, session).resume(sent.localId).outcome)
+        assertEquals("Cliente junto a caja", store.rows.getValue(sent.localId).attempt.patioNote)
+        assertEquals(1, store.writes)
+    }
 }

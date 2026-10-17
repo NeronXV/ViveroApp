@@ -1,5 +1,132 @@
 # Catalogación móvil permanente
 
+## Entrega 1 — contratos locales para Android (14 de octubre de 2026)
+
+Esta sección describe las correcciones locales; no acredita un despliegue. El
+resto del documento conserva la entrega histórica 034. El destino acordado es
+ViveroApp como única aplicación Android del personal y ViveroWeb para
+administración y Caja. No se implementaron pantallas Android en esta entrega.
+
+Se reutilizan `cataloging_drafts`, `cataloging_events`, la transacción de sesión
+y el esquema MariaDB actual, incluida la migración **035 ya presente en el trabajo
+local**. No se añadió ni modificó una migración en esta entrega. `/health` exige
+034 y 035; no basta con encontrar una de las dos.
+
+### Operaciones para los clientes
+
+- Todas las rutas requieren sesión, `MANAGE_PRODUCTS`, sucursal activa y los
+  encabezados `X-Expected-Actor-Id` / `X-Expected-Branch-Id`.
+- Crear: `POST /api/v1/cataloging`, `{original_name, fields}`.
+- Guardar: `PATCH /api/v1/cataloging/{id}`, `{revision, action:"SAVE", fields}`.
+  Los campos omitidos se conservan; para vaciar se envía `""` o `null` según su
+  tipo. `suggested_price_cents` e `initial_quantity` son propuestas guardadas,
+  no modifican precio ni inventario del catálogo.
+- Foto: `PUT /api/v1/cataloging/{id}/photo`, bytes JPEG/PNG/WEBP,
+  `Content-Type` y `X-Cataloging-Revision`. Mantiene límites y normalización
+  existentes. La foto confirmada se transfiere al producto al publicarlo.
+- Vincular: mismo PATCH, `action:"LINK"`, `product_id` y `fields`. Requiere
+  `PUBLISH_CATALOGING` o la autorización histórica del propietario. Funciona
+  desde DRAFT y REVIEW; no modifica el producto existente ni sus existencias.
+- Publicar: `POST /api/v1/cataloging/{id}/publish`,
+  `{revision, fields?, price_cents?, initial_quantity?}`; requiere además
+  `PUBLISH_CATALOGING`. Se pueden completar directamente DRAFT o REVIEW sin
+  una nueva aprobación. La capacidad existente corresponde a MANAGER, ADMIN y
+  OWNER en 035; se verifica en servidor y no se deduce del nombre en el cliente.
+
+SAVE y foto sobre REVIEW requieren publicación. SUBMIT solo sale de DRAFT: no
+permite eludir esa restricción reenviando una ficha que ya está en REVIEW.
+RETURN/PREPARE conservan el contrato histórico del propietario. LINKED y PREPARED
+son terminales para nuevas escrituras sobre el borrador; un reintento confirmado
+puede recuperar su recibo aunque la ficha haya avanzado después.
+
+Publicar asigna un SKU si está vacío y comprueba también las colisiones del
+código de barras. Producto, foto vinculada, precio, movimiento, conteo inicial,
+preparación por sucursal, estado y recibo se confirman en una transacción. Con
+precio positivo y existencia positiva queda listo; si falta alguno, queda
+registrado e inactivo. Cero existencias no inventa un movimiento ni confirma un
+conteo inicial en este contrato. Las propuestas guardadas no sustituyen la
+confirmación explícita de precio/existencia en el cuerpo de publicación.
+
+### Reintentos y recuperación
+
+Cada escritura lleva `Idempotency-Key` persistida **antes** de enviar. Repetir
+exactamente ruta, cuerpo/bytes, revisión, actor y sucursal recupera el resultado.
+No generar otra clave ante una respuesta incierta. La misma clave con otro
+contenido da conflicto. Cambiar la clave tampoco permite publicar dos veces el
+mismo borrador. Los permisos actuales se siguen exigiendo al recuperar.
+
+El recibo de publicación añade `publication` con `branch_id`, `price_cents`,
+`initial_quantity` y `ready`. Es el resultado de esa operación, no una consulta
+del stock actual. Los recibos anteriores siguen aceptados sin ese campo; los
+clientes deben consultar la ficha del producto para conocer su disponibilidad.
+Para recuperar existencias históricas se comprueba la sucursal del conteo exacto
+de esa publicación. Un GET de borrador puede devolver una revisión posterior al
+recibo: no sobrescribirla silenciosamente con el formulario anterior.
+
+Web conserva el intento también para fotos y ante errores de autenticación,
+permisos, timeout, saturación o servidor. Ofrece «Comprobar guardado» en la lista
+y el asistente. «Guardar y salir» guarda datos comerciales y después foto con la
+revisión devuelta; no sale si una operación falla. El diario utiliza el
+almacenamiento existente del navegador: si no cabe la foto, se avisa y **no se
+envía**; debe elegirse una más pequeña. No se cambió el flujo de foto de productos
+ya existentes ni se añadió sincronización offline general.
+
+### Validación local reproducible
+
+`backend/test/cataloging-integration.test.js` comprueba las operaciones reales
+con cuentas y plantas sintéticas, concurrencia, respuesta perdida, fallo forzado
+después de las escrituras, reintento, permisos, sucursales y compatibilidad del
+flujo anterior. El mensaje `Request failed` del fallo forzado es esperado.
+
+Desde la raíz, con binarios portables MariaDB 11.4 ya disponibles:
+
+```powershell
+./backend/scripts/test-cataloging-local.ps1 -MariaDbBin C:/ruta/mariadb/bin
+```
+
+El script crea una carpeta nueva en `tmp/plants-contract-*`, rechaza un puerto
+43389 ocupado, escucha solo en 127.0.0.1 y apaga su proceso al terminar. La prueba
+rechaza una base `vivero` preexistente. No lee `.env`, no conecta al VPS y no
+reutiliza datos reales. Conserva artefactos sintéticos ignorados por Git.
+
+Antes de implementar Android: aprobar el contrato anterior, conservar las claves
+y bytes de intentos en almacenamiento durable nativo y validar el flujo con la
+gerente. La aceptación visual/manual y las pruebas en dispositivo no forman
+parte de la evidencia automatizada de esta entrega. Un despliegue de 035/API/Web
+requiere una autorización independiente; no se realizó aquí.
+
+### Resultado verificado de esta entrega
+
+- Backend: `npm test`, 116 pruebas aprobadas; pruebas dirigidas
+  `node --test test/cataloging.test.js test/inventory-preparation.test.js`, 12
+  aprobadas; comprobación sintáctica `npm run check:cataloging` y de `src/app.js`.
+- Integración real: script local anterior, 19 pruebas aprobadas con MariaDB
+  11.4.13. Cada ejecución creó datos sintéticos nuevos y apagó su proceso.
+- Web: Vitest general con `--exclude 'artifacts/**' --experimental.fsModuleCache
+  --maxWorkers 1`, 652 aprobadas y una omitida por no proporcionar el fixture
+  opcional de flujo HTTP completo. Tras los últimos ajustes, Vitest dirigido a
+  `src/features/admin/plants`, 52 aprobadas. Los conteos se solapan; no sumarlos.
+- Web: `npm run build` y ESLint de los seis archivos de Plantas tocados, correctos.
+- `git diff --check` correcto en ambos repositorios. No se compila Android porque
+  no se modificó; no se ejecutaron pruebas de cámara/dispositivo ni aceptación
+  manual del asistente. No se modificó SQL, por lo que no se ejecutó pgTAP ni la
+  verificación histórica de migraciones Supabase.
+
+Archivos editados por esta entrega, sobre los cambios locales preexistentes:
+
+| Repositorio | Archivos |
+|---|---|
+| ViveroApp | `backend/src/cataloging.js`, `backend/src/app.js`, `backend/test/cataloging-integration.test.js`, `backend/scripts/test-cataloging-local.ps1` (nuevo), `docs/mobile-cataloging.md` |
+| ViveroWeb | `src/features/admin/plants/cataloging-service.ts`, `cataloging-service.test.ts`, `CatalogingWizard.tsx`, `AdminPlants.tsx`, `cataloging-wizard-model.ts`, `cataloging-wizard-model.test.ts` (los seis en la misma carpeta) |
+
+Los asistentes/modelos Web y las migraciones 035/036 ya estaban sin versionar al
+iniciar. Se conservaron también los cambios de Recepción, permisos de inventario,
+menús, estilos, configuración del IDE y documentación ajenos a esta entrega.
+Los repositorios continúan con cambios locales sin commit. No hubo commit, push,
+despliegue ni conexión a producción.
+
+## Historial de la entrega 034
+
 Reutiliza el catálogo móvil premium de ViveroWeb y la preparación comercial /
 inventario 033. Un producto por presentación.
 

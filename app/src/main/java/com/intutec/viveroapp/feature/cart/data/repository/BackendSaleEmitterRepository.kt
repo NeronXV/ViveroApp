@@ -35,13 +35,14 @@ class BackendSaleEmitterRepository @Inject constructor(
         return try { action() } finally { operation.unlock() }
     }
     override suspend fun quote(items: List<BackendSaleLine>): PreparedBackendSale = exclusive { prepare(items) }
-    override suspend fun quoteCart(cart: BackendCartSnapshot): PreparedBackendSale = exclusive {
+    override suspend fun quoteCart(cart: BackendCartSnapshot): PreparedBackendSale = quoteCart(cart, null)
+    override suspend fun quoteCart(cart: BackendCartSnapshot, patioNote: String?): PreparedBackendSale = exclusive {
         require(cart.id > 0 && cart.revision > 0)
         check(cart.identity == access().identity) { "El carrito pertenece a otra cuenta o sucursal." }
-        val prepared = prepare(cart.saleLines())
+        val prepared = prepare(cart.saleLines(), patioNote)
         PreparedBackendSale(prepared.quote, prepared.attempt, cart.copy(items = Collections.unmodifiableList(cart.items.toList())))
     }
-    private suspend fun prepare(items: List<BackendSaleLine>): PreparedBackendSale {
+    private suspend fun prepare(items: List<BackendSaleLine>, patioNote: String? = null): PreparedBackendSale {
         val current = access()
         // Validate/copy the caller's mutable list before the first suspension.
         val lines = BackendSaleAttempt.restore(current.identity, "0".repeat(64), items, 1).items
@@ -51,7 +52,7 @@ class BackendSaleEmitterRepository @Inject constructor(
         check(access() == current) { "La sesión cambió durante la cotización." }
         check(quote.branchId == current.identity.branchId && quote.items.map { BackendSaleLine(it.productId, it.quantity) }.sortedBy { it.productId } == lines)
         val snapshot = quote.copy(items = Collections.unmodifiableList(quote.items.toList()))
-        return PreparedBackendSale(snapshot, BackendSaleAttempt.create(current.identity, lines, quote.totalCents))
+        return PreparedBackendSale(snapshot, BackendSaleAttempt.create(current.identity, lines, quote.totalCents, patioNote))
     }
     override suspend fun send(prepared: PreparedBackendSale): BackendSaleEmission = exclusive {
         val current = access()
@@ -65,7 +66,8 @@ class BackendSaleEmitterRepository @Inject constructor(
         }
         val saved = checkNotNull(outbox.load(id)) { "No se confirmó el almacenamiento local del intento." }
         check(saved.attempt.key == prepared.attempt.key && saved.attempt.identity == prepared.attempt.identity &&
-            saved.attempt.items == prepared.attempt.items && saved.attempt.expectedTotalCents == prepared.attempt.expectedTotalCents) { "El intento guardado no coincide; requiere revisión." }
+            saved.attempt.items == prepared.attempt.items && saved.attempt.expectedTotalCents == prepared.attempt.expectedTotalCents &&
+            saved.attempt.patioNote == prepared.attempt.patioNote) { "El intento guardado no coincide; requiere revisión." }
         check(access() == current) { "La sesión cambió; el intento quedó guardado para recuperación." }
         BackendSaleEmission(id, synchronize(id))
     }

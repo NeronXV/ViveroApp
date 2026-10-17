@@ -66,7 +66,7 @@ android {
         buildConfigField("String", "SUPABASE_URL", "\"\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
         buildConfigField("String", "AUTH_REDIRECT_URL", "\"\"")
-        buildConfigField("boolean", "NATIVE_OPERATIONS_ENABLED", "false")
+        buildConfigField("boolean", "NATIVE_OPERATIONS_ENABLED", "true")
     }
 
     signingConfigs {

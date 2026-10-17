@@ -36,7 +36,7 @@ class BackendDashboardTest {
 
     @Test fun webModulesRequireTheOfficialPortalAndCorrespondingCapabilities() {
         val current = session(setOf("MANAGE_PRODUCTS", "MANAGE_USERS", "VIEW_REPORTS"))
-        assertTrue(requireNotNull(backendDashboard(current, false)).modules.isEmpty())
+        assertEquals(listOf("products"),requireNotNull(backendDashboard(current, false)).modules.map { it.id })
         assertEquals(setOf("products", "staff", "reports"), requireNotNull(backendDashboard(current, true)).modules.map { it.id }.toSet())
     }
 
