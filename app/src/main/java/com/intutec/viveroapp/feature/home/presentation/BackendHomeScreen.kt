@@ -73,16 +73,50 @@ fun BackendHomeScreen(
     val dashboard = backendDashboard(session, webAvailable)
     if (dashboard != null) {
         val lines = cartState.cart?.items.orEmpty()
-        HomeDashboard(dashboard, HomeCartSummary(lines.sumOf { it.quantity },
-            lines.fold(0L) { total, item -> Math.addExact(total, Math.multiplyExact(item.priceCents, item.quantity.toLong())) }),
+        HomeDashboard(
+            dashboard,
+            HomeCartSummary(
+                lines.sumOf { it.quantity },
+                lines.fold(0L) { total, item ->
+                    Math.addExact(total, Math.multiplyExact(item.priceCents, item.quantity.toLong()))
+                }
+            ),
             onCatalog, onCart, onCashier, onInventory, onWeb, onHistory,
-            { profile = true }, onPlants, onWeb)
+            { profile = true }, onPlants, onWeb
+        )
     } else {
-        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Tu espacio de trabajo", style = MaterialTheme.typography.headlineMedium)
-            Text("Necesitas un rol activo para ver tus módulos. Tus datos guardados se conservan.")
-            Button(onRefresh) { Text("Actualizar permisos") }
-            TextButton(onSignOut) { Text("Cerrar sesión") }
+        Box(Modifier.fillMaxSize()) {
+            com.intutec.viveroapp.core.designsystem.LightBotanicalBackdrop(Modifier.fillMaxSize())
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp, androidx.compose.ui.Alignment.CenterVertically)
+            ) {
+                com.intutec.viveroapp.core.designsystem.ViveroMark(markSize = 64.dp)
+                Text(
+                    "Tu espacio de trabajo",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                Text(
+                    "Necesitas un rol activo para ver tus módulos. Tus datos guardados se conservan.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Button(
+                    onClick = onRefresh,
+                    shape = androidx.compose.foundation.shape.CircleShape
+                ) {
+                    Text("Actualizar permisos")
+                }
+                TextButton(onClick = onSignOut) {
+                    Text("Cerrar sesión")
+                }
+            }
         }
     }
     if (profile) AlertDialog(onDismissRequest = { profile = false },

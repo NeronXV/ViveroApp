@@ -31,6 +31,13 @@ import com.intutec.viveroapp.feature.inventory.domain.repository.inventorySessio
 import com.intutec.viveroapp.feature.splash.presentation.SplashScreen
 import com.intutec.viveroapp.feature.home.presentation.BackendHomeScreen
 
+import com.intutec.viveroapp.core.designsystem.LightBotanicalBackdrop
+import com.intutec.viveroapp.core.designsystem.ViveroMark
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.shape.CircleShape
+
 @Composable
 fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
     val navController = rememberNavController()
@@ -59,12 +66,41 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
         }
     }
     if (auth.status == AuthStatus.AUTHENTICATED && auth.backend.accessStatus != BackendAccessStatus.READY) {
-        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Consulta tus permisos para continuar.")
-            if (auth.backend.accessStatus == BackendAccessStatus.LOADING) CircularProgressIndicator()
-            auth.errorMessage?.let { Text(it) }
-            Button(authViewModel::refresh) { Text("Actualizar permisos") }
-            TextButton(authViewModel::signOut) { Text("Cerrar sesión") }
+        Box(Modifier.fillMaxSize()) {
+            LightBotanicalBackdrop(Modifier.fillMaxSize())
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+            ) {
+                ViveroMark(markSize = 64.dp)
+                Text(
+                    "Verificando permisos",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Consultando tus accesos para continuar...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                if (auth.backend.accessStatus == BackendAccessStatus.LOADING) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+                auth.errorMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                }
+                Button(onClick = authViewModel::refresh, shape = CircleShape) {
+                    Text("Actualizar permisos")
+                }
+                TextButton(onClick = authViewModel::signOut) {
+                    Text("Cerrar sesión")
+                }
+            }
         }
         return
     }
@@ -106,8 +142,31 @@ fun ViveroApp(authViewModel: BackendAuthViewModel = hiltViewModel()) {
 
 @Composable
 private fun AccessUnavailable(onHome: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Tus permisos actuales no permiten abrir este módulo. Los intentos guardados se conservan.")
-        Button(onHome) { Text("Volver al inicio") }
+    Box(Modifier.fillMaxSize()) {
+        LightBotanicalBackdrop(Modifier.fillMaxSize())
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+        ) {
+            ViveroMark(markSize = 64.dp)
+            Text(
+                "Módulo no disponible",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Tus permisos actuales no permiten abrir este módulo. Los intentos guardados se conservan.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Button(onClick = onHome, shape = CircleShape) {
+                Text("Volver al inicio")
+            }
+        }
     }
 }
