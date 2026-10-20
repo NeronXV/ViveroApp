@@ -80,6 +80,10 @@ pasó en un proyecto aislado sin puertos públicos. Se estableció la administra
 en `/srv/apps/vivero-dulcinea` y la red de proxy compartido, preservando datos y
 servicios existentes. Falta la copia cifrada fuera del VPS.
 [Guía para Pedro y Toni](docs/vps-multiproject-operations.md).
+El 19 de octubre de 2026 se publicaron el registro directo de plantas,
+los conteos directos y su historial en API/Web del VPS, con MariaDB hasta 040.
+Android está compilado para la prueba física desde Android Studio.
+[Alcance y verificación de esta entrega](docs/plants-direct-registration.md).
 Consultar [estado y evidencia](docs/backend-complete-cutover.md) y
 [preparación VPS](docs/backend-vps-preparation.md). Las verificaciones históricas
 conservan su fecha y alcance originales.

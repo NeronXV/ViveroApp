@@ -33,8 +33,6 @@ import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.intutec.viveroapp.core.designsystem.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
@@ -46,6 +44,9 @@ fun PlantScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val p = state.selected
     val context = LocalContext.current
+    var showCatalog by rememberSaveable { mutableStateOf(false) }
+    var countQuantity by rememberSaveable(p?.id,p?.product,p?.baselineMovementId) { mutableStateOf("") }
+    var countReason by rememberSaveable(p?.id,p?.product,p?.baselineMovementId) { mutableStateOf("") }
     var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
     var photoTarget by rememberSaveable { mutableStateOf("") }
     var chooseCategory by remember { mutableStateOf(false) }
@@ -153,7 +154,12 @@ fun PlantScreen(
                     )
                 }
 
-                state.plants.forEach { plant ->
+                Row {
+                    TextButton(onClick={showCatalog=false}){Text("Por completar")}
+                    TextButton(onClick={showCatalog=true}){Text("Catálogo")}
+                    TextButton(onClick={vm.history()},enabled=!state.busy){Text("Historial")}
+                }
+                (if(showCatalog) state.catalogProducts else state.plants).forEach { plant ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -175,7 +181,8 @@ fun PlantScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    if (plant.hasImage) "Completar información" else "Falta fotografía",
+                                    if (plant.product) "En catálogo · revisar preparación para venta"
+                                    else if (plant.hasImage) "Borrador · falta confirmar y publicar" else "Borrador · falta fotografía",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (plant.hasImage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
@@ -316,16 +323,21 @@ fun PlantScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    val preview by produceState<android.graphics.Bitmap?>(null, p.photoPath) {
-                        value = withContext(Dispatchers.IO) {
-                            p.photoPath?.let { android.graphics.BitmapFactory.decodeFile(it) }
-                        }
+                    val preview by produceState<android.graphics.Bitmap?>(null, p) {
+                        value = null
+                        value = try { vm.preview(p) }
+                        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                        catch (_: Exception) { null }
+                    }
+
+                    if (preview == null && p.hasImage) {
+                        Text("La fotografía está guardada. Si no carga, comprueba tu conexión.")
                     }
 
                     preview?.let {
                         Image(
                             it.asImageBitmap(),
-                            contentDescription = "Foto seleccionada",
+                            contentDescription = if (p.photoPath != null) "Foto seleccionada" else "Foto guardada",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)
@@ -397,6 +409,9 @@ fun PlantScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    if(state.canDirect&&!p.product&&!p.fromReceipt&&p.linkProductId==null){
+                        OutlinedTextField(value=p.quantity,onValueChange={vm.change(p.copy(quantity=it))},label={Text("Cantidad inicial en esta sucursal")},supportingText={Text("Escribe 0 si no hay unidades. Se registra una sola vez.")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),enabled=editable,modifier=Modifier.fillMaxWidth())
+                    }
                     if (state.canPublish && p.status !in listOf("DISABLED", "LINKED", "PREPARED")) {
                         Button(
                             onClick = { vm.save(publish = true) },
@@ -406,11 +421,21 @@ fun PlantScreen(
                         ) {
                             Icon(Icons.Outlined.Publish, null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Confirmar y publicar", fontWeight = FontWeight.Bold)
+                            Text(if(state.canDirect&&!p.product&&!p.fromReceipt&&p.linkProductId==null) "Guardar y habilitar" else "Confirmar y publicar", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
 
+                if(p.product){
+                    TextButton(onClick={vm.history(p.id)},enabled=!state.busy){Text("Historial de esta planta")}
+                    if(state.canDirect){
+                        Text("Conteo directo · Registradas: "+p.quantity)
+                        OutlinedTextField(value=countQuantity,onValueChange={countQuantity=it},label={Text("Cantidad contada")},enabled=editable,keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number))
+                        Text("Diferencia: "+(countQuantity.toLongOrNull()?.let { count->p.quantity.toDoubleOrNull()?.let { count-it } }?:"—"))
+                        OutlinedTextField(value=countReason,onValueChange={countReason=it},label={Text("Motivo del ajuste")},enabled=editable)
+                        Button(onClick={vm.count(countQuantity,countReason)},enabled=editable&&p.baselineMovementId!=null){Text("Aplicar ajuste")}
+                    }
+                }
                 // Navigation buttons between steps
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -462,6 +487,9 @@ fun PlantScreen(
         }
     }
 
+    state.history?.let { rows ->
+        AlertDialog(onDismissRequest=vm::closeHistory,title={Text("Últimos 50 cambios · Sucursal actual")},text={Column(Modifier.verticalScroll(rememberScrollState())){if(rows.isEmpty())Text("Sin registros nuevos. Los movimientos anteriores siguen en Inventario.");rows.forEach{Text(it);HorizontalDivider()}}},confirmButton={TextButton(onClick=vm::closeHistory){Text("Cerrar")}})
+    }
     if (chooseCategory) {
         AlertDialog(
             onDismissRequest = { chooseCategory = false },

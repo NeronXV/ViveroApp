@@ -87,7 +87,10 @@ test('administration lock surrounds commit or rollback and is released before po
 
 test('HTTP enforces price permissions before writes while allowing unchanged prices', async t => {
   let writes = 0;
+  let audits = 0;
   const db = { execute: async sql => {
+    if (sql.startsWith('SELECT common_name')) return [[{common_name:'Prueba',price_cents:'100'}]];
+    if (sql.startsWith('INSERT INTO plant_history')) {audits++;return [{insertId:1}];}
     if (sql.startsWith('SELECT price_cents')) return [[{ price_cents: '100', wholesale_price_cents: '50' }]];
     writes++;
     return [{ affectedRows: 1, insertId: 2 }];
@@ -112,7 +115,9 @@ test('HTTP enforces price permissions before writes while allowing unchanged pri
     assert.equal(response.status, 403);
   }
   assert.equal(writes, 0);
+  assert.equal(audits, 0);
   const unchanged = await fetch(url + '/1', { method: 'PATCH', headers, body: JSON.stringify({ price_cents: 100, wholesale_price_cents: 50, common_name: 'Nuevo nombre' }) });
   assert.equal(unchanged.status, 200);
   assert.equal(writes, 1);
+  assert.equal(audits, 1);
 });

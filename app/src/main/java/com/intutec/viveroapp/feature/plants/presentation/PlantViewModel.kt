@@ -17,7 +17,7 @@ import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
-data class PlantUiState(val plants:List<PlantWork> = emptyList(),val categories:List<PlantCategory> = emptyList(),val catalogProducts:List<PlantWork> = emptyList(),val selected:PlantWork?=null,val step:Int=1,val busy:Boolean=false,val pending:Boolean=false,val error:String?=null,val message:String?=null,val enabled:Boolean=false,val canPublish:Boolean=false,val canPrice:Boolean=false)
+data class PlantUiState(val plants:List<PlantWork> = emptyList(),val categories:List<PlantCategory> = emptyList(),val catalogProducts:List<PlantWork> = emptyList(),val selected:PlantWork?=null,val step:Int=1,val busy:Boolean=false,val pending:Boolean=false,val error:String?=null,val message:String?=null,val enabled:Boolean=false,val canPublish:Boolean=false,val canPrice:Boolean=false,val canDirect:Boolean=false,val history:List<String>?=null)
 @HiltViewModel
 class PlantViewModel @Inject constructor(private val gateway:PlantGateway,private val sessions:SessionStore,@param:ApplicationContext private val context:Context):ViewModel(){
     private val mutable=MutableStateFlow(PlantUiState())
@@ -30,6 +30,10 @@ class PlantViewModel @Inject constructor(private val gateway:PlantGateway,privat
     suspend fun preview(imageId:Long):Bitmap?=withContext(Dispatchers.IO){
         gateway.preview(imageId)?.let{BitmapFactory.decodeByteArray(it,0,it.size)}
     }
+    suspend fun preview(plant:PlantWork):Bitmap?=withContext(Dispatchers.IO){
+        plant.photoPath?.let { BitmapFactory.decodeFile(it) }
+            ?:gateway.preview(plant)?.let { BitmapFactory.decodeByteArray(it,0,it.size) }
+    }
     init {viewModelScope.launch {sessions.backend.collectLatest { s->
         generation++
         operation?.cancel();remembering?.cancel()
@@ -39,7 +43,7 @@ class PlantViewModel @Inject constructor(private val gateway:PlantGateway,privat
     }}}
     private suspend fun load(){
         val list=gateway.list();val remembered=gateway.remembered();val pending=gateway.hasPending()
-        mutable.update{it.copy(plants=list.plants,categories=list.categories,catalogProducts=list.catalogProducts,selected=remembered,pending=pending)}
+        mutable.update{it.copy(plants=list.plants,categories=list.categories,catalogProducts=list.catalogProducts,canDirect=list.canDirect,selected=remembered,pending=pending)}
     }
     private fun run(action:suspend()->Unit){if(state.value.busy||!state.value.enabled)return
         val epoch=generation;mutable.update{it.copy(busy=true,error=null,message=null)}
@@ -56,7 +60,14 @@ class PlantViewModel @Inject constructor(private val gateway:PlantGateway,privat
         mutable.update{it.copy(selected=saved,message=if(publish&&saved.readyForSale)"Ficha publicada y lista para venta."
             else if(publish&&saved.needsInitialCount)"Ficha publicada. Falta confirmar el conteo inicial${if(saved.price.isBlank())" y el precio" else ""}."
             else if(publish)"Ficha publicada. Revisa el precio o la preparación comercial para venderla." else "Cambios guardados.")}
-        if(exit||saved.status in listOf("PREPARED","LINKED")){gateway.remember(null);val list=gateway.list();mutable.update{it.copy(selected=null,plants=list.plants,step=1)}}
+        if(exit||publish||saved.status in listOf("PREPARED","LINKED")){gateway.remember(null);val list=gateway.list();mutable.update{it.copy(selected=null,plants=list.plants,categories=list.categories,catalogProducts=list.catalogProducts,canDirect=list.canDirect,step=1)}}
+    }
+    fun history(productId:Long?=null)=run{val rows=gateway.history(productId);mutable.update{it.copy(history=rows)}}
+    fun closeHistory(){mutable.update{it.copy(history=null)}}
+    fun count(quantity:String,reason:String)=run{
+        check(state.value.canDirect);val plant=state.value.selected?:return@run
+        val saved=gateway.count(plant,quantity,reason);mutable.update{it.copy(selected=saved,message="Ajuste aplicado y registrado en el historial.")}
+        val current=gateway.open(saved);gateway.remember(current);mutable.update{it.copy(selected=current)}
     }
     fun recover()=run {val result=gateway.recover();mutable.update{it.copy(selected=result?:it.selected,message="Operación comprobada. Consulta la ficha antes de continuar.")}}
     fun reload()=run{val p=state.value.selected?:return@run;val current=gateway.open(p);gateway.remember(current);mutable.update{it.copy(selected=current,step=1)}}

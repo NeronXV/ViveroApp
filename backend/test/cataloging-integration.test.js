@@ -447,3 +447,47 @@ test('product photo replays the exact receipt after response loss',async()=>{
   const first=await upload();assert.equal(first.status,200);const receipt=await first.json();
   const replay=await upload();assert.equal(replay.status,200);assert.deepEqual(await replay.json(),receipt);
 });
+
+test('direct registration and counts for trusted roles are atomic, audited and replay safe',async()=>{
+  for(const person of ['owner','admin','manager']){
+    const d=(await create()).data;
+    const initial=person==='owner'?0:5;
+    const body={target:'draft',id:d.id,revision:d.revision,fields:{approved_name:'Registro directo sintético',presentation:'Maceta',category_id:category},price_cents:15000,initial_quantity:initial};
+    const k=key(),first=await call('plants/confirm','POST',body,person,k);
+    assert.equal(first.status,200,JSON.stringify(first.data));
+    assert.equal(first.data.publication.ready,true);
+    assert.deepEqual((await call('plants/confirm','POST',body,person,k)).data,first.data);
+    const pid=first.data.product_id;
+    const [[stock]]=await admin.execute('SELECT quantity FROM inventory WHERE branch_id=1 AND product_id=?',[pid]);
+    assert.equal(Number(stock.quantity),initial);
+    const baseline=(await call(`inventory/count-baseline?product_id=${pid}`,'GET',undefined,person)).data;
+    const input={product_id:pid,counted_quantity:'4',reason:'Conteo físico sintético',baseline_quantity:baseline.quantity,baseline_movement_id:baseline.movement_id};
+    const countKey=key(),count=await call('inventory/direct-counts','POST',input,person,countKey);
+    assert.equal(count.status,200,JSON.stringify(count.data));assert.equal(count.data.status,'APPLIED');
+    const again=await call('inventory/direct-counts','POST',input,person,countKey);
+    assert.equal(again.data.observation_id,count.data.observation_id);
+    assert.equal((await call('inventory/direct-counts/result','POST',input,person,countKey)).data.observation_id,count.data.observation_id);
+    assert.equal((await call('inventory/direct-counts','POST',input,person)).status,409);
+    const history=await call(`plants/history?product_id=${pid}`,'GET',undefined,person);
+    assert.equal(history.status,200,JSON.stringify(history.data));assert.equal(history.data.items.length,2);
+    assert.equal(history.data.items[0].action,'DIRECT_COUNT');
+    assert.equal(Number(history.data.items[0].before_values.quantity),initial);
+    assert.equal(Number(history.data.items[0].after_values.quantity),4);
+    assert.equal((await call('inventory/direct-counts','POST',input,'inventory')).status,403);
+    assert.equal((await call(`plants/history?product_id=${pid}`,'GET',undefined,'cashier')).status,403);
+  }
+});
+
+test('failed history write rolls back initial stock and allows same registration attempt',async()=>{
+  const d=(await create()).data,k=key();
+  const body={target:'draft',id:d.id,revision:d.revision,fields:{approved_name:'Atomicidad sintética',presentation:'Maceta',category_id:category},price_cents:12000,initial_quantity:5};
+  const [[before]]=await admin.query('SELECT COUNT(*) n FROM inventory_movements');
+  await admin.query("CREATE TRIGGER synthetic_history_failure BEFORE INSERT ON plant_history FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Synthetic history failure'");
+  try {assert.equal((await call('plants/confirm','POST',body,'manager',k)).status,503)}
+  finally {await admin.query('DROP TRIGGER synthetic_history_failure')}
+  assert.deepEqual((await admin.query('SELECT COUNT(*) n FROM inventory_movements'))[0][0],before);
+  assert.equal((await call(`cataloging/${d.id}`)).data.status,'DRAFT');
+  assert.equal((await call('plants/confirm','POST',body,'manager',k)).status,200);
+  await assert.rejects(pool.query("UPDATE plant_history SET reason='forbidden'"),e=>e.code==='ER_TABLEACCESS_DENIED_ERROR');
+  await assert.rejects(pool.query('DELETE FROM plant_history'),e=>e.code==='ER_TABLEACCESS_DENIED_ERROR');
+});

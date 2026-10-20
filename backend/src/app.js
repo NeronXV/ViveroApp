@@ -10,6 +10,8 @@ import { createInventoryObservations, observationInput, decisionInput, observati
 import { createProductPreparation } from './product-preparation.js';
 import { receptionInput, confirmationInput } from './purchase-reception.js';
 import { plantEdit } from './plant-edits.js';
+import { readPlantHistory } from './plant-history.js';
+import { requireDirectInventory, canApplyInventoryCount } from './inventory-policy.js';
 import { createHash } from 'node:crypto';
 import { inventoryPermissions } from './inventory-policy.js';
 import { createSales, saleQuery } from './sales.js';
@@ -70,8 +72,8 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
       const method = request.method;
       if (url.pathname === '/health' && method === 'GET') {
         try {
-          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version IN ('034_cataloging_drafts', '035_cataloging_publish', '037_receiving_pending_plants', '038_zero_received_purchase_lines', '039_sale_patio_note')");
-          if (migrations.length !== 5) throw new Error('Migration required');
+          const [migrations] = await db.execute("SELECT version FROM schema_migrations WHERE version IN ('034_cataloging_drafts', '035_cataloging_publish', '037_receiving_pending_plants', '038_zero_received_purchase_lines', '039_sale_patio_note', '040_plant_history')");
+          if (migrations.length !== 6) throw new Error('Migration required');
           if (imageStore) await imageStore.check();
         }
         catch { throw new ApiError(503, 'DATABASE_UNAVAILABLE'); }
@@ -404,13 +406,29 @@ export function createApp({ db, auth = createAuth(db), imageStore, webOrigin = n
       if (url.pathname === '/api/v1/inventory/permissions' && method === 'GET') {
         if (url.search) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
         return send(200, await auth.withAccess(request, ['MANAGE_INVENTORY'], (_db, context) =>
-          ({ schema_version: 1, branch_id: context.branch?.id, permissions: inventoryPermissions(context) })));
+          ({ schema_version: 1, branch_id: context.branch?.id, permissions: {...inventoryPermissions(context),can_apply_count:canApplyInventoryCount(context)} })));
       }
       if (url.pathname === '/api/v1/inventory/count-baseline' && method === 'GET') {
         if ([...url.searchParams.keys()].length !== 1 || !url.searchParams.has('product_id')) throw new ApiError(400, 'INVENTORY_QUERY_INVALID');
         const id = positiveId(url.searchParams.get('product_id'));
         return send(200, await auth.withAccess(request, ['MANAGE_INVENTORY'], (db, context) =>
           createInventoryObservations(db, context).baseline(id), { readCommitted: true }));
+      }
+      if(url.pathname==='/api/v1/plants/history' && method==='GET') {
+        return send(200,await auth.withAccess(request,['MANAGE_PRODUCTS'],(db,context)=>{
+          catalogingScope(context,request);
+          return readPlantHistory(db,context,url.searchParams);
+        }));
+      }
+      if(/^\/api\/v1\/inventory\/direct-counts(?:\/result)?$/.test(url.pathname)) {
+        if(method!=='POST'||url.search)throw new ApiError(404,'NOT_FOUND');
+        const input=observationInput(await body(request),request.headers['idempotency-key']);
+        input.idempotencyHash=createHash('sha256').update('direct-count:').update(input.idempotencyHash).digest();
+        return send(200,await auth.withAccess(request,['MANAGE_INVENTORY'],(db,context)=>{
+          requireDirectInventory(context);catalogingScope(context,request,'MANAGE_INVENTORY');
+          const service=createInventoryObservations(db,context);
+          return url.pathname.endsWith('/result')?service.result(input):service.observe(input,true);
+        },{readCommitted:true}));
       }
       const observations = /^\/api\/v1\/inventory\/count-observations(?:\/(result|[1-9][0-9]*)\/?)?$/.exec(url.pathname);
       if (observations) {

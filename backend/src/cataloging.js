@@ -3,6 +3,8 @@ import { ApiError, positiveId, validateProduct, createCatalog } from './catalog.
 import { requireCapabilities } from './auth/service.js';
 import { lockInventoryRow, parseMilli, formatMilli } from './inventory.js';
 import { createProductPreparation } from './product-preparation.js';
+import { requireDirectInventory } from './inventory-policy.js';
+import { plantSnapshot, recordPlantHistory } from './plant-history.js';
 
 const fail = (status, code) => { throw new ApiError(status, code); };
 const hash = v => createHash('sha256').update(JSON.stringify(v)).digest();
@@ -66,15 +68,17 @@ export function catalogingPublishInput(value) {
 }
 export function plantConfirmationInput(value) {
   object(value);
-  if (Object.keys(value).some(k => !['target','id','revision','fields','price_cents','product_id'].includes(k))) fail(400,'CATALOGING_INPUT_INVALID');
+  if (Object.keys(value).some(k => !['target','id','revision','fields','price_cents','product_id','initial_quantity'].includes(k))) fail(400,'CATALOGING_INPUT_INVALID');
   if (!['draft','product'].includes(value.target) || !Number.isInteger(value.revision) || value.revision < 1) fail(400,'CATALOGING_INPUT_INVALID');
   const id=positiveId(value.id);
   if (!Number.isSafeInteger(value.price_cents) || value.price_cents < 0) fail(400,'CATALOGING_INPUT_INVALID');
   if (value.target==='product' && Object.hasOwn(value,'product_id')) fail(400,'CATALOGING_INPUT_INVALID');
   const fields=value.target==='draft' ? catalogingFields(value.fields) : validateProduct(value.fields,true);
+  if(Object.hasOwn(value,'initial_quantity') && (value.target!=='draft'||Object.hasOwn(value,'product_id')||!Number.isSafeInteger(value.initial_quantity)||value.initial_quantity<0||value.initial_quantity>1000000||value.price_cents<=0))fail(400,'CATALOGING_INPUT_INVALID');
   if (value.target==='draft' && Object.hasOwn(fields,'initial_quantity')) fail(400,'CATALOGING_INPUT_INVALID');
   if (value.target==='product' && Object.keys(fields).some(k => !['common_name','category_id','description','scientific_name','light_type','watering_advice'].includes(k))) fail(400,'CATALOGING_INPUT_INVALID');
   return {target:value.target,id,revision:value.revision,fields,price_cents:value.price_cents,
+    ...(Object.hasOwn(value,'initial_quantity')?{initial_quantity:value.initial_quantity}:{}),
     ...(Object.hasOwn(value,'product_id') ? {product_id:positiveId(value.product_id)} : {})};
 }
 export async function generateSku(db, draftId) {
@@ -318,6 +322,7 @@ export function createCataloging(db, context) {
     },
     async confirm(id,input,key) {
       requireCapabilities(context,['PUBLISH_CATALOGING','MANAGE_PRICES']);
+      if(Object.hasOwn(input,'initial_quantity'))requireDirectInventory(context);
       const branchId=context.branch.id;
       await db.execute('SELECT id FROM branches WHERE id=? FOR UPDATE',[branchId]);
       const current=await row(id), fingerprint=hash(['confirm',id,input,branchId]);
@@ -325,6 +330,8 @@ export function createCataloging(db, context) {
       if(current.revision!==input.revision)fail(409,'CATALOGING_EDIT_CONFLICT');
       if(['LINKED','PREPARED'].includes(current.status))fail(409,'CATALOGING_CLOSED');
       const f={...json(current.fields),...input.fields};
+      if(current.source_key==='supplier_purchase_item' && Object.hasOwn(input,'initial_quantity'))fail(409,'CATALOGING_RECEIPT_QUANTITY_MANAGED');
+      const beforeValues=input.product_id?await plantSnapshot(db,input.product_id):{};
       let receipt=null;
       if(current.source_key==='supplier_purchase_item'){
         const [[line]]=await db.execute(`SELECT i.id,i.line_number,i.quantity,i.product_id,i.movement_id,i.new_product,
@@ -375,13 +382,21 @@ export function createCataloging(db, context) {
         if(!input.product_id)await db.execute('INSERT INTO product_branch_preparation(product_id,branch_id,initial_count_confirmed_at,initial_count_confirmed_by) VALUES(?,?,UTC_TIMESTAMP(6),?) ON DUPLICATE KEY UPDATE initial_count_confirmed_at=COALESCE(initial_count_confirmed_at,VALUES(initial_count_confirmed_at)),initial_count_confirmed_by=COALESCE(initial_count_confirmed_by,VALUES(initial_count_confirmed_by))',
           [productId,branchId,context.user.id]);
       }
+      if(Object.hasOwn(input,'initial_quantity')) {
+        await lockInventoryRow(db,branchId,productId);
+        if(input.initial_quantity>0)await db.execute("INSERT INTO inventory_movements(branch_id,product_id,movement_type,quantity,idempotency_hash,notes,created_by) VALUES(?,?,'RECEPTION',?,?,?,?)",
+          [branchId,productId,input.initial_quantity,hash(['plant-initial',id]),'Existencia inicial al registrar planta',context.user.id]);
+        await db.execute('INSERT INTO product_branch_preparation(product_id,branch_id,initial_count_confirmed_at,initial_count_confirmed_by) VALUES(?,?,UTC_TIMESTAMP(6),?)',[productId,branchId,context.user.id]);
+      }
       const preparation=createProductPreparation(db,context), before=await preparation.state(productId);
       const final=before.initial_count_confirmed && priceCents>0 && !before.reasons.some(r=>['DISABLED','CATEGORY_INACTIVE'].includes(r))
         ? await preparation.activate(productId) : before;
       await db.execute(`UPDATE cataloging_drafts SET fields=?,status=?,product_id=?,revision=revision+1,updated_by=?,updated_at=UTC_TIMESTAMP(6),
         reviewed_by=?,reviewed_at=UTC_TIMESTAMP(6),approved_by=?,approved_at=UTC_TIMESTAMP(6) WHERE id=?`,
         [JSON.stringify(f),status,productId,context.user.id,context.user.id,context.user.id,id]);
-      return record(id,key,fingerprint,{publication:{branch_id:branchId,price_cents:priceCents,initial_quantity:receipt?.quantity??0,
+      await recordPlantHistory(db,context,productId,input.product_id?'LINK':'CREATE','Registro de planta',beforeValues,
+        {...await plantSnapshot(db,productId),initial_quantity:receipt?.quantity??input.initial_quantity??null,ready:final.ready});
+      return record(id,key,fingerprint,{publication:{branch_id:branchId,price_cents:priceCents,initial_quantity:receipt?.quantity??input.initial_quantity??0,
         ready:final.ready,needs_initial_count:!final.initial_count_confirmed}});
     },
     async photo(id,revision,key,store,uploaded) {

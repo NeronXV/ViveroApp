@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import { ApiError, positiveId } from './catalog.js';
 import { inventoryScope, inventoryBody, lockInventoryRow, requestKey, milliFromDb, formatMilli, parseMilli } from './inventory.js';
-import { requireInventoryOwner, inventoryPermissions } from './inventory-policy.js';
+import { requireInventoryOwner, requireDirectInventory, inventoryPermissions } from './inventory-policy.js';
+import { recordPlantHistory } from './plant-history.js';
+import { createProductPreparation } from './product-preparation.js';
 
 const fail = (code, status = 409) => { throw new ApiError(status, code); };
 const hash = value => createHash('sha256').update(value).digest();
@@ -76,7 +78,8 @@ export function createInventoryObservations(db, context) {
       if (!row) fail('INVENTORY_OPERATION_NOT_FOUND', 404);
       return receipt(row, true);
     },
-    async observe(request) {
+    async observe(request, direct=false) {
+      if(direct)requireDirectInventory(context);
       const before = await snapshot(request.productId);
       const previous = await saved(request);
       if (previous) return receipt(previous, true);
@@ -85,10 +88,11 @@ export function createInventoryObservations(db, context) {
         (branch_id, product_id, observed_quantity, baseline_quantity, baseline_movement_id, reason, observed_by, idempotency_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [branchId, request.productId, request.quantity, before.quantity, before.revision,
         request.reason, context.user.id, request.idempotencyHash]);
+      if(direct)return this.decide(created.insertId,{decision:'APPROVE',reason:request.reason,key:hash(`direct:${created.insertId}`)},true);
       return receipt(await get(created.insertId));
     },
-    async decide(id, input) {
-      requireInventoryOwner(context);
+    async decide(id, input, direct=false) {
+      if(direct)requireDirectInventory(context);else requireInventoryOwner(context);
       // Branch first prevents approve/reception/payment races and lock inversion.
       await db.execute('SELECT id FROM branches WHERE id = ? FOR UPDATE', [branchId]);
       const row = await get(id, true);
@@ -120,7 +124,13 @@ export function createInventoryObservations(db, context) {
         countId = count.insertId;
         status = adjustment === 0n ? 'CLOSED' : 'APPLIED';
         await db.execute(`INSERT INTO product_branch_preparation (product_id, branch_id, initial_count_confirmed_at, initial_count_confirmed_by)
-          VALUES (?, ?, UTC_TIMESTAMP(6), ?) ON DUPLICATE KEY UPDATE product_id = VALUES(product_id)`, [row.product_id, branchId, context.user.id]);
+          VALUES (?, ?, UTC_TIMESTAMP(6), ?) ON DUPLICATE KEY UPDATE initial_count_confirmed_at=COALESCE(initial_count_confirmed_at,VALUES(initial_count_confirmed_at)),initial_count_confirmed_by=COALESCE(initial_count_confirmed_by,VALUES(initial_count_confirmed_by))`, [row.product_id, branchId, context.user.id]);
+        await recordPlantHistory(db,context,row.product_id,direct?'DIRECT_COUNT':'APPROVED_COUNT',input.reason,
+          {quantity:current.quantity},{quantity:row.observed_quantity,difference:formatMilli(adjustment)});
+        if(direct && ['MANAGE_PRODUCTS','MANAGE_PRICES'].every(cap=>context.capabilities.includes(cap))) {
+          const prep=createProductPreparation(db,context),state=await prep.state(row.product_id);
+          if(state.reasons.every(r=>['PRODUCT_PENDING','ACTIVATION_PENDING'].includes(r)))await prep.activate(row.product_id);
+        }
       }
       await db.execute(`UPDATE inventory_count_observations SET status = ?, decided_by = ?, decided_at = UTC_TIMESTAMP(6),
         decision_reason = ?, decision_key = ?, decision_hash = ?, count_id = ? WHERE id = ? AND branch_id = ? AND status = 'PENDING'`,

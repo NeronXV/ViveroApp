@@ -17,6 +17,13 @@ export function requireInventoryReception(context) {
   }
 }
 
+export function canApplyInventoryCount(context) {
+  return inventoryPermissions(context).can_receive;
+}
+export function requireDirectInventory(context) {
+  if(!canApplyInventoryCount(context))throw new ApiError(403,'INVENTORY_DIRECT_FORBIDDEN');
+}
+
 export function inventoryPermissions(context) {
   const write = context.access_state === 'ACTIVE' && Boolean(context.branch?.is_active)
     && context.capabilities.includes('MANAGE_INVENTORY');

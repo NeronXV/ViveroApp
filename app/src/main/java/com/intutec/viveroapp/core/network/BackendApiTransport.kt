@@ -33,6 +33,7 @@ internal fun backendNativeRequestAllowed(path: String, method: HttpMethod, opera
         "/api/v1/inventory/counts/result", "/api/v1/inventory/receptions/result",
     ))
 internal fun nativePlantRequest(path:String,method:HttpMethod):Boolean =
+    (path=="/api/v1/inventory/direct-counts" && method==HttpMethod.Post) ||
     (path=="/api/v1/plants/confirm" && method==HttpMethod.Post) ||
     (path=="/api/v1/cataloging" && method==HttpMethod.Post) ||
     (Regex("^/api/v1/cataloging/[1-9][0-9]*$").matches(path) && method==HttpMethod.Patch) ||
@@ -42,6 +43,7 @@ internal fun nativePlantRequest(path:String,method:HttpMethod):Boolean =
     (Regex("^/api/v1/products/[1-9][0-9]*/catalog-photo$").matches(path) && method==HttpMethod.Put) ||
     (Regex("^/api/v1/products/[1-9][0-9]*/preparation/activate$").matches(path) && method==HttpMethod.Post)
 interface BackendApiTransport {
+    suspend fun plantDraftImage(draftId:Long,token:String,headers:Map<String,String>):ByteArray? = null
     suspend fun plantImage(imageId:Long,token:String):ByteArray? = null
     suspend fun plantRead(path:String,token:String,headers:Map<String,String>,query:Map<String,String>):BackendApiResponse = throw UnsupportedOperationException()
     suspend fun plantWrite(path:String,method:String,token:String,headers:Map<String,String>,body:ByteArray):BackendApiResponse = throw UnsupportedOperationException()
@@ -56,6 +58,17 @@ class KtorBackendApiTransport @Inject constructor(
     @param:Named("backendApi") private val client: HttpClient,
     @param:Named("backendApiOrigin") private val origin: String,
 ) : BackendApiTransport {
+    override suspend fun plantDraftImage(draftId:Long,token:String,headers:Map<String,String>):ByteArray? {
+        require(draftId>0 && Regex("^[A-Za-z0-9_-]{43}$").matches(token))
+        val response=client.request("$origin/api/v1/cataloging/$draftId/photo") {
+            method=HttpMethod.Get
+            header("Authorization","Bearer $token")
+            header("Cache-Control","no-store")
+            headers.forEach { (name,value)->header(name,value) }
+        }
+        if(response.status.value!=200)return null
+        return response.body<ByteArray>().takeIf { it.size in 1..5*1024*1024 }
+    }
     override suspend fun plantImage(imageId:Long,token:String):ByteArray? {
         require(imageId>0 && Regex("^[A-Za-z0-9_-]{43}$").matches(token))
         val response=client.request("$origin/api/v1/images/$imageId") {
