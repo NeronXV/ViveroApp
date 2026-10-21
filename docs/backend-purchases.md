@@ -1,5 +1,59 @@
 # Compras y proveedores: bloque 020
 
+## Recepción publicada el 20 de octubre de 2026
+
+La recepción simplificada (`PATCH /supplier-purchases/:id`) ahora aprende la
+misma equivalencia por proveedor, descripción y envase que la revisión individual
+al vincular una partida recibida a un producto existente. El aprendizaje comparte
+la transacción y la protección de revisión: una falla posterior revierte también
+la equivalencia y un reintento no la duplica. Cantidad cero y fichas nuevas no
+borran equivalencias. Los futuros borradores reutilizan el `AUTO_MATCHED` existente.
+No cambia esquemas, privilegios, cuerpos HTTP, precios de venta ni inventario
+durante la revisión.
+
+La Web incorpora lectura por columnas para tickets térmicos, revisión de nombres,
+costos y cantidades antes de guardar, sugerencias explícitas y comparación contra
+el total del documento. Detalles y límites en la
+[guía de revisión Web](../../ViveroWeb/docs/reception-document-review.md).
+
+Validación nueva: tres pruebas unitarias de compras y 31 integraciones HTTP/SQL
+con MariaDB 11.4.13 en una base sintética nueva, incluida la reversión de una
+equivalencia cuando falla otra partida, aislamiento por proveedor, reintentos y
+conservación de precios/existencias. El proceso local quedó detenido. Estas
+pruebas corresponden a la preparación, no a nuevas pruebas sobre producción.
+Web y API fueron publicadas con verificación interna/HTTPS y sin migraciones.
+Android no requirió cambios de código. Pedro validó manualmente el lector con
+un ticket y una cotización; guardar una recepción real sigue pendiente de
+aceptación. La descripción del bloque 020 que sigue conserva el contexto histórico.
+
+### Recuperación de fuentes publicadas
+
+Etiqueta coordinada en ViveroApp y ViveroWeb:
+`prod-reception-pdf-2026-10-20`. No crea una release Android ni otro despliegue.
+
+- Base API: `1910b06fc74b38ed40cb5ae61ce9b77a96f52da1`.
+- Base Web: `224e09bac59ca748ccab131c1b50dd88b0f269cf`.
+- Imagen API: `vivero-api-reception:20261020-reviewed`,
+  `sha256:be7ff9a22a3adeac36ec6408c53486488a827b42514646d70ae5be502eec993c`.
+- Imagen API base preservada:
+  `sha256:c7349feb7fb94196784bbec13a74693543ba5d6052b72ec11d47584fbd381b2b`.
+- Paquete aprobado SHA-256:
+  `c79b9edf1e14440b78ce0240b713b12ea72195e10dc5f89d1cd290e9d5f217db`.
+- Inventario de 38 fuentes/dependencias API, con CRLF normalizado a LF:
+  `faf7771c05ca045a8caebea0316ef17585b62a9d46b9b15fa10e7eb5b0fdce3c`.
+
+La imagen publicada conserva la configuración y capas de la base y sustituye
+únicamente `backend/src/purchases.js`. Las fuentes/dependencias coinciden con el
+manifiesto aprobado; Git normaliza saltos de línea sin cambiar su lógica. El
+inventario normalizado ordena rutas relativas y calcula SHA-256 sobre líneas
+`ruta sha256_del_contenido\n`. El commit incluye pruebas sintéticas y esta nota
+de aceptación, sin datos de producción. La reconstrucción funcional dispone de
+fuentes y lockfile; reproducir el digest Docker exacto requiere conservar la
+imagen base y el paquete original. Los Dockerfiles generales usan bases móviles.
+No se publican respaldos, fotografías privadas, documentos de proveedores ni
+credenciales. No se agregan migraciones. Esta etiqueta no sustituye un respaldo
+operativo de base de datos.
+
 Implementación en el backend oficial. Web/Android conservan sus contratos
 Supabase hasta un cambio coordinado de consumidores. Health requiere
 `020_supplier_purchases`; no se importan proveedores ni documentos reales.

@@ -104,6 +104,12 @@ export function createPurchases(db, context) {
     const [[row]] = await db.execute("SELECT p.id FROM products p JOIN categories c ON c.id = p.category_id WHERE p.id = ? AND (p.is_active = 1 OR (p.preparation_mode='PENDING' AND p.commercial_disabled_at IS NULL)) AND c.is_active = 1 LOCK IN SHARE MODE", [id]);
     if (!row) fail(409, 'PURCHASE_PRODUCT_UNAVAILABLE');
   }
+  async function learnAlias(supplierId, item, productId) {
+    const key = aliasHash({ raw_description: item.raw_description, container_code: item.supplier_container_code });
+    const [[alias]] = await db.execute('SELECT id FROM supplier_product_aliases WHERE supplier_id=? AND alias_hash=? FOR UPDATE', [supplierId, key]);
+    if (alias) await db.execute('UPDATE supplier_product_aliases SET product_id=?,updated_by=?,raw_description=?,supplier_container_code=? WHERE id=?', [productId, context.user.id, item.raw_description, item.supplier_container_code, alias.id]);
+    else await db.execute('INSERT INTO supplier_product_aliases(supplier_id,alias_hash,raw_description,supplier_container_code,product_id,updated_by) VALUES(?,?,?,?,?,?)', [supplierId, key, item.raw_description, item.supplier_container_code, productId, context.user.id]);
+  }
   return {
     detail,
     async suppliers(query) {
@@ -180,10 +186,7 @@ export function createPurchases(db, context) {
       await db.execute('UPDATE supplier_purchase_items SET new_product=NULL,product_id=?,resolution_status=?,resolved_by=?,resolved_at=UTC_TIMESTAMP(6),suggested_common_name=COALESCE(?,suggested_common_name),suggested_presentation=COALESCE(?,suggested_presentation) WHERE id=?', [input.product_id, input.resolution_status, context.user.id, input.suggested_common_name, input.suggested_presentation, itemId]);
       if (input.product_id !== null) {
         // Matching a quotation must not change the selling price.
-        const key = aliasHash({ raw_description: item.raw_description, container_code: item.supplier_container_code });
-        const [[alias]] = await db.execute('SELECT id FROM supplier_product_aliases WHERE supplier_id=? AND alias_hash=? FOR UPDATE', [doc.supplier_id, key]);
-        if (alias) await db.execute('UPDATE supplier_product_aliases SET product_id=?,updated_by=?,raw_description=?,supplier_container_code=? WHERE id=?', [input.product_id, context.user.id, item.raw_description, item.supplier_container_code, alias.id]);
-        else await db.execute('INSERT INTO supplier_product_aliases(supplier_id,alias_hash,raw_description,supplier_container_code,product_id,updated_by) VALUES(?,?,?,?,?,?)', [doc.supplier_id, key, item.raw_description, item.supplier_container_code, input.product_id, context.user.id]);
+        await learnAlias(doc.supplier_id, item, input.product_id);
       }
       await db.execute('UPDATE supplier_purchase_documents SET revision=revision+1 WHERE id=?',[id]);
       return detail(id);
@@ -203,6 +206,9 @@ export function createPurchases(db, context) {
       for(const line of input.items){
         const item=items.find(i=>i.id===line.id);
         if(line.product_id)await availableProduct(line.product_id);
+        // Reuse the same supplier equivalence as individual item review. Zero/new
+        // lines do not erase an existing equivalence; the transaction owns both writes.
+        if(line.quantity>0 && line.product_id)await learnAlias(doc.supplier_id, item, line.product_id);
         if(line.new_product && line.new_product.category_id!==null){
           const [[category]]=await db.execute('SELECT id FROM categories WHERE id=? AND is_active=1 LOCK IN SHARE MODE',[line.new_product.category_id]);
           if(!category)fail(409,'REFERENCE_CONFLICT');

@@ -334,6 +334,34 @@ async function arrival(reference=key(),quantities=[10,10,10]) {
   const d=await call('supplier-purchases','POST',input);assert.equal(d.status,201,JSON.stringify(d.data));
   return {d:d.data.purchase,input};
 }
+test('arrival review learns supplier equivalences atomically and reuses them without changing stock or prices',async()=>{
+  const {d,input}=await arrival();
+  const [[before]]=await admin.execute('SELECT quantity FROM inventory WHERE product_id=? AND branch_id=1',[product]);
+  const [[price]]=await admin.execute('SELECT price_cents FROM products WHERE id=?',[product]);
+  const edit={revision:d.revision,items:d.items.map((i,n)=>({id:i.id,quantity:n===2?0:2,product_id:n===0?product:null,
+    new_product:n===1?{name:'Nueva sintética',presentation:null,category_id:null}:null}))};
+  // A later unavailable product must roll back the earlier alias as well as the review.
+  const invalid={...edit,items:edit.items.map((i,n)=>n===1?{...i,product_id:4294967000,new_product:null}:i)};
+  assert.equal((await call(`supplier-purchases/${d.id}`,'PATCH',invalid)).status,409);
+  const aliases=async()=> (await admin.execute('SELECT product_id FROM supplier_product_aliases WHERE supplier_id=?',[d.supplier.id]))[0];
+  assert.deepEqual(await aliases(),[]);
+  const reviewed=await call(`supplier-purchases/${d.id}`,'PATCH',edit);
+  assert.equal(reviewed.status,200,JSON.stringify(reviewed.data));
+  assert.deepEqual((await call(`supplier-purchases/${d.id}`,'PATCH',edit)).data,reviewed.data);
+  assert.deepEqual(await aliases(),[{product_id:product}]);
+  const next=await call('supplier-purchases','POST',{...input,external_reference:key()});
+  assert.equal(next.status,201,JSON.stringify(next.data));
+  assert.equal(next.data.purchase.items[0].resolution_status,'AUTO_MATCHED');
+  assert.equal(next.data.purchase.items[0].product_id,product);
+  assert.ok(next.data.purchase.items.slice(1).every(i=>i.resolution_status==='UNMATCHED'));
+  const other=await arrival();assert.ok(other.d.items.every(i=>i.resolution_status==='UNMATCHED'));
+  const zero={revision:reviewed.data.purchase.revision,items:edit.items.map(i=>({...i,quantity:0,product_id:null,new_product:null}))};
+  assert.equal((await call(`supplier-purchases/${d.id}`,'PATCH',zero)).status,200);
+  assert.deepEqual(await aliases(),[{product_id:product}]);
+  assert.deepEqual((await admin.execute('SELECT quantity FROM inventory WHERE product_id=? AND branch_id=1',[product]))[0][0],before);
+  assert.deepEqual((await admin.execute('SELECT price_cents FROM products WHERE id=?',[product]))[0][0],price);
+});
+
 test('arrival binds new plants and adds actual quantities once; completing the same product does not add stock',async()=>{
   const {d,input}=await arrival();
   const [[before]]=await admin.execute('SELECT quantity FROM inventory WHERE product_id=? AND branch_id=1',[product]);
